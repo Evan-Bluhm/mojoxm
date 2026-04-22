@@ -33,7 +33,18 @@ SHELL := /bin/bash
 # Compiler invocations.  Override on the command line for cluster use.
 MOJO        ?= .venv/bin/mojo
 MPICC       ?= mpicc
-MPI_LIBDIR  ?= /usr/lib/x86_64-linux-gnu/openmpi/lib
+
+# Default MPI_LIBDIR picks up the system convention for each platform:
+#   * Linux (WSL2, Klone): Debian/Ubuntu multiarch path for OpenMPI.
+#   * macOS: Homebrew's `open-mpi` cellar under /opt/homebrew on Apple
+#     Silicon, /usr/local on Intel.  `brew --prefix open-mpi` returns
+#     the right directory on either Homebrew layout.
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    MPI_LIBDIR ?= $(shell brew --prefix open-mpi 2>/dev/null)/lib
+else
+    MPI_LIBDIR ?= /usr/lib/x86_64-linux-gnu/openmpi/lib
+endif
 
 BUILD_DIR    = build
 
