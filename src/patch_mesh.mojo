@@ -133,6 +133,7 @@ def gather_owned_nodes_kernel(
 
 def classify_owned_kernel(
     o_halo_flag:      UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned]
+    o_primary_ring:   UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned], -1 if interior
     owned_elem_ids:   UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned]
     elem_faces:       UnsafePointer[Int32,   MutAnyOrigin],  # [num_local*N_F]
     face_elem:        UnsafePointer[Int32,   MutAnyOrigin],  # [num_faces*2]
@@ -145,12 +146,22 @@ def classify_owned_kernel(
         return
     var elem = Int(owned_elem_ids[idx])
     var is_halo: Int32 = 0
+    # primary_ring: the lowest-priority (direction index) ghost
+    # neighbour.  Directions are 0=-x, 1=+x, 2=-y, 3=+y, 4=-z, 5=+z.
+    # -1 sentinel means interior (no ghost neighbours).
+    var primary: Int32 = -1
+    # Decode this element's own cube coords so we know which direction
+    # each neighbour lies in.
+    var my_cube = elem // KUHN_TETS_PER_CELL
+    var my_lcz = my_cube // (loc_nx * loc_ny)
+    var my_rem = my_cube - my_lcz * loc_nx * loc_ny
+    var my_lcy = my_rem // loc_nx
+    var my_lcx = my_rem - my_lcy * loc_nx
     for lf in range(N_F):
         var face_id = Int(elem_faces[elem * N_F + lf])
         var s0 = Int(face_elem[face_id * 2 + 0])
         var s1 = Int(face_elem[face_id * 2 + 1])
         var neighbour = s1 if s0 == elem else s0
-        # Decode neighbour cube coords.
         var n_cube = neighbour // KUHN_TETS_PER_CELL
         var n_lcz = n_cube // (loc_nx * loc_ny)
         var rem = n_cube - n_lcz * loc_nx * loc_ny
@@ -163,7 +174,22 @@ def classify_owned_kernel(
         )
         if not n_owned:
             is_halo = 1
+            # Translate the cube offset to a direction index.
+            var dx = n_lcx - my_lcx
+            var dy = n_lcy - my_lcy
+            var dz = n_lcz - my_lcz
+            var this_dir: Int32 = -1
+            if dx == -1 and dy == 0 and dz == 0: this_dir = 0   # -x
+            elif dx == 1 and dy == 0 and dz == 0: this_dir = 1  # +x
+            elif dx == 0 and dy == -1 and dz == 0: this_dir = 2 # -y
+            elif dx == 0 and dy == 1 and dz == 0: this_dir = 3  # +y
+            elif dx == 0 and dy == 0 and dz == -1: this_dir = 4 # -z
+            elif dx == 0 and dy == 0 and dz == 1: this_dir = 5  # +z
+            # First-match by direction index wins (i.e. lowest index).
+            if this_dir != -1 and (primary == -1 or this_dir < primary):
+                primary = this_dir
     o_halo_flag[idx] = is_halo
+    o_primary_ring[idx] = primary
 
 
 # ----------------------------------------------------------------------
@@ -197,6 +223,18 @@ struct PatchMesh(Movable):
     var num_interior_elements: Int
     var d_halo_elem_ids:     DeviceBuffer[patch_i]
     var d_interior_elem_ids: DeviceBuffer[patch_i]
+
+    # Per-direction (primary-ring-ordered) halo element counts.  For
+    # each of the 6 face directions [-x, +x, -y, +y, -z, +z] this is
+    # the number of halo tets whose PRIMARY (lowest-priority-wins)
+    # ghost neighbour lies in that direction.  Used by a future
+    # pack-free HaloExchange to slice q into contiguous primary send
+    # regions; the existing pack-kernel HaloExchange ignores these.
+    var halo_primary_count: List[Int]
+    # Ring counts per direction on the ghost side (equals the owned
+    # halo ring counts for face-adjacent rings -- each ghost cube on
+    # a face ring has exactly one primary sender).
+    var ghost_ring_count: List[Int]
 
     def __init__(
         out self,
@@ -274,12 +312,17 @@ struct PatchMesh(Movable):
         d_owned_nodes.enqueue_copy_to(self.owned_node_xyz_f32_ptr)
 
         # -------- Interior / halo classification ---------------------
-        # Flag every owned element as 0 (interior) or 1 (halo).
+        # Flag every owned element as 0 (interior) or 1 (halo), and
+        # record its primary-ring direction (-1 for interior).
         var d_halo_flag = ctx.enqueue_create_buffer[patch_i](
+            self.num_owned_elements
+        )
+        var d_primary_ring = ctx.enqueue_create_buffer[patch_i](
             self.num_owned_elements
         )
         ctx.enqueue_function[classify_owned_kernel, classify_owned_kernel](
             d_halo_flag.unsafe_ptr(),
+            d_primary_ring.unsafe_ptr(),
             self.d_owned_elem_ids.unsafe_ptr(),
             self.mesh.d_elem_faces.unsafe_ptr(),
             self.mesh.d_face_elem.unsafe_ptr(),
@@ -290,48 +333,89 @@ struct PatchMesh(Movable):
             block_dim=PATCH_BLOCK,
         )
 
-        # Download the flag array + the owned_elem_ids to the host and
-        # split into two lists.  The owned element count is small
-        # (< 1e6 even at large ranks) so this two-pass CPU partition
-        # is negligible compared to mesh build cost.
+        # Download everything we need for host-side partitioning.
         var h_flag = ctx.enqueue_create_host_buffer[patch_i](
+            self.num_owned_elements
+        )
+        var h_primary = ctx.enqueue_create_host_buffer[patch_i](
             self.num_owned_elements
         )
         var h_owned = ctx.enqueue_create_host_buffer[patch_i](
             self.num_owned_elements
         )
         ctx.enqueue_copy(h_flag, d_halo_flag)
+        ctx.enqueue_copy(h_primary, d_primary_ring)
         ctx.enqueue_copy(h_owned, self.d_owned_elem_ids)
         ctx.synchronize()
 
-        var pflag  = h_flag.unsafe_ptr()
-        var powned = h_owned.unsafe_ptr()
+        var pflag    = h_flag.unsafe_ptr()
+        var pprimary = h_primary.unsafe_ptr()
+        var powned   = h_owned.unsafe_ptr()
+
+        # Count per-bucket sizes: [interior, halo_-x, halo_+x, halo_-y,
+        # halo_+y, halo_-z, halo_+z].
+        var halo_per_dir = InlineArray[Int, 6](fill=0)
         var halo_count = 0
         for i in range(self.num_owned_elements):
             if pflag[i] != 0:
                 halo_count += 1
+                var d = Int(pprimary[i])
+                if d >= 0 and d < 6:
+                    halo_per_dir[d] += 1
         var interior_count = self.num_owned_elements - halo_count
         self.num_halo_elements = halo_count
         self.num_interior_elements = interior_count
 
+        # Publish primary counts.  The list is canonical [-x,+x,-y,+y,-z,+z].
+        self.halo_primary_count = List[Int]()
+        for d in range(6):
+            self.halo_primary_count.append(halo_per_dir[d])
+        # Ghost ring counts mirror the owned halo RINGS (every cube on
+        # the -x ring contributes 6 tets, regardless of primary-ring
+        # picks; the face-ring size is nx*ny*6 at the -z ring etc.).
+        self.ghost_ring_count = List[Int]()
+        self.ghost_ring_count.append(part.ny * part.nz * KUHN_TETS_PER_CELL)  # -x
+        self.ghost_ring_count.append(part.ny * part.nz * KUHN_TETS_PER_CELL)  # +x
+        self.ghost_ring_count.append(part.nx * part.nz * KUHN_TETS_PER_CELL)  # -y
+        self.ghost_ring_count.append(part.nx * part.nz * KUHN_TETS_PER_CELL)  # +y
+        self.ghost_ring_count.append(part.nx * part.ny * KUHN_TETS_PER_CELL)  # -z
+        self.ghost_ring_count.append(part.nx * part.ny * KUHN_TETS_PER_CELL)  # +z
+
+        # Build the two compact lists on the host, then upload.  The
+        # halo list is ordered primary-ring-first so future pack-free
+        # variants of HaloExchange can slice contiguously into it.
         self.d_halo_elem_ids = ctx.enqueue_create_buffer[patch_i](halo_count)
         self.d_interior_elem_ids = ctx.enqueue_create_buffer[patch_i](
             interior_count
         )
-        # Build the two lists on the host, then upload.
         var h_halo = ctx.enqueue_create_host_buffer[patch_i](halo_count)
         var h_int  = ctx.enqueue_create_host_buffer[patch_i](interior_count)
         var p_halo = h_halo.unsafe_ptr()
         var p_int  = h_int.unsafe_ptr()
-        var hc = 0
+
+        # Compute cumulative primary offsets.
+        var halo_offset = InlineArray[Int, 6](fill=0)
+        for d in range(1, 6):
+            halo_offset[d] = halo_offset[d - 1] + halo_per_dir[d - 1]
+        # Mutable working cursors.
+        var halo_cursor = InlineArray[Int, 6](fill=0)
+        for d in range(6):
+            halo_cursor[d] = halo_offset[d]
+
         var ic = 0
         for i in range(self.num_owned_elements):
-            if pflag[i] != 0:
-                p_halo[hc] = powned[i]
-                hc += 1
-            else:
+            if pflag[i] == 0:
                 p_int[ic] = powned[i]
                 ic += 1
+            else:
+                var d = Int(pprimary[i])
+                if d < 0 or d >= 6:
+                    # Should not happen if classify kernel is correct;
+                    # fall back to bucket 0.
+                    d = 0
+                p_halo[halo_cursor[d]] = powned[i]
+                halo_cursor[d] += 1
+
         ctx.enqueue_copy(self.d_halo_elem_ids, h_halo)
         ctx.enqueue_copy(self.d_interior_elem_ids, h_int)
         ctx.synchronize()

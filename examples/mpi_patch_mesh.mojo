@@ -45,11 +45,25 @@ def main() raises:
                 "[rank", rank, "/", size, "]",
                 " owned cubes (", patch.part.nx, "x",
                 patch.part.ny, "x", patch.part.nz, ")",
-                " -> local mesh (", patch.part.nx + 2, "x",
-                patch.part.ny + 2, "x", patch.part.nz + 2, ")",
                 " num_owned=", patch.num_owned_elements,
                 " (halo=", patch.num_halo_elements,
                 ", interior=", patch.num_interior_elements, ")",
+            )
+            print(
+                "  halo primary-ring counts [-x,+x,-y,+y,-z,+z] =",
+                patch.halo_primary_count[0],
+                patch.halo_primary_count[1],
+                patch.halo_primary_count[2],
+                patch.halo_primary_count[3],
+                patch.halo_primary_count[4],
+                patch.halo_primary_count[5],
+                " sum=",
+                patch.halo_primary_count[0]
+                + patch.halo_primary_count[1]
+                + patch.halo_primary_count[2]
+                + patch.halo_primary_count[3]
+                + patch.halo_primary_count[4]
+                + patch.halo_primary_count[5],
             )
         mpi.barrier_world()
 
