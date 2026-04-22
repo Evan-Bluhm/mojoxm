@@ -172,6 +172,10 @@ def _pack_list_for_dir(
 
 struct HaloExchange(Movable):
     var nc: Int
+    # Runtime flag: if True we hand device pointers directly to MPI
+    # (saves 12 D/H copies per exchange).  Otherwise we stage through
+    # pinned HostBuffers.
+    var cuda_aware: Bool
 
     # 6 neighbour ranks in the order [-x, +x, -y, +y, -z, +z].
     var neighbour: List[Int]
@@ -184,8 +188,8 @@ struct HaloExchange(Movable):
     var d_unpack_idx: List[DeviceBuffer[halo_i]]
     var d_send_buf:   List[DeviceBuffer[halo_f]]
     var d_recv_buf:   List[DeviceBuffer[halo_f]]
-    # Pinned host staging buffers (used when MPI isn't CUDA-aware).
-    # Indexed the same way as d_send_buf / d_recv_buf.
+    # Pinned host staging buffers.  Populated only when cuda_aware is
+    # False (skipping the allocation entirely when we don't need it).
     var h_send_buf:   List[HostBuffer[halo_f]]
     var h_recv_buf:   List[HostBuffer[halo_f]]
 
@@ -202,6 +206,7 @@ struct HaloExchange(Movable):
         nc: Int,
     ) raises:
         self.nc = nc
+        self.cuda_aware = mpi.is_cuda_aware()
         var nx = part.nx
         var ny = part.ny
         var nz = part.nz
@@ -252,12 +257,14 @@ struct HaloExchange(Movable):
             self.d_recv_buf.append(
                 ctx.enqueue_create_buffer[halo_f](buf_floats)
             )
-            self.h_send_buf.append(
-                ctx.enqueue_create_host_buffer[halo_f](buf_floats)
-            )
-            self.h_recv_buf.append(
-                ctx.enqueue_create_host_buffer[halo_f](buf_floats)
-            )
+            # Host staging only needed for non-CUDA-aware MPI.
+            if not self.cuda_aware:
+                self.h_send_buf.append(
+                    ctx.enqueue_create_host_buffer[halo_f](buf_floats)
+                )
+                self.h_recv_buf.append(
+                    ctx.enqueue_create_host_buffer[halo_f](buf_floats)
+                )
 
         ctx.synchronize()
         self.req_storage = alloc[Int64](12)
@@ -275,7 +282,10 @@ struct HaloExchange(Movable):
         Must be paired with `complete_exchange()` before any compute
         that reads ghost q values.
         """
-        # ---- Phase 1: pack on GPU, then copy device -> host ---------
+        # ---- Phase 1: pack on GPU --------------------------------
+        # If MPI is CUDA-aware the Isend/Irecv below use device
+        # pointers directly -- no D<->H copy needed.  Otherwise we
+        # stage through pinned host buffers.
         for d in range(6):
             var count = self.ring_count[d]
             if count == 0:
@@ -288,8 +298,9 @@ struct HaloExchange(Movable):
                 grid_dim=ceildiv(total, HALO_BLOCK),
                 block_dim=HALO_BLOCK,
             )
-            ctx.enqueue_copy(self.h_send_buf[d], self.d_send_buf[d])
-        ctx.synchronize()   # pack + D->H done before MPI reads bufs
+            if not self.cuda_aware:
+                ctx.enqueue_copy(self.h_send_buf[d], self.d_send_buf[d])
+        ctx.synchronize()   # pack (+ D->H if staged) done before MPI
 
         # ---- Phase 2: post non-blocking Irecvs + Isends -------------
         # Tag encoding: directions 0..5 for (-x, +x, -y, +y, -z, +z).
@@ -301,14 +312,22 @@ struct HaloExchange(Movable):
             var neigh = self.neighbour[d]
             var send_tag = d
             var recv_tag = d ^ 1
+            var recv_ptr = (
+                self.d_recv_buf[d].unsafe_ptr()
+                if self.cuda_aware
+                else self.h_recv_buf[d].unsafe_ptr()
+            )
+            var send_ptr = (
+                self.d_send_buf[d].unsafe_ptr()
+                if self.cuda_aware
+                else self.h_send_buf[d].unsafe_ptr()
+            )
             mpi.irecv_float(
-                self.h_recv_buf[d].unsafe_ptr(),
-                count_fl, neigh, recv_tag,
+                recv_ptr, count_fl, neigh, recv_tag,
                 self.req_storage + (6 + d),
             )
             mpi.isend_float(
-                self.h_send_buf[d].unsafe_ptr(),
-                count_fl, neigh, send_tag,
+                send_ptr, count_fl, neigh, send_tag,
                 self.req_storage + d,
             )
 
@@ -325,12 +344,13 @@ struct HaloExchange(Movable):
         # Wait for the 12 non-blocking MPI ops posted in submit_pack.
         mpi.waitall(12, self.req_storage)
 
-        # Copy host recv buffers back to device and unpack.
+        # Copy host->device (if staged) and unpack.
         for d in range(6):
             var count = self.ring_count[d]
             if count == 0:
                 continue
-            ctx.enqueue_copy(self.d_recv_buf[d], self.h_recv_buf[d])
+            if not self.cuda_aware:
+                ctx.enqueue_copy(self.d_recv_buf[d], self.h_recv_buf[d])
             var total = count * N_P
             ctx.enqueue_function[unpack_kernel, unpack_kernel](
                 q, self.d_recv_buf[d].unsafe_ptr(),

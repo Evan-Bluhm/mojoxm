@@ -28,6 +28,14 @@
 #include <mpi.h>
 #include <stddef.h>
 
+/* mpi-ext.h defines MPIX_Query_cuda_support (runtime) and
+ * MPIX_CUDA_AWARE_SUPPORT (compile-time) when the MPI implementation
+ * provides them.  Guarded because generic build hosts (e.g. a WSL2
+ * apt-get'd OpenMPI) don't ship this header. */
+#if __has_include(<mpi-ext.h>)
+#  include <mpi-ext.h>
+#endif
+
 /* --- Lifecycle ---------------------------------------------------- */
 
 int mxm_mpi_init(void) {
@@ -132,4 +140,21 @@ int mxm_mpi_any_source(void) {
 
 int mxm_mpi_any_tag(void) {
     return MPI_ANY_TAG;
+}
+
+/* --- CUDA-aware MPI capability check ----------------------------- */
+
+int mxm_mpi_is_cuda_aware(void) {
+#if defined(MPIX_Query_cuda_support)
+    /* OpenMPI >=5 / newer OMPI builds expose a runtime query. */
+    return MPIX_Query_cuda_support();
+#elif defined(MPIX_CUDA_AWARE_SUPPORT)
+    /* OpenMPI 4.x pattern: compile-time macro defined to 1 when the
+     * library was built with --with-cuda.  Klone's ompi/4.1.6-2 has
+     * this set.  Trust the compile-time header. */
+    return MPIX_CUDA_AWARE_SUPPORT;
+#else
+    /* No detection hook at all -- assume host staging is required. */
+    return 0;
+#endif
 }

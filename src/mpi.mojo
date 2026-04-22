@@ -43,6 +43,12 @@ def finalize() raises:
 def initialized() -> Bool:
     return Int(external_call["mxm_mpi_initialized", c_int]()) != 0
 
+def is_cuda_aware() -> Bool:
+    """True iff the linked MPI library was built with CUDA support
+    (i.e. accepts device pointers in Isend/Irecv).  Detected at shim
+    compile time via MPIX_CUDA_AWARE_SUPPORT / MPIX_Query_cuda_support."""
+    return Int(external_call["mxm_mpi_is_cuda_aware", c_int]()) != 0
+
 
 # ----------------------------------------------------------------------
 # MPI_COMM_WORLD identity
