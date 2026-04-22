@@ -146,8 +146,16 @@ set -euo pipefail
 
 # Point at Klone's host OpenMPI + gcc + cuda via absolute paths,
 # without needing `module load` on a login node.
-export LD_LIBRARY_PATH=/sw/gcc/13.2.0/lib64:/sw/gcc/13.2.0/lib:/sw/ompi/4.1.6-2/lib:/sw/cuda/12.9.1/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+HOST_LIB_PATH=/sw/gcc/13.2.0/lib64:/sw/gcc/13.2.0/lib:/sw/ompi/4.1.6-2/lib:/sw/cuda/12.9.1/lib64
+export LD_LIBRARY_PATH=$HOST_LIB_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 export PATH=/sw/gcc/13.2.0/bin:/sw/ompi/4.1.6-2/bin:$PATH
+
+# Apptainer drops host env by default.  Propagate LD_LIBRARY_PATH
+# into the container so the Mojo binary resolves libmpi.so.40 from
+# Klone's CUDA-aware /sw/ompi/4.1.6-2/lib instead of the container's
+# generic Ubuntu libmpi.  The APPTAINERENV_* prefix is the documented
+# way to set an env var inside the container.
+export APPTAINERENV_LD_LIBRARY_PATH="$HOST_LIB_PATH"
 
 if [ "$MOJOXM_NO_BUILD" != "1" ]; then
     echo "===> make $MOJOXM_DRIVER"
