@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# ======================================================================
+# klone-run -- build and run a mojoxm driver on Klone in a single srun
+# ======================================================================
+#
+# Problem this solves:
+#
+#   Mojo bakes GPU PTX for the specific architecture detected at build
+#   time.  If you build on an A40 node and then `sbatch` to an RTX6000
+#   node you get CUDA_ERROR_NO_BINARY_FOR_GPU.  Compiling inside the
+#   same allocation that will run the binary guarantees a match.
+#
+# Also this solves the "my run command is 4 lines of srun + mpirun +
+# apptainer exec + bind mounts".
+#
+# Usage (from the project root or anywhere):
+#
+#   scripts/klone-run <driver> [driver-args...]
+#
+# Cluster parameters come from environment variables so the CLI stays
+# tidy:
+#
+#   NP          MPI ranks                               (default 1)
+#   GPU         a40 | a100 | l40 | l40s | ...           (default a40)
+#               Pins --gres=gpu:$GPU:1.  Ignored if CONSTRAINT is set.
+#   CONSTRAINT  SLURM --constraint expression           (default empty)
+#               e.g. CONSTRAINT='a100|a40|l40|l40s' lets SLURM pick any
+#               of those GPU types via a generic --gres=gpu:1 request.
+#   TIME        SLURM walltime                          (default 30:00)
+#   ACCOUNT     SLURM account                           (default aaplasma)
+#   PARTITION   SLURM partition                         (default ckpt)
+#   MEM         memory per node                         (default 16G)
+#   SIF         path to Apptainer image                 (default mojo.sif
+#                                                        in project root)
+#   NO_BUILD=1  skip the `make` step, run pre-built binary only
+#
+# Examples:
+#
+#   scripts/klone-run mpi_hello
+#   NP=4 scripts/klone-run mpi_advection_gaussian
+#   NP=4 GPU=a100 TIME=1:00:00 scripts/klone-run mpi_advection_gaussian
+#   NP=4 CONSTRAINT='a100|a40|l40|l40s' scripts/klone-run mpi_advection_gaussian
+#   scripts/klone-run euler_taylor_green     # single rank, no MPI
+# ======================================================================
+
+set -euo pipefail
+
+# --- Locate the project root ------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_DIR"
+
+# --- Defaults (env-overridable) ---------------------------------------
+: "${NP:=1}"
+: "${GPU:=a40}"
+: "${CONSTRAINT:=}"
+: "${TIME:=30:00}"
+: "${ACCOUNT:=aaplasma}"
+: "${PARTITION:=ckpt}"
+: "${MEM:=16G}"
+: "${SIF:=$PROJECT_DIR/mojo.sif}"
+: "${NO_BUILD:=0}"
+
+# --- Parse args -------------------------------------------------------
+if [ $# -eq 0 ]; then
+    sed -n '7,45p' "$0"
+    exit 1
+fi
+DRIVER="$1"; shift
+DRIVER_ARGS=("$@")
+
+if [ ! -f "examples/${DRIVER}.mojo" ]; then
+    echo "error: no driver at examples/${DRIVER}.mojo" >&2
+    exit 1
+fi
+if [ ! -f "$SIF" ]; then
+    echo "error: Apptainer image not found at $SIF" >&2
+    echo "       build it with: apptainer build --fakeroot mojo.sif mojo.def" >&2
+    exit 1
+fi
+
+# --- Classify the driver ---------------------------------------------
+# IS_MPI:  launch via mpirun (if its name starts with mpi_)
+# NEEDS_GPU:  instantiates DeviceContext (every driver except the pure
+#             MPI smoke tests mpi_hello / mpi_partition)
+case "$DRIVER" in
+    mpi_hello|mpi_partition) NEEDS_GPU=0 ;;
+    *) NEEDS_GPU=1 ;;
+esac
+case "$DRIVER" in
+    mpi_*) IS_MPI=1 ;;
+    *) IS_MPI=0 ;;
+esac
+
+# --- Assemble srun request -------------------------------------------
+# We always run *one* wrapper process under srun (which will then
+# optionally invoke mpirun to spawn the NP ranks).  `-n 1` prevents
+# srun from replicating the wrapper across NP tasks, which would
+# cause NP parallel mpirun invocations.  Enough CPUs are requested
+# up front for the ranks via --cpus-per-task.
+CORES_PER_RANK=2
+if [ "$IS_MPI" = "1" ]; then
+    TOTAL_CORES=$(( NP * CORES_PER_RANK ))
+else
+    TOTAL_CORES=4
+fi
+SRUN_ARGS=(
+    -A "$ACCOUNT" -p "$PARTITION"
+    --ntasks=1 --cpus-per-task="$TOTAL_CORES"
+    --mem="$MEM" --time="$TIME"
+)
+if [ "$NEEDS_GPU" = "1" ]; then
+    if [ -n "$CONSTRAINT" ]; then
+        # Constraint-based GPU selection: any GPU matching the feature
+        # expression.  --gres=gpu:1 asks for 1 GPU of any type;
+        # --constraint narrows the nodes.
+        SRUN_ARGS+=(--gres="gpu:1" "--constraint=$CONSTRAINT")
+    else
+        SRUN_ARGS+=(--gres="gpu:${GPU}:1")
+    fi
+fi
+
+# Apptainer flags (--nv is only valid with a GPU allocation)
+if [ "$NEEDS_GPU" = "1" ]; then
+    APPTAINER_FLAGS="--nv --bind /sw --bind /gscratch"
+else
+    APPTAINER_FLAGS="--bind /sw --bind /gscratch"
+fi
+
+# --- The launched job: build then run --------------------------------
+# We pass configuration through the environment rather than shell
+# interpolation to keep the heredoc simple and quoting-safe.
+export MOJOXM_DRIVER="$DRIVER"
+export MOJOXM_SIF="$SIF"
+export MOJOXM_APPTAINER_FLAGS="$APPTAINER_FLAGS"
+export MOJOXM_IS_MPI="$IS_MPI"
+export MOJOXM_NP="$NP"
+export MOJOXM_NO_BUILD="$NO_BUILD"
+export MOJOXM_DRIVER_ARGS="${DRIVER_ARGS[*]}"
+
+GPU_DESCR="$GPU"
+[ -n "$CONSTRAINT" ] && GPU_DESCR="any of [$CONSTRAINT]"
+echo "===> srun ${SRUN_ARGS[*]}  (driver=$DRIVER, np=$NP, gpu=$GPU_DESCR, needs_gpu=$NEEDS_GPU)"
+exec srun "${SRUN_ARGS[@]}" bash <<'INNER_SCRIPT'
+set -euo pipefail
+
+# Point at Klone's host OpenMPI + gcc + cuda via absolute paths,
+# without needing `module load` on a login node.
+export LD_LIBRARY_PATH=/sw/gcc/13.2.0/lib64:/sw/gcc/13.2.0/lib:/sw/ompi/4.1.6-2/lib:/sw/cuda/12.9.1/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+export PATH=/sw/gcc/13.2.0/bin:/sw/ompi/4.1.6-2/bin:$PATH
+
+if [ "$MOJOXM_NO_BUILD" != "1" ]; then
+    echo "===> make $MOJOXM_DRIVER"
+    make -s "$MOJOXM_DRIVER" \
+        MOJO="apptainer exec $MOJOXM_APPTAINER_FLAGS $MOJOXM_SIF mojo" \
+        MPICC=/sw/ompi/4.1.6-2/bin/mpicc \
+        MPI_LIBDIR=/sw/ompi/4.1.6-2/lib
+fi
+
+# Read driver args back into an array.  Simple whitespace split is
+# fine here -- driver args through this script are always plain
+# tokens (no shell metachars needed for our examples).
+read -r -a DRV_ARGS <<< "$MOJOXM_DRIVER_ARGS"
+
+if [ "$MOJOXM_IS_MPI" = "1" ]; then
+    # SLURM allocated 1 task + N*cores_per_rank cpus.  OpenMPI's
+    # SLURM integration otherwise sees SLURM_NTASKS=1 and refuses to
+    # launch NP ranks; --oversubscribe tells it to ignore that count.
+    # We have enough cores to back NP processes -- the allocation
+    # requested N*cores_per_rank dedicated CPUs above.
+    echo "===> mpirun -np $MOJOXM_NP --oversubscribe apptainer exec $MOJOXM_APPTAINER_FLAGS $MOJOXM_SIF ./$MOJOXM_DRIVER ${DRV_ARGS[*]-}"
+    mpirun -np "$MOJOXM_NP" --oversubscribe \
+        apptainer exec $MOJOXM_APPTAINER_FLAGS "$MOJOXM_SIF" \
+        "./$MOJOXM_DRIVER" ${DRV_ARGS[@]+"${DRV_ARGS[@]}"}
+else
+    echo "===> apptainer exec $MOJOXM_APPTAINER_FLAGS $MOJOXM_SIF ./$MOJOXM_DRIVER ${DRV_ARGS[*]-}"
+    apptainer exec $MOJOXM_APPTAINER_FLAGS "$MOJOXM_SIF" \
+        "./$MOJOXM_DRIVER" ${DRV_ARGS[@]+"${DRV_ARGS[@]}"}
+fi
+INNER_SCRIPT

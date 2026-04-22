@@ -271,49 +271,36 @@ for this step):
 apptainer build --fakeroot mojo.sif mojo.def
 ```
 
-**Build drivers.** Login nodes can build only CPU-only MPI drivers
-(`mpi_hello`, `mpi_partition`) because Mojo elaborates the GPU kernel
-at compile time and needs a live GPU to do so. Everything else builds
-on a GPU compute node. One-line make invocation with the Apptainer
-overrides:
+**Build and run in one command** via `scripts/klone-run`.  The
+wrapper requests an srun allocation, compiles the driver inside that
+allocation (so Mojo's generated GPU code matches the actual GPU
+assigned), and then launches the binary under `mpirun` — all in a
+single command.  Compiling every run trades ~15 s of startup for
+immunity to the `CUDA_ERROR_NO_BINARY_FOR_GPU` you otherwise hit when
+SLURM moves you between GPU generations.
 
 ```bash
-# CPU-only MPI drivers (can run on a login node):
-LD_LIBRARY_PATH=/sw/gcc/13.2.0/lib64:/sw/gcc/13.2.0/lib:/sw/ompi/4.1.6-2/lib \
-PATH=/sw/gcc/13.2.0/bin:/sw/ompi/4.1.6-2/bin:$PATH \
-make cpu \
-    MOJO='apptainer exec --bind /sw --bind /gscratch mojo.sif mojo' \
-    MPICC=/sw/ompi/4.1.6-2/bin/mpicc \
-    MPI_LIBDIR=/sw/ompi/4.1.6-2/lib
+# CPU-only MPI smoke test (no GPU requested, runs fast):
+NP=4 scripts/klone-run mpi_hello
 
-# Everything (GPU-using drivers included, must be on a GPU node):
-srun -A aaplasma -p ckpt --gres=gpu:a40:1 -c 8 --mem=16G --time=30:00 \
-    bash -c '
-LD_LIBRARY_PATH=/sw/gcc/13.2.0/lib64:/sw/gcc/13.2.0/lib:/sw/ompi/4.1.6-2/lib \
-PATH=/sw/gcc/13.2.0/bin:/sw/ompi/4.1.6-2/bin:$PATH \
-make -j4 all \
-    MOJO="apptainer exec --nv --bind /sw --bind /gscratch mojo.sif mojo" \
-    MPICC=/sw/ompi/4.1.6-2/bin/mpicc \
-    MPI_LIBDIR=/sw/ompi/4.1.6-2/lib'
+# GPU + MPI, pinned to A40:
+NP=4 GPU=a40 scripts/klone-run mpi_advection_gaussian
+
+# GPU + MPI, any GPU matching a SLURM constraint expression:
+NP=4 CONSTRAINT='a100|a40|l40|l40s' scripts/klone-run mpi_advection_gaussian
+
+# Single-rank GPU driver (no MPI):
+scripts/klone-run euler_taylor_green
 ```
 
-**Run**: always launch the binary through `mpirun` (even at `-np 1`)
-and wrap each rank in `apptainer exec --nv` so the Mojo runtime
-library is on the rank's `LD_LIBRARY_PATH`:
+Env vars recognised by the script: `NP`, `GPU`, `CONSTRAINT`, `TIME`,
+`ACCOUNT`, `PARTITION`, `MEM`, `SIF`, `NO_BUILD`.  `CONSTRAINT` wins
+over `GPU` when both are set.  Run `scripts/klone-run` with no
+arguments to see usage.
 
-```bash
-srun -A aaplasma -p ckpt --gres=gpu:a40:1 -n 4 --cpus-per-task=2 \
-    --mem=16G --time=30:00 \
-    bash -c '
-LD_LIBRARY_PATH=/sw/ompi/4.1.6-2/lib:/sw/cuda/12.9.1/lib64:/sw/gcc/13.2.0/lib64 \
-PATH=/sw/ompi/4.1.6-2/bin:$PATH \
-mpirun -np 4 apptainer exec --nv --bind /sw --bind /gscratch mojo.sif \
-    ./mpi_advection_gaussian'
-```
-
-Verified on A40: at `np = 4` the driver reports identical
-conservation / max to the WSL2 single-GPU `np = 8` run
-(drift 3.56·10⁻⁵, overshoot 1.003426).
+Verified on a Klone A40 at `NP=4`: wall time ≈ 40 s (≈ 18 s build +
+20 s sim), conservation drift 3.56·10⁻⁵, overshoot 1.003426 —
+identical to the WSL2 RTX 3090 run.
 
 **Known limitations and future work:**
 
