@@ -49,7 +49,7 @@ comptime MESH_BLOCK = 256
 # Host-side helpers (fast, small tables)
 # ======================================================================
 
-fn kuhn_vertex(t: Int, k: Int) -> Int:
+def kuhn_vertex(t: Int, k: Int) -> Int:
     # Cube-corner index of each tet-local vertex (0..3).  Corner layout:
     #   0=(0,0,0) 1=(1,0,0) 2=(0,1,0) 3=(1,1,0)
     #   4=(0,0,1) 5=(1,0,1) 6=(0,1,1) 7=(1,1,1)
@@ -83,15 +83,15 @@ fn kuhn_vertex(t: Int, k: Int) -> Int:
     if k == 2: return 1
     return 7
 
-fn corner_dx(c: Int) -> Int:
+def corner_dx(c: Int) -> Int:
     if c == 1 or c == 3 or c == 5 or c == 7: return 1
     return 0
 
-fn corner_dy(c: Int) -> Int:
+def corner_dy(c: Int) -> Int:
     if c == 2 or c == 3 or c == 6 or c == 7: return 1
     return 0
 
-fn corner_dz(c: Int) -> Int:
+def corner_dz(c: Int) -> Int:
     if c >= 4: return 1
     return 0
 
@@ -120,7 +120,7 @@ struct TetFaceInfo(ImplicitlyCopyable, Movable):
     var dk: Int
     var side: Int
 
-fn tet_face_info(t: Int, f: Int) -> TetFaceInfo:
+def tet_face_info(t: Int, f: Int) -> TetFaceInfo:
     # (tet, local_face) -> (face_type, owner_offset, side).
     if t == 0:
         if f == 0: return TetFaceInfo(6, 0, 0, 0, 0)
@@ -153,7 +153,7 @@ fn tet_face_info(t: Int, f: Int) -> TetFaceInfo:
     if f == 2: return TetFaceInfo(5, 0, 0, 0, 1)
     return TetFaceInfo(8, 0, -1, 0, 1)
 
-fn face_type_corner(ft: Int, idx: Int) -> Int:
+def face_type_corner(ft: Int, idx: Int) -> Int:
     # Owner-cell cube-corner index at canonical position (0..2).
     if ft == 0:
         if idx == 0: return 0
@@ -615,7 +615,7 @@ struct Mesh(Movable):
     var elem_node_xyz_f32_ptr: UnsafePointer[Float32, MutExternalOrigin]
     var elem_node_xyz_f32_len: Int
 
-    fn __init__(
+    def __init__(
         out self,
         mut ctx: DeviceContext,
         Nx: Int, Ny: Int, Nz: Int,

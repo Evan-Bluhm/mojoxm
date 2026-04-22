@@ -101,11 +101,11 @@ struct AsyncWriter(Movable):
     var _thread_ids: List[UInt64]
     var _max_concurrent: Int
 
-    fn __init__(out self, max_concurrent: Int = 4):
+    def __init__(out self, max_concurrent: Int = 4):
         self._thread_ids = List[UInt64]()
         self._max_concurrent = max_concurrent
 
-    fn submit(
+    def submit(
         mut self,
         path: String,
         segments: List[WriteSegment],
@@ -155,7 +155,7 @@ struct AsyncWriter(Movable):
             return
         self._thread_ids.append(tid)
 
-    fn wait_all(mut self):
+    def wait_all(mut self):
         for i in range(len(self._thread_ids)):
             var retval = UnsafePointer[Int8, MutAnyOrigin]()
             _ = external_call["pthread_join", Int32](
@@ -163,5 +163,5 @@ struct AsyncWriter(Movable):
             )
         self._thread_ids.clear()
 
-    fn __del__(deinit self):
+    def __del__(deinit self):
         self.wait_all()

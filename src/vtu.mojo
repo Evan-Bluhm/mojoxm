@@ -43,7 +43,7 @@ struct ByteBuf(Movable):
     var cap: Int
     var len: Int
 
-    fn __init__(out self, capacity: Int):
+    def __init__(out self, capacity: Int):
         self.ptr = alloc[UInt8](capacity)
         self.cap = capacity
         self.len = 0
@@ -55,7 +55,7 @@ struct ByteBuf(Movable):
     # (VtuWriter's xml/static/tail), we accept the memory leak at exit
     # rather than risk freeing data still referenced by writer threads.
 
-    fn write_u32_le(mut self, v: UInt32):
+    def write_u32_le(mut self, v: UInt32):
         var p = self.ptr + self.len
         p[0] = UInt8(v & 0xFF)
         p[1] = UInt8((v >> 8) & 0xFF)
@@ -63,13 +63,13 @@ struct ByteBuf(Movable):
         p[3] = UInt8((v >> 24) & 0xFF)
         self.len += 4
 
-    fn write_bytes[
+    def write_bytes[
         mut: Bool, //, origin: Origin[mut=mut]
     ](mut self, src: UnsafePointer[UInt8, origin], n: Int):
         memcpy(dest=self.ptr + self.len, src=src, count=n)
         self.len += n
 
-    fn write_str(mut self, s: String):
+    def write_str(mut self, s: String):
         var n = len(s)
         memcpy(dest=self.ptr + self.len,
                src=s.unsafe_ptr().bitcast[UInt8](),
@@ -121,7 +121,7 @@ struct VtuWriter(Movable):
 
     var _last_size: Int
 
-    fn __init__[
+    def __init__[
         mut: Bool, //, origin: Origin[mut=mut]
     ](out self,
         num_elements: Int,
@@ -212,7 +212,7 @@ struct VtuWriter(Movable):
         self.xml_tail = String('\n</AppendedData>\n</VTKFile>\n')
         self._last_size = 0
 
-    fn write_frame(mut self, path: String, q: List[Float32],
+    def write_frame(mut self, path: String, q: List[Float32],
                    mut nvtx: NvtxContext) raises:
         """Synchronous write -- deprecated, kept for compatibility.
         Prefer `build_segments()` + AsyncWriter.submit() on the hot path."""
@@ -238,7 +238,7 @@ struct VtuWriter(Movable):
     # Only the density segment is copied per frame (~26 MB at 48^3).
     # The 80 MB mesh coords are referenced once from Mesh's host buffer
     # and fed to writev() in place -- no copy anywhere in the pipeline.
-    fn build_segments(
+    def build_segments(
         mut self, q: List[Float32]
     ) raises -> List[WriteSegment]:
         var total_points = self.total_points
@@ -296,10 +296,10 @@ struct VtuWriter(Movable):
         var segs = [hdr_seg, density_seg, pre_seg, pts_seg, post_seg, tail_seg]
         return segs^
 
-    fn last_size(self) -> Int:
+    def last_size(self) -> Int:
         return self._last_size
 
-    fn _serialize(
+    def _serialize(
         mut self, q: List[Float32]
     ) raises -> UnsafePointer[UInt8, MutAnyOrigin]:
         var total_points = self.total_points

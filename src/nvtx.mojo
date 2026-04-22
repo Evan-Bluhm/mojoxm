@@ -31,7 +31,7 @@ struct NvtxContext(Movable):
     var _lib: OwnedDLHandle
     var _enabled: Bool
 
-    fn __init__(out self) raises:
+    def __init__(out self) raises:
         var candidates = [
             String("libnvtx3interop.so.1"),
             String("libnvtx3interop.so"),
@@ -52,7 +52,7 @@ struct NvtxContext(Movable):
             self._lib = OwnedDLHandle()   # RTLD_DEFAULT placeholder
             self._enabled = False
 
-    fn push_range(mut self, name: String) raises:
+    def push_range(mut self, name: String) raises:
         if not self._enabled:
             return
         var cstr = name + String("\0")
@@ -63,13 +63,13 @@ struct NvtxContext(Movable):
             rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr())
         )
 
-    fn pop_range(mut self) raises:
+    def pop_range(mut self) raises:
         if not self._enabled:
             return
         var f = self._lib.get_function[def() -> Int32]("nvtxRangePop")
         _ = f()
 
-    fn mark(mut self, name: String) raises:
+    def mark(mut self, name: String) raises:
         if not self._enabled:
             return
         var cstr = name + String("\0")
@@ -80,5 +80,5 @@ struct NvtxContext(Movable):
             rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr())
         )
 
-    fn is_enabled(self) -> Bool:
+    def is_enabled(self) -> Bool:
         return self._enabled

@@ -326,7 +326,7 @@ struct ReferenceElement(Copyable, Movable):
     var Lift_ref: List[Float64]      # [N_F * N_P * N_FP]
     var M_ref_inv: List[Float64]     # [N_P * N_P]  (diag info for diagnostics)
 
-    fn __init__(out self) raises:
+    def __init__(out self) raises:
         # Reference node positions (matching VTK_QUADRATIC_TETRA ordering).
         self.node_pos = List[Float64]()
         var positions = [

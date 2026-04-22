@@ -1,65 +1,113 @@
-# mojoxm — GPU DG advection solver in Mojo
+# mojoxm — GPU DG hyperbolic solver in Mojo
 
-Testing out the use of [Mojo](https://docs.modular.com/mojo/manual) to apply the discontinuous Galerkin method (DG) 
-over tetrahedral meshes to solve hyperbolic differential equations, 
-and inspired by [WARPXM](https://github.com/orgs/iws-hyperion/repositories).
-Intended as a minimum viable test bed for exploring Mojo's GPU programming
-model on a real finite-element kernel.
+A minimum viable GPU-accelerated [discontinuous
+Galerkin](https://en.wikipedia.org/wiki/Discontinuous_Galerkin_method)
+finite-element solver in [Mojo](https://docs.modular.com/mojo/manual),
+inspired by [WARPXM](https://github.com/orgs/iws-hyperion/repositories).
 
-```
-              ∂q/∂t + v · ∇q = 0,   on  [0, 1]³,  triply periodic
-              initial:  q(x, 0) = exp(-|x - x₀|² / 2σ²)
-              velocity: v = (1, 1, 1)
-```
+The solver is parameterized by a `Physics` trait; each simulation is
+its own single-file Mojo driver that composes a mesh, a physics type,
+an initial condition, and a time integrator. Two physics implementations
+ship today:
+
+- **Advection** — scalar linear advection, upwind flux. Single component.
+- **Euler** — 5-moment compressible gas dynamics with four selectable
+  numerical fluxes (Rusanov, Roe, HLLE, HLLEC) and an optional
+  Harten-Hyman entropy fix.
+
+Three reference drivers under `examples/`:
+
+- `examples/advection_gaussian.mojo` — Gaussian pulse on `[0, 1]³` with
+  `v = (1, 1, 1)`, triply periodic. After `T = 1` the exact solution
+  returns to the IC.
+- `examples/euler_vortex.mojo` — classical isentropic vortex (Shu form)
+  on `[0, 10]³` with background velocity `(1, 1, 0)` and HLLEC Riemann
+  solver.
+- `examples/euler_taylor_green.mojo` — compressible Taylor-Green vortex
+  on a 2π cube at Ma ≈ 0.3. Two counter-rotating vortex sheets stretch
+  and cascade toward turbulence.
 
 ## Numerical scheme
 
 - **P2 Lagrange DG** on tetrahedra (10 nodes per element: 4 vertices +
-  6 edge midpoints), with node ordering matching `VTK_QUADRATIC_TETRA`
-  (cell type 24) so ParaView opens the output with no re-indexing.
-- **Kuhn 6-tet decomposition** of a Cartesian cell grid.  Each cube
+  6 edge midpoints). Node ordering matches `VTK_QUADRATIC_TETRA` (cell
+  type 24) so ParaView opens the output with no re-indexing.
+- **Kuhn 6-tet decomposition** of a Cartesian cell grid. Each cube
   owns 12 uniquely numbered faces (6 interior diagonal + 6 external on
-  its +x/+y/+z boundaries).  Face IDs are computed as
-  `owner_cell * 12 + face_type`, giving a Dict-free mesh build.
+  its +x/+y/+z boundaries). Face IDs are `owner_cell * 12 + face_type`,
+  giving a Dict-free mesh build.
 - **Canonical face-node ordering by owner-cell cube-corner index**
-  (ascending).  Because Kuhn tets are translation-invariant, this makes
+  (ascending). Because Kuhn tets are translation-invariant, this makes
   the `(tet, local_face, side) → element-local P2 node` mapping a set
   of small precomputed tables — no per-cell orientation bookkeeping
   and no special cases for periodic-wrap cells.
-- **Upwind numerical flux** for the face term,
-  `F* = 0.5·((v·n + |v·n|) q_L + (v·n - |v·n|) q_R)`, matching the
-  `advection_t::numerical_flux_impl` formulation in WARPXM.
-- **Fused RK-stage kernel**: one GPU kernel computes the upwind flux,
-  volume DG term, and SSPRK3 linear combination per thread, avoiding
-  any intermediate `rhs` / `face_flux` scratch buffers.  Launched
-  **three times per timestep** for SSPRK3.
+- **Multi-component conserved state**: `q[(e*N_P + i)*NC + c]` where
+  `NC = PhysT.NUM_COMPONENTS`.
+- **Upwind / wave-based numerical flux**: the physics type's
+  `numerical_flux(q_l, q_r, n, flux)` hook writes the NC-vector flux at
+  a face given the outward normal. Advection uses plain upwind; Euler
+  rotates into the face-normal frame, solves the chosen 1D Riemann
+  problem, and rotates back.
+- **Fused RK-stage kernel**: one GPU kernel computes the numerical
+  flux, volume DG term, and SSPRK3 linear combination per thread, per
+  stage. No intermediate `rhs` / `face_flux` scratch buffers. Launched
+  three times per timestep. Generic over NC and physics type, so the
+  compiler emits one specialized kernel per physics module.
 - **Affine tets**: inverse Jacobian and `1/(6V)` are constants per
   tet-type; the kernel reads them from per-element arrays filled by
   the build-time tet-type tables.
 
-Validated at 48³ (663 552 tets, 6.6 M DOF) against the analytical
-solution: after 2080 SSPRK3 steps at `dt ≈ 4.8·10⁻⁴`, integral
-conservation holds to ~10⁻⁵ and the overshoot is ~0.2 % (inherent DG
-Gibbs behaviour with no limiter).
-
 ## System architecture
 
-The project is ~2400 lines of Mojo across seven files:
+The project is ~3900 lines of Mojo. Core components live under
+`src/`; problem-specific drivers live under `examples/`.
 
-| file                    | size  | role                                                  |
-|-------------------------|-------|-------------------------------------------------------|
-| `src/main.mojo`         |  234  | entry point, simulation driver, NVTX instrumentation  |
-| `src/reference.mojo`    |  433  | P2 reference element: analytic monomial integration of `M_ref`, `S_ref^k`, face mass/lift matrices |
-| `src/mesh.mojo`         |  756  | periodic Kuhn-tet mesh, **GPU-resident build**        |
-| `src/solver.mojo`       |  366  | fused RK-stage kernel, Gaussian IC kernel, SSPRK3 stepper |
-| `src/vtu.mojo`          |  372  | zero-copy binary-appended VTU writer                  |
-| `src/async_writer.mojo` |  167  | pthread-based `writev()` scatter-gather file writer   |
-| `src/nvtx.mojo`         |   84  | runtime-loaded NVTX shim for Nsight Systems timelines |
+| file                                | lines | role                                                                               |
+|-------------------------------------|-------|------------------------------------------------------------------------------------|
+| `src/reference.mojo`                |   433 | P2 reference element: analytic monomial integration, `D_ref`, `Lift_ref`           |
+| `src/mesh.mojo`                     |   756 | periodic Kuhn-tet mesh, **GPU-resident build**                                     |
+| `src/solver.mojo`                   |   447 | `Physics` trait, cooperative `rk_stage_kernel`, `Solver[PhysT]`, SSPRK3 stepper    |
+| `src/advection.mojo`                |    81 | `Advection` physics: scalar upwind flux                                            |
+| `src/euler.mojo`                    |   678 | `Euler` physics: 5-moment, 4 Riemann solvers, Harten-Hyman entropy fix, face rotation |
+| `src/vtu.mojo`                      |   372 | zero-copy binary-appended VTU writer (writes one scalar field per frame)           |
+| `src/async_writer.mojo`             |   167 | pthread-based `writev()` scatter-gather file writer                                |
+| `src/nvtx.mojo`                     |    84 | runtime-loaded NVTX shim for Nsight Systems timelines                              |
+| `examples/advection_gaussian.mojo`  |   284 | driver: Gaussian-pulse advection                                                   |
+| `examples/euler_vortex.mojo`        |   289 | driver: isentropic Euler vortex (Shu 1997)                                         |
+| `examples/euler_taylor_green.mojo`  |   280 | driver: compressible Taylor-Green vortex                                           |
+
+### The `Physics` trait
+
+Each physics module implements a tiny interface:
+
+```mojo
+trait Physics(Copyable, Movable, ImplicitlyDestructible, DevicePassable):
+    comptime NUM_COMPONENTS: Int
+
+    def internal_flux(
+        self,
+        q:    UnsafePointer[Float32, MutAnyOrigin],
+        flux: UnsafePointer[Float32, MutAnyOrigin],
+    ) -> Float32: ...      # writes flux[d * NC + c] = F_d_c(q)
+
+    def numerical_flux(
+        self,
+        q_l:  UnsafePointer[Float32, MutAnyOrigin],
+        q_r:  UnsafePointer[Float32, MutAnyOrigin],
+        nx: Float32, ny: Float32, nz: Float32,
+        flux: UnsafePointer[Float32, MutAnyOrigin],
+    ) -> Float32: ...      # writes NC-vector upwind / Riemann flux
+```
+
+`DevicePassable` is required because the physics instance is passed
+*by value* to the RK-stage kernel; the compiler copies the struct into
+kernel launch parameters, inlines every method call into the kernel,
+and emits one specialized kernel per `(NC, PhysT)` pair.
 
 ### Everything that lives on the GPU
 
 After construction, no host-side arrays indexed by element, face, or
-DOF survive past startup.  All of the following are device-resident:
+DOF survive past startup. All of the following are device-resident:
 
 - **Mesh** (`Mesh` struct, populated by two build kernels):
   - 10 node coordinates per element (`elem_node_xyz`)
@@ -69,48 +117,55 @@ DOF survive past startup.  All of the following are device-resident:
 - **DG operators** (uploaded once from host, ~540 Float32s total):
   - `D_ref[3][10][10]` = `M_ref⁻¹ · S_ref^k` (volume)
   - `Lift_ref[4][10][6]` = `M_ref⁻¹ · L_ref^f` (face)
-- **Solution state**: three `q` buffers for SSPRK3 (`d_q`, `d_q1`, `d_q2`)
-- **Initial condition**: evaluated on-device by `gaussian_ic_kernel`
-  reading the already-resident node coordinates
+- **Solution state**: three `q` buffers for SSPRK3
+  (each `num_elements * N_P * NC` Float32s)
+- **Initial condition**: each driver owns an IC kernel that writes
+  `d_q` directly, reading the already-resident node coordinates.
 
 The only host-side array of note is a single pointer to `elem_node_xyz`
 that `VtuWriter` references by pointer (zero-copy) when streaming VTU
 frames out to disk.
 
+### VTU output
+
+The VTU writer emits one scalar (named `"density"`) per frame. Drivers
+use `solver.download_component(c, buf)` to extract a single component
+from the multi-component `q` for visualization. For Advection, `c = 0`
+is the whole solution; for Euler, `c = 0` is the mass density ρ.
+
 ### The I/O pipeline
 
-- Per-frame writes use a pthread-based `AsyncWriter` that issues
-  `writev()` with 6 scatter-gather segments per frame:
-  `[xml_header][density(owned)][pts_count][elem_node_xyz(ref)][conn+offsets+types][xml_tail]`.
-  Only the 26 MB density section is copied per frame; the 80 MB mesh
-  coord segment is a pointer into `Mesh`'s host-side download.
-- Up to `max_concurrent=8` writer threads in flight, joined lazily in
-  the next `submit()` or at `wait_all()`.  Disk I/O is fully hidden
-  behind GPU compute in the steady state (typical `wait_async_writes`
-  at shutdown is tens of ms).
+Per-frame writes use a pthread-based `AsyncWriter` that issues
+`writev()` with 6 scatter-gather segments per frame:
+`[xml_header][density(owned)][pts_count][elem_node_xyz(ref)][conn+offsets+types][xml_tail]`.
+Only the density section is copied per frame; the mesh coord segment
+is a pointer into `Mesh`'s host-side download. Up to
+`max_concurrent=8` writer threads in flight, joined lazily in the
+next `submit()` or at `wait_all()`.
 
-## Performance at 48³ (RTX 3090, WSL2)
+## Performance
+
+### advection_gaussian at 48³ (RTX 3090, WSL2)
 
 End-to-end wall clock for a full 20-frame run at 48³ (663 K tets,
-6.6 M DOF, 2080 SSPRK3 steps, 136 MB per VTU file, 2.7 GB total on disk):
-**~7 s**.
+6.6 M DOF, 2080 SSPRK3 steps, 26 MB density per VTU file):
+**~4.7 s**.
 
-NVTX breakdown (host timeline; GPU compute is `frame_boundary_sync`):
+The fused RK-stage kernel achieves **98% of peak L1-cache throughput**
+according to Nsight Compute at 48³ (scalar advection specialization).
 
-```
-frame_boundary_sync    ~4.3 s    (2080 steps × 3 stages × ~730 µs = GPU compute)
-build_mesh             ~0.68 s   (GPU kernels + 80 MB device->host coord download)
-device_context_create  ~0.73 s   (CUDA runtime init, one-time)
-init_vtu_writer         ~25 ms   (connectivity iota + offsets + memset types)
-write_frame (×20)      ~8 ms ea  (async; overlapping with subsequent compute)
-initial_condition       ~1 ms    (one GPU kernel launch)
-solver_setup            ~0.2 ms  (D_ref + Lift_ref upload, ~540 floats)
-reference_element       ~0.2 ms
-```
+### euler_vortex at 32³ (RTX 3090, WSL2)
 
-The fused RK-stage kernel achieves **98 % of peak L1-cache throughput**
-according to Nsight Compute at 48³.  For the ncu drill-down, see the
-notes at the end of this README.
+End-to-end wall clock for a 10-frame run at 32³ (196 K tets, 2.0 M DOF
+× 5 components = 9.8 M unknowns, 280 SSPRK3 steps):
+**~21 s**.
+
+Euler's RK-stage kernel is substantially heavier than advection's
+(HLLEC Riemann solver + 3×3 face rotation matrix construction per
+face node, 5-component accumulators everywhere), so the per-step
+wall time is roughly an order of magnitude larger. The mean density
+drifts by ~2·10⁻⁶ over the 280-step run — well within single-precision
+round-off expectations.
 
 ## Build & run
 
@@ -119,7 +174,7 @@ notes at the end of this README.
 - NVIDIA GPU with compute capability 7.5+ (tested on RTX 3090).
 - CUDA 12.x installed (for `libnvtx3interop`, `ncu`, `nsys`).
 - `uv` (or `pip`) to install Mojo.
-- A C toolchain (linker).  On Linux, `libm` and `libpthread` via the
+- A C toolchain (linker). On Linux, `libm` and `libpthread` via the
   system `glibc`.
 
 ### Install Mojo
@@ -132,65 +187,57 @@ uv pip install mojo        # installs Mojo 0.26.2.0 (or newer)
 
 The compiler binary ends up at `.venv/bin/mojo`.
 
-### Compile
+### Compile a driver
+
+Drivers under `examples/` import the core modules from `src/`, so the
+build needs `-I src` on its search path:
 
 ```bash
-.venv/bin/mojo build -O3 -g0 src/main.mojo -o mojoxm \
-    -Xlinker -lm -Xlinker -lpthread
+.venv/bin/mojo build -O3 -g0 -I src examples/advection_gaussian.mojo \
+    -o advection_gaussian -Xlinker -lm -Xlinker -lpthread
+
+.venv/bin/mojo build -O3 -g0 -I src examples/euler_vortex.mojo \
+    -o euler_vortex -Xlinker -lm -Xlinker -lpthread
+
+.venv/bin/mojo build -O3 -g0 -I src examples/euler_taylor_green.mojo \
+    -o euler_taylor_green -Xlinker -lm -Xlinker -lpthread
 ```
 
 - `-O3` — full optimization (default already, but explicit).
 - **`-g0` is critical** — the default Mojo debug info inflates register
-  pressure from 40 → 114 per thread in the RK kernel and drops ncu's
-  reported memory throughput from 98 % to 8 %.  See the ncu analysis
-  notes at the end.
+  pressure from 40 → 114 per thread in the advection RK kernel and drops
+  ncu's reported memory throughput from 98% to 8%.
 
 ### Run
 
 ```bash
-./mojoxm
+./advection_gaussian        # writes output/frame_NNNNN.vtu + solution.pvd
+./euler_vortex              # same output layout, density field
+./euler_taylor_green        # density tracks the vortex pressure field
 ```
 
-20 binary VTU frames and one PVD collection file land in `output/`.
-Open `output/solution.pvd` in ParaView to see the Gaussian pulse
-advecting across the periodic cube along the diagonal.
+Open `output/solution.pvd` in ParaView.
 
-### Change the problem
+### Writing a new physics / driver
 
-All simulation parameters are `comptime` constants at the top of
-`src/main.mojo` — edit and rebuild:
-
-```mojo
-comptime NX = 48                     # cells per axis (mesh is NX³ × 6 tets)
-comptime LX = 1.0                    # domain size
-comptime VX: Float32 = 1.0           # advection velocity components
-comptime T_FINAL: Float32 = 1.0      # simulation end time
-comptime NUM_FRAMES = 20             # output frames (evenly spaced)
-comptime CFL = Float32(0.2)          # SSPRK3 safety factor
-
-comptime GAUSS_CX: Float32 = 0.5     # pulse center
-comptime GAUSS_SIGMA: Float32 = 0.12 # pulse width
-```
-
-### Expected scaling
-
-| NX  | tets     | DOF       | steps | wall (s) |
-|-----|----------|-----------|-------|----------|
-| 16  | 24 576   | 245 k     | 700   | ~1.0     |
-| 32  | 196 608  | 1.97 M    | 1400  | ~2.5     |
-| 48  | 663 552  | 6.64 M    | 2080  | ~7       |
-| 64  | 1 572 864| 15.7 M    | 2780  | ~15      |
-
-Wall time scales near-linearly with DOF count × step count at these
-sizes (frame I/O is hidden; `device_context_create` is a one-time cost
-that becomes a smaller fraction on longer runs).
+1. Create `src/my_physics.mojo` with a struct conforming to `Physics`
+   (`NUM_COMPONENTS`, `internal_flux`, `numerical_flux`) plus the
+   three `DevicePassable` plumbing items (`device_type`,
+   `_to_device_type`, `get_type_name`). See `src/advection.mojo` for
+   the minimal example.
+2. Create `examples/my_sim.mojo` with a `main()` that builds a `Mesh`,
+   an instance of your physics, and a `Solver[MyPhysics]`, plus an
+   initial-condition kernel you launch once. Copy the structure of
+   `examples/advection_gaussian.mojo`.
+3. Compile with `-I src` and run — no changes to `solver.mojo`,
+   `mesh.mojo`, or `vtu.mojo` are needed.
 
 ## Profiling
 
 ### Nsight Systems (CPU timeline + GPU kernels)
 
 ```bash
-nsys profile --trace=nvtx,cuda --output=trace ./mojoxm
+nsys profile --trace=nvtx,cuda --output=trace ./advection_gaussian
 nsys stats --report nvtx_pushpop_sum --report cuda_gpu_kern_sum trace.nsys-rep
 nsight-sys trace.nsys-rep          # or open in the GUI
 ```
@@ -198,8 +245,8 @@ nsight-sys trace.nsys-rep          # or open in the GUI
 The code is instrumented with NVTX ranges at every interesting phase
 (`build_mesh`, `solver_setup`, `initial_condition`, `ssprk3_step`,
 `rk_stage_{1,2,3}`, `frame_boundary_sync`, `write_frame`,
-`vtu_build_segments`, `vtu_submit`, `download_q`, `wait_async_writes`,
-…) so the timeline view tells a readable story.
+`vtu_build_segments`, `vtu_submit`, `download_q` / `download_component`,
+`wait_async_writes`, …) so the timeline view tells a readable story.
 
 NVTX support is **runtime-optional** — `src/nvtx.mojo` does a `dlopen`
 of `libnvtx3interop.so.1` (shipped with CUDA 12), and if the library
@@ -210,105 +257,89 @@ itself uses when no profiler is attached.
 
 ```bash
 ncu --kernel-name regex:rk_stage --launch-count 3 --launch-skip 10 \
-    --set detailed ./mojoxm
+    --set detailed ./advection_gaussian
 ```
 
-The fused RK-stage kernel (`solver_rk_stage_kernel`) dominates
-execution time; the three mesh-build kernels and the IC kernel each
-run once.
+The fused RK-stage kernel dominates execution time in both drivers.
 
 ## Design decisions worth knowing
 
+### Physics as a trait, not a virtual-call interface
+
+`Solver[PhysT: Physics]` is parametric on the physics type. Every RK
+kernel launch is a *specialization* on `PhysT`, so the compiler can
+inline `physics.internal_flux` / `physics.numerical_flux` into the
+kernel body. No vtable, no runtime branch on physics — the HLLEC
+solver compiles down to the same PTX it would if it were written
+inline as a scalar advection specialization.
+
+This is why the physics struct has to be `DevicePassable` — the
+instance travels to the device as part of the kernel launch
+parameters, so every field read in `internal_flux` / `numerical_flux`
+is a register load, not a memory fetch.
+
 ### The Mojo 0.26.2 `ByteBuf` `__del__` workaround
 
-`ByteBuf` in `src/vtu.mojo` deliberately has **no `__del__`**.  The
+`ByteBuf` in `src/vtu.mojo` deliberately has **no `__del__`**. The
 Mojo 0.26.2 compiler was observed to emit spurious destructor calls
 on struct values that were still reachable through another path,
 which caused the 109 MB static mesh buffer to be freed while a writer
-thread was mid-`writev()`.  Since the three `ByteBuf`s in `VtuWriter`
+thread was mid-`writev()`. Since the three `ByteBuf`s in `VtuWriter`
 have process-lifetime scope, the one-time leak at exit is harmless.
-Diagnosing this is the single longest debugging anecdote in the
-codebase (the writer thread printed a valid pointer whose contents
-had been zeroed the moment `__del__` fired).
 
 ### Cube-corner canonical ordering (not sorted-global-ID)
 
 Earlier versions of the mesh builder canonicalized shared faces by
-sorting the three global vertex IDs.  At periodic boundaries the
+sorting the three global vertex IDs. At periodic boundaries the
 wrap flips the sort order, which silently broke the
 canonical-to-element-node permutations — constant fields still
 propagated (no information in the node-identity mapping), but any
-non-constant field blew up.  The current mesh builder uses the **owner
+non-constant field blew up. The current mesh builder uses the **owner
 cell's cube-corner indices** as the canonical ordering, which is
 position-independent and therefore works everywhere.
 
 ### Async VTU writing via pthread + `writev`
 
 Frame writes were originally synchronous and a 48³ simulation spent
-more time in disk I/O than in GPU compute.  `src/async_writer.mojo`
+more time in disk I/O than in GPU compute. `src/async_writer.mojo`
 issues `pthread_create` with a Mojo callback function pointer (which
 works on x86-64 because thin Mojo function types match the C ABI for
 our pointer-only signatures), and the writer threads call `writev()`
 on scatter-gather segment lists so the zero-copy mesh-coords segment
 can be referenced in place without ever going through a staging
-buffer.  `cuMemAllocHost` is avoided on the device→host path too.
-
-## File index
-
-```
-src/main.mojo         Driver, NVTX scopes, hard-coded problem parameters
-src/reference.mojo    P2 basis, analytic ∫ λ₀^α₀ … λ₃^α₃ dV = ∏αᵢ!/(|α|+3)!,
-                      reference operators D_ref and Lift_ref
-src/mesh.mojo         Kuhn-tet mesh, build_elements_kernel, build_faces_kernel,
-                      Mesh struct owns all device mesh buffers
-src/solver.mojo       rk_stage_kernel (fused), gaussian_ic_kernel, Solver
-                      owns Mesh + DeviceContext + 3 RK buffers + D_ref/Lift_ref
-src/vtu.mojo          ByteBuf raw-buffer helper, VtuWriter, writes binary-
-                      appended XML with zero-copy points via scatter-gather
-src/async_writer.mojo _writer_entry pthread callback, AsyncWriter with up to
-                      8 concurrent writev()-based write threads
-src/nvtx.mojo         OwnedDLHandle-based NVTX wrapper, silent no-op when
-                      libnvtx3interop isn't present
-
-output/               Generated: frame_00000.vtu … frame_00019.vtu + solution.pvd
-.venv/                uv-managed Python venv containing mojo 0.26.2
-.claude/              Skills registry (mojo-gpu-fundamentals, mojo-syntax,
-                      mojo-python-interop)
-```
+buffer. `cuMemAllocHost` is avoided on the device→host path too.
 
 ## Limitations
 
-This is an MVP and nowhere near as capable as WARPXM:
-- Only scalar advection (1 component).  Vector-field apps (Euler,
-  Maxwell, MHD) would need per-component kernel generalization.
-- Only periodic BCs, triply.  No wall, Dirichlet, inflow/outflow.
-- Only P2.  The reference-element module could be generalized to
-  higher orders; the kernel ABI is order-independent but the on-face
-  orientation handling assumes the current 6-face-node triangle
-  layout.
-- Cartesian block mesh only.  Unstructured tet meshes from GMSH/etc.
+- Only periodic BCs. No wall, Dirichlet, inflow/outflow.
+- Only P2 elements. The reference-element module could be generalized
+  to higher orders; the kernel ABI is order-independent but the
+  on-face orientation handling assumes the current 6-face-node
+  triangle layout.
+- Cartesian block mesh only. Unstructured tet meshes from GMSH/etc.
   would need a different `Mesh` that loads from file and computes
   face-node mappings via the sorted-global-ID scheme (with care at
   periodic boundaries).
-- Float32 everywhere.  RTX 3090 FP64 is 1/64 of FP32, so FP32 is the
+- Float32 everywhere. RTX 3090 FP64 is 1/64 of FP32, so FP32 is the
   right call, but some applications may need FP64 mass-matrix inversion.
-- No limiter (Moe-Rossmanith, etc.) — smooth solutions only.  Gibbs
+- No limiter (Moe-Rossmanith, etc.) — smooth solutions only. Gibbs
   oscillations on discontinuous ICs grow without bound.
+- VTU writer emits one scalar per frame; visualizing multiple Euler
+  components (momentum, pressure) requires extending the writer.
 
 ## References
 
 - **DG formulation**: Hesthaven & Warburton, *Nodal Discontinuous
   Galerkin Methods*, Springer 2008.
 - **Kuhn tetrahedra**: Moore, *Simplicial Mesh Generation with
-  Applications* (thesis), Cornell 1992; or any introductory
-  computational-geometry text.
-- **WARPXM**: the reference implementation whose `advection_t::internal_flux_impl`
-  and `advection_t::numerical_flux_impl` were the starting point for
-  the numerical formulas here.
+  Applications* (thesis), Cornell 1992.
+- **Isentropic vortex test**: Shu, "Essentially Non-Oscillatory and
+  Weighted Essentially Non-Oscillatory Schemes for Hyperbolic
+  Conservation Laws", ICASE 97-65.
+- **Roe / HLLE / HLLEC**: LeVeque, *Finite Volume Methods for
+  Hyperbolic Problems*, Cambridge 2002.
+- **WARPXM**: the reference implementation whose `advection_t` and
+  `euler_t` numerical formulas were the starting point here.
 - **VTK appended binary format**: Kitware's VTK File Formats
   documentation, section "UnstructuredGrid".
 
-## License
-
-Same as the parent `mojo-playground` project (if any).  This is
-exploratory / educational code; not intended for production use.
