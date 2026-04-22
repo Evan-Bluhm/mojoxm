@@ -60,7 +60,8 @@ SRC_MOJO    := $(wildcard src/*.mojo)
 #                  Need a GPU at build time.
 NONMPI_GPU   = advection_gaussian euler_vortex euler_taylor_green
 MPI_CPU      = mpi_hello mpi_partition
-MPI_GPU      = mpi_patch_mesh mpi_halo_pingpong mpi_advection_gaussian
+MPI_GPU      = mpi_patch_mesh mpi_halo_pingpong mpi_advection_gaussian \
+               mpi_advection_test
 MPI          = $(MPI_CPU) $(MPI_GPU)
 ALL_DRIVERS  = $(NONMPI_GPU) $(MPI)
 

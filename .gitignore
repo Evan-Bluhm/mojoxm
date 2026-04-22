@@ -16,6 +16,8 @@ wheels/
 
 # output
 output/*
+test_dumps_np1/
+test_dumps_np4/
 
 # binaries
 mojoxm
@@ -27,6 +29,7 @@ mpi_partition
 mpi_patch_mesh
 mpi_halo_pingpong
 mpi_advection_gaussian
+mpi_advection_test
 mojo.sif
 
 # build products

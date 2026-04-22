@@ -275,6 +275,62 @@ struct PatchSolver[PhysT: Physics](Movable):
         self.ctx.synchronize()
 
     # --- Download helpers --------------------------------------------
+    def download_owned_component_with_ids(
+        mut self, c: Int,
+        mut scalar_host: List[Float32],
+        mut global_elem_ids_host: List[Int32],
+        nx_global: Int, ny_global: Int, nz_global: Int,
+        mut nvtx: NvtxContext,
+    ) raises:
+        """Download component `c` for owned elements AND compute each
+        element's global-mesh ID so a downstream test harness can
+        reassemble a whole-domain field from multiple ranks' dumps.
+
+        `scalar_host`          length >= num_owned_elements * N_P
+        `global_elem_ids_host`  length >= num_owned_elements
+        """
+        nvtx.push_range("download_owned_component_with_ids")
+        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](
+            self.total_q_len
+        )
+        var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](
+            self.num_owned_elements
+        )
+        self.ctx.enqueue_copy(hbuf,  self.d_q)
+        self.ctx.enqueue_copy(h_ids, self.patch.d_owned_elem_ids)
+        self.ctx.synchronize()
+        var q_p   = hbuf.unsafe_ptr()
+        var ids_p = h_ids.unsafe_ptr()
+        var stride = Self.NC
+
+        # Local grid dimensions used to decode cube coords from element id.
+        var loc_nx = self.patch.part.nx + 2
+        var loc_ny = self.patch.part.ny + 2
+        var cx0 = self.patch.part.cx0
+        var cy0 = self.patch.part.cy0
+        var cz0 = self.patch.part.cz0
+
+        for i in range(self.num_owned_elements):
+            var e = Int(ids_p[i])
+            # Kuhn tets per cube is 6; N_F is faces-per-tet (4).
+            var cube = e // 6
+            var tet = e - cube * 6
+            var lcz = cube // (loc_nx * loc_ny)
+            var rem = cube - lcz * loc_nx * loc_ny
+            var lcy = rem // loc_nx
+            var lcx = rem - lcy * loc_nx
+            # Local -> global: owned cubes are at (lcx in [1, nx+1)).
+            var gcx = cx0 + (lcx - 1)
+            var gcy = cy0 + (lcy - 1)
+            var gcz = cz0 + (lcz - 1)
+            var gcube = gcx + nx_global * (gcy + ny_global * gcz)
+            global_elem_ids_host[i] = Int32(gcube * 6 + tet)
+            for nn in range(N_P):
+                scalar_host[i * N_P + nn] = q_p[
+                    (e * N_P + nn) * stride + c
+                ]
+        nvtx.pop_range()
+
     def download_owned_component(
         mut self, c: Int, mut scalar_host: List[Float32],
         mut nvtx: NvtxContext,
