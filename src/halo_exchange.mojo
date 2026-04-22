@@ -262,14 +262,18 @@ struct HaloExchange(Movable):
         ctx.synchronize()
         self.req_storage = alloc[Int64](12)
 
-    def exchange(
+    def submit_pack(
         mut self,
         mut ctx: DeviceContext,
         q: UnsafePointer[Float32, MutAnyOrigin],
     ) raises:
-        """Pack owned-boundary q values, Isend/Irecv with all 6 face
-        neighbours, then unpack received data into the ghost ring.
-        Blocking: returns after ghost q values are up-to-date on device.
+        """Pack owned-boundary q values, stage to pinned host memory,
+        sync, and post non-blocking MPI_Isend/Irecv.  Returns
+        immediately; MPI runs on the host side while the caller is
+        free to launch interior compute on the default stream.
+
+        Must be paired with `complete_exchange()` before any compute
+        that reads ghost q values.
         """
         # ---- Phase 1: pack on GPU, then copy device -> host ---------
         for d in range(6):
@@ -284,16 +288,12 @@ struct HaloExchange(Movable):
                 grid_dim=ceildiv(total, HALO_BLOCK),
                 block_dim=HALO_BLOCK,
             )
-            # Stage to pinned host memory for non-CUDA-aware MPI.
             ctx.enqueue_copy(self.h_send_buf[d], self.d_send_buf[d])
-        ctx.synchronize()   # pack + D->H done before MPI reads host bufs
+        ctx.synchronize()   # pack + D->H done before MPI reads bufs
 
-        # ---- Phase 2: post Irecvs + Isends on host-side buffers -----
-        # Tag encoding: directions are numbered 0..5 for -x, +x, -y,
-        # +y, -z, +z.  On a send toward direction d we tag with d.  A
-        # receive from direction d expects tag = d XOR 1 (the
-        # neighbour sent it *toward us*, which is their opposite
-        # direction).
+        # ---- Phase 2: post non-blocking Irecvs + Isends -------------
+        # Tag encoding: directions 0..5 for (-x, +x, -y, +y, -z, +z).
+        # Send toward d => tag = d.  Recv from d => tag = d XOR 1.
         for d in range(6):
             var count_fl = self.ring_count[d] * N_P * self.nc
             if count_fl == 0:
@@ -312,10 +312,20 @@ struct HaloExchange(Movable):
                 self.req_storage + d,
             )
 
-        # ---- Phase 3: wait for MPI to finish -------------------------
+    def complete_exchange(
+        mut self,
+        mut ctx: DeviceContext,
+        q: UnsafePointer[Float32, MutAnyOrigin],
+    ) raises:
+        """Wait for MPI to finish, copy received payload back to
+        device, and unpack into the ghost ring.  Blocking: returns
+        after ghost q values are visible to subsequent kernel
+        launches on the default stream.
+        """
+        # Wait for the 12 non-blocking MPI ops posted in submit_pack.
         mpi.waitall(12, self.req_storage)
 
-        # ---- Phase 4: copy host -> device and unpack on GPU --------
+        # Copy host recv buffers back to device and unpack.
         for d in range(6):
             var count = self.ring_count[d]
             if count == 0:
@@ -330,6 +340,17 @@ struct HaloExchange(Movable):
                 block_dim=HALO_BLOCK,
             )
         ctx.synchronize()
+
+    def exchange(
+        mut self,
+        mut ctx: DeviceContext,
+        q: UnsafePointer[Float32, MutAnyOrigin],
+    ) raises:
+        """Blocking exchange.  Thin convenience wrapper over
+        `submit_pack` + `complete_exchange` for callers that don't
+        want to overlap compute with comm."""
+        self.submit_pack(ctx, q)
+        self.complete_exchange(ctx, q)
 
 
 # ----------------------------------------------------------------------

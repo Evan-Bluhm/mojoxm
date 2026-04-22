@@ -304,15 +304,21 @@ struct PatchSolver[PhysT: Physics](Movable):
                 ]
         nvtx.pop_range()
 
-    # --- Internal: one RK stage kernel launch ------------------------
+    # --- Internal: one RK stage kernel launch -----------------------
+    # `elem_ids_ptr` + `num_elems` select which subset of owned
+    # elements the kernel iterates over (interior, halo, or all owned).
     def _launch_rk_stage(
         mut self,
+        elem_ids_ptr: UnsafePointer[Int32,   MutAnyOrigin],
+        num_elems:    Int,
         q_in_ptr:  UnsafePointer[Float32, MutAnyOrigin],
         q_a_ptr:   UnsafePointer[Float32, MutAnyOrigin],
         q_b_ptr:   UnsafePointer[Float32, MutAnyOrigin],
         q_out_ptr: UnsafePointer[Float32, MutAnyOrigin],
         a: Float32, b: Float32, cc: Float32, dt: Float32,
     ) raises:
+        if num_elems == 0:
+            return
         comptime kernel = rk_stage_kernel_patch[Self.NC, Self.PhysT]
         self.ctx.enqueue_function[kernel, kernel](
             self.physics,
@@ -328,14 +334,59 @@ struct PatchSolver[PhysT: Physics](Movable):
             self.patch.mesh.d_face_area.unsafe_ptr(),
             self.d_D_ref.unsafe_ptr(),
             self.d_Lift_ref.unsafe_ptr(),
-            self.patch.d_owned_elem_ids.unsafe_ptr(),
-            self.num_owned_elements,
+            elem_ids_ptr, num_elems,
             a, b, cc, dt,
-            grid_dim=ceildiv(self.num_owned_elements, ELEMS_PER_BLOCK),
+            grid_dim=ceildiv(num_elems, ELEMS_PER_BLOCK),
             block_dim=THREADS_PER_BLOCK,
         )
 
-    # --- SSPRK3 time step with halo exchange before every stage ------
+    # Run one RK stage with split interior / halo kernels bracketing
+    # a non-blocking halo exchange.  Interior compute overlaps with
+    # MPI progress on the host; halo compute runs after the ghost q
+    # values have been unpacked.
+    def _step_stage_overlapped(
+        mut self,
+        q_in_ptr:  UnsafePointer[Float32, MutAnyOrigin],
+        q_a_ptr:   UnsafePointer[Float32, MutAnyOrigin],
+        q_b_ptr:   UnsafePointer[Float32, MutAnyOrigin],
+        q_out_ptr: UnsafePointer[Float32, MutAnyOrigin],
+        a: Float32, b: Float32, cc: Float32, dt: Float32,
+        mut nvtx: NvtxContext,
+    ) raises:
+        # Kick off pack + D->H + MPI_Isend/Irecv; returns while MPI
+        # progresses on the host.
+        nvtx.push_range("submit_pack")
+        self.halo.submit_pack(self.ctx, q_in_ptr)
+        nvtx.pop_range()
+
+        # Interior compute: needs only owned q, no ghost data.  Runs
+        # on the default stream concurrently with MPI.
+        nvtx.push_range("rk_stage_interior")
+        self._launch_rk_stage(
+            self.patch.d_interior_elem_ids.unsafe_ptr(),
+            self.patch.num_interior_elements,
+            q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
+            a, b, cc, dt,
+        )
+        nvtx.pop_range()
+
+        # Waitall + H->D + unpack.  After this returns, ghost q is up
+        # to date on device.
+        nvtx.push_range("complete_exchange")
+        self.halo.complete_exchange(self.ctx, q_in_ptr)
+        nvtx.pop_range()
+
+        # Halo compute: needs ghost q.
+        nvtx.push_range("rk_stage_halo")
+        self._launch_rk_stage(
+            self.patch.d_halo_elem_ids.unsafe_ptr(),
+            self.patch.num_halo_elements,
+            q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
+            a, b, cc, dt,
+        )
+        nvtx.pop_range()
+
+    # --- SSPRK3 time step with comm-compute overlap ------------------
     def step_ssprk3(
         mut self, dt: Float32, mut nvtx: NvtxContext,
     ) raises:
@@ -345,36 +396,30 @@ struct PatchSolver[PhysT: Physics](Movable):
         var p_q2 = self.d_q2.unsafe_ptr()
 
         # Stage 1: rhs(q) -> q1
-        nvtx.push_range("halo_exchange_1")
-        self.halo.exchange(self.ctx, p_q)
-        nvtx.pop_range()
         nvtx.push_range("rk_stage_1")
-        self._launch_rk_stage(
+        self._step_stage_overlapped(
             p_q, p_q, p_q, p_q1,
             Float32(1.0), Float32(0.0), Float32(1.0), dt,
+            nvtx,
         )
         nvtx.pop_range()
 
         # Stage 2: rhs(q1) -> q2
-        nvtx.push_range("halo_exchange_2")
-        self.halo.exchange(self.ctx, p_q1)
-        nvtx.pop_range()
         nvtx.push_range("rk_stage_2")
-        self._launch_rk_stage(
+        self._step_stage_overlapped(
             p_q1, p_q, p_q1, p_q2,
             Float32(0.75), Float32(0.25), Float32(0.25), dt,
+            nvtx,
         )
         nvtx.pop_range()
 
         # Stage 3: rhs(q2) -> q
-        nvtx.push_range("halo_exchange_3")
-        self.halo.exchange(self.ctx, p_q2)
-        nvtx.pop_range()
         nvtx.push_range("rk_stage_3")
-        self._launch_rk_stage(
+        self._step_stage_overlapped(
             p_q2, p_q, p_q2, p_q,
             Float32(1.0 / 3.0), Float32(2.0 / 3.0),
             Float32(2.0 / 3.0), dt,
+            nvtx,
         )
         nvtx.pop_range()
 
