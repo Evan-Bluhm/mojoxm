@@ -35,7 +35,7 @@
 # `face_elem` refs of faces owned by owned cubes.
 # ======================================================================
 
-from src.reference import N_P
+from src.reference import N_P, N_F
 from src.mesh import Mesh, KUHN_TETS_PER_CELL
 from src.partition import Partition
 from std.gpu import global_idx
@@ -122,6 +122,51 @@ def gather_owned_nodes_kernel(
 
 
 # ----------------------------------------------------------------------
+# Kernel: classify every owned element as halo (at least one face
+# neighbour is a ghost) or interior (all 4 face neighbours are owned).
+#
+# We decide "is neighbour owned?" by looking at the neighbour's cube
+# coordinates in the local grid and checking that it lies inside the
+# inner owned box [1, nx+1) x [1, ny+1) x [1, nz+1).  An element's
+# halo flag is written into `o_halo_flag` as 0 (interior) or 1 (halo).
+# ----------------------------------------------------------------------
+
+def classify_owned_kernel(
+    o_halo_flag:      UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned]
+    owned_elem_ids:   UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned]
+    elem_faces:       UnsafePointer[Int32,   MutAnyOrigin],  # [num_local*N_F]
+    face_elem:        UnsafePointer[Int32,   MutAnyOrigin],  # [num_faces*2]
+    num_owned: Int,
+    loc_nx: Int, loc_ny: Int,
+    nx: Int, ny: Int, nz: Int,
+):
+    var idx = Int(global_idx.x)
+    if idx >= num_owned:
+        return
+    var elem = Int(owned_elem_ids[idx])
+    var is_halo: Int32 = 0
+    for lf in range(N_F):
+        var face_id = Int(elem_faces[elem * N_F + lf])
+        var s0 = Int(face_elem[face_id * 2 + 0])
+        var s1 = Int(face_elem[face_id * 2 + 1])
+        var neighbour = s1 if s0 == elem else s0
+        # Decode neighbour cube coords.
+        var n_cube = neighbour // KUHN_TETS_PER_CELL
+        var n_lcz = n_cube // (loc_nx * loc_ny)
+        var rem = n_cube - n_lcz * loc_nx * loc_ny
+        var n_lcy = rem // loc_nx
+        var n_lcx = rem - n_lcy * loc_nx
+        var n_owned = (
+            n_lcx >= 1 and n_lcx <= nx
+            and n_lcy >= 1 and n_lcy <= ny
+            and n_lcz >= 1 and n_lcz <= nz
+        )
+        if not n_owned:
+            is_halo = 1
+    o_halo_flag[idx] = is_halo
+
+
+# ----------------------------------------------------------------------
 # PatchMesh
 # ----------------------------------------------------------------------
 
@@ -142,6 +187,16 @@ struct PatchMesh(Movable):
     # num_owned_elements * N_P * 3.
     var owned_node_xyz_f32_ptr: UnsafePointer[Float32, MutExternalOrigin]
     var owned_node_xyz_f32_len: Int
+
+    # Interior / halo partition of the owned element set.  Interior
+    # elements have all 4 face neighbours in the owned set; halo
+    # elements touch at least one ghost face neighbour.  Phase 3's
+    # split kernels dispatch over these lists separately so that
+    # interior compute can overlap with MPI halo exchange.
+    var num_halo_elements: Int
+    var num_interior_elements: Int
+    var d_halo_elem_ids:     DeviceBuffer[patch_i]
+    var d_interior_elem_ids: DeviceBuffer[patch_i]
 
     def __init__(
         out self,
@@ -217,6 +272,68 @@ struct PatchMesh(Movable):
             self.owned_node_xyz_f32_len
         )
         d_owned_nodes.enqueue_copy_to(self.owned_node_xyz_f32_ptr)
+
+        # -------- Interior / halo classification ---------------------
+        # Flag every owned element as 0 (interior) or 1 (halo).
+        var d_halo_flag = ctx.enqueue_create_buffer[patch_i](
+            self.num_owned_elements
+        )
+        ctx.enqueue_function[classify_owned_kernel, classify_owned_kernel](
+            d_halo_flag.unsafe_ptr(),
+            self.d_owned_elem_ids.unsafe_ptr(),
+            self.mesh.d_elem_faces.unsafe_ptr(),
+            self.mesh.d_face_elem.unsafe_ptr(),
+            self.num_owned_elements,
+            nx_loc, ny_loc,
+            part.nx, part.ny, part.nz,
+            grid_dim=ceildiv(self.num_owned_elements, PATCH_BLOCK),
+            block_dim=PATCH_BLOCK,
+        )
+
+        # Download the flag array + the owned_elem_ids to the host and
+        # split into two lists.  The owned element count is small
+        # (< 1e6 even at large ranks) so this two-pass CPU partition
+        # is negligible compared to mesh build cost.
+        var h_flag = ctx.enqueue_create_host_buffer[patch_i](
+            self.num_owned_elements
+        )
+        var h_owned = ctx.enqueue_create_host_buffer[patch_i](
+            self.num_owned_elements
+        )
+        ctx.enqueue_copy(h_flag, d_halo_flag)
+        ctx.enqueue_copy(h_owned, self.d_owned_elem_ids)
+        ctx.synchronize()
+
+        var pflag  = h_flag.unsafe_ptr()
+        var powned = h_owned.unsafe_ptr()
+        var halo_count = 0
+        for i in range(self.num_owned_elements):
+            if pflag[i] != 0:
+                halo_count += 1
+        var interior_count = self.num_owned_elements - halo_count
+        self.num_halo_elements = halo_count
+        self.num_interior_elements = interior_count
+
+        self.d_halo_elem_ids = ctx.enqueue_create_buffer[patch_i](halo_count)
+        self.d_interior_elem_ids = ctx.enqueue_create_buffer[patch_i](
+            interior_count
+        )
+        # Build the two lists on the host, then upload.
+        var h_halo = ctx.enqueue_create_host_buffer[patch_i](halo_count)
+        var h_int  = ctx.enqueue_create_host_buffer[patch_i](interior_count)
+        var p_halo = h_halo.unsafe_ptr()
+        var p_int  = h_int.unsafe_ptr()
+        var hc = 0
+        var ic = 0
+        for i in range(self.num_owned_elements):
+            if pflag[i] != 0:
+                p_halo[hc] = powned[i]
+                hc += 1
+            else:
+                p_int[ic] = powned[i]
+                ic += 1
+        ctx.enqueue_copy(self.d_halo_elem_ids, h_halo)
+        ctx.enqueue_copy(self.d_interior_elem_ids, h_int)
         ctx.synchronize()
 
         # Finally, move the partition into place.  We had to keep it

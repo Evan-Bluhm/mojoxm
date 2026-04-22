@@ -47,21 +47,9 @@ def main() raises:
                 patch.part.ny, "x", patch.part.nz, ")",
                 " -> local mesh (", patch.part.nx + 2, "x",
                 patch.part.ny + 2, "x", patch.part.nz + 2, ")",
-                " num_owned_elements=", patch.num_owned_elements,
-                " total_local_elements=", patch.mesh.num_elements,
-            )
-            var pts = patch.owned_node_xyz_f32_ptr
-            var nE = patch.num_owned_elements
-            print(
-                "  first-node:  (",
-                Float32(pts[0]), ",", Float32(pts[1]), ",", Float32(pts[2]), ")",
-                "  last-node:  (",
-                Float32(pts[(nE * 10 - 1) * 3 + 0]), ",",
-                Float32(pts[(nE * 10 - 1) * 3 + 1]), ",",
-                Float32(pts[(nE * 10 - 1) * 3 + 2]), ")",
-                "  (patch cube x-range: [",
-                Float32(Float64(patch.part.cx0) / Float64(NX)), ",",
-                Float32(Float64(patch.part.cx1) / Float64(NX)), "])",
+                " num_owned=", patch.num_owned_elements,
+                " (halo=", patch.num_halo_elements,
+                ", interior=", patch.num_interior_elements, ")",
             )
         mpi.barrier_world()
 
