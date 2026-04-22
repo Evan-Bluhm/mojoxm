@@ -193,41 +193,32 @@ The compiler binary ends up at `.venv/bin/mojo`.
 ### Compile a driver
 
 `src/` is a Mojo package (it contains `__init__.mojo`), so drivers
-import the core modules as `from src.solver import Solver`, etc. Build
-from the project root with `-I .` on the search path:
+import the core modules as `from src.solver import Solver`, etc.
+Everything builds through a `Makefile` at the project root:
 
 ```bash
-.venv/bin/mojo build -O3 -g0 -I . examples/advection_gaussian.mojo \
-    -o advection_gaussian -Xlinker -lm -Xlinker -lpthread
-
-.venv/bin/mojo build -O3 -g0 -I . examples/euler_vortex.mojo \
-    -o euler_vortex -Xlinker -lm -Xlinker -lpthread
-
-.venv/bin/mojo build -O3 -g0 -I . examples/euler_taylor_green.mojo \
-    -o euler_taylor_green -Xlinker -lm -Xlinker -lpthread
+make               # build every driver (CPU + GPU, MPI + non-MPI)
+make nonmpi        # single-rank GPU drivers (advection_gaussian, etc.)
+make mpi           # all MPI drivers
+make cpu           # just the MPI drivers that don't touch the GPU
+make <driver>      # e.g. `make mpi_hello`
+make clean
+make help
 ```
 
-- `-O3` — full optimization (default already, but explicit).
+Key build flags baked into the Makefile:
+
+- `-O3` — full optimization.
 - **`-g0` is critical** — the default Mojo debug info inflates register
   pressure from 40 → 114 per thread in the advection RK kernel and drops
   ncu's reported memory throughput from 98% to 8%.
+- `-I .` — with `src/__init__.mojo` in place, lets drivers import as
+  `from src.solver import Solver`.
 
-### MPI examples
-
-Drivers under `examples/mpi_*.mojo` use the `src.mpi` module which
-binds OpenMPI through a tiny C shim (`src/mpi_shim.c`).  Build the
-shim once, then link it into each MPI driver:
+MPI drivers additionally link `build/mpi_shim.o` (built once by the
+`shim` target) against the system's `libmpi`.
 
 ```bash
-mkdir -p build
-mpicc -O2 -fPIC -c src/mpi_shim.c -o build/mpi_shim.o
-
-.venv/bin/mojo build -O3 -g0 -I . examples/mpi_hello.mojo -o mpi_hello \
-    -Xlinker build/mpi_shim.o \
-    -Xlinker -L/usr/lib/x86_64-linux-gnu/openmpi/lib \
-    -Xlinker -lmpi \
-    -Xlinker -lm -Xlinker -lpthread
-
 mpirun -np 4 ./mpi_hello
 mpirun -np 8 ./mpi_partition           # cube-grid Partition
 mpirun -np 8 ./mpi_patch_mesh          # PatchMesh + halo classification
@@ -280,27 +271,30 @@ for this step):
 apptainer build --fakeroot mojo.sif mojo.def
 ```
 
-**Compile the shim** with the host's OpenMPI (no module-load needed
-on login nodes; use absolute paths):
+**Build drivers.** Login nodes can build only CPU-only MPI drivers
+(`mpi_hello`, `mpi_partition`) because Mojo elaborates the GPU kernel
+at compile time and needs a live GPU to do so. Everything else builds
+on a GPU compute node. One-line make invocation with the Apptainer
+overrides:
 
 ```bash
-mkdir -p build
+# CPU-only MPI drivers (can run on a login node):
 LD_LIBRARY_PATH=/sw/gcc/13.2.0/lib64:/sw/gcc/13.2.0/lib:/sw/ompi/4.1.6-2/lib \
 PATH=/sw/gcc/13.2.0/bin:/sw/ompi/4.1.6-2/bin:$PATH \
-/sw/ompi/4.1.6-2/bin/mpicc -O2 -fPIC -c src/mpi_shim.c -o build/mpi_shim.o
-```
+make cpu \
+    MOJO='apptainer exec --bind /sw --bind /gscratch mojo.sif mojo' \
+    MPICC=/sw/ompi/4.1.6-2/bin/mpicc \
+    MPI_LIBDIR=/sw/ompi/4.1.6-2/lib
 
-**Compile a GPU-using driver on a compute node** (Mojo elaborates GPU
-kernels at build time, so this must happen where a GPU is visible):
-
-```bash
-srun -A aaplasma -p ckpt --gres=gpu:a40:1 -c 4 --mem=16G --time=30:00 \
-    apptainer exec --nv --bind /sw --bind /gscratch mojo.sif \
-    mojo build -O3 -g0 -I . examples/mpi_advection_gaussian.mojo \
-        -o mpi_advection_gaussian \
-        -Xlinker build/mpi_shim.o \
-        -Xlinker -L/sw/ompi/4.1.6-2/lib -Xlinker -lmpi \
-        -Xlinker -lm -Xlinker -lpthread
+# Everything (GPU-using drivers included, must be on a GPU node):
+srun -A aaplasma -p ckpt --gres=gpu:a40:1 -c 8 --mem=16G --time=30:00 \
+    bash -c '
+LD_LIBRARY_PATH=/sw/gcc/13.2.0/lib64:/sw/gcc/13.2.0/lib:/sw/ompi/4.1.6-2/lib \
+PATH=/sw/gcc/13.2.0/bin:/sw/ompi/4.1.6-2/bin:$PATH \
+make -j4 all \
+    MOJO="apptainer exec --nv --bind /sw --bind /gscratch mojo.sif mojo" \
+    MPICC=/sw/ompi/4.1.6-2/bin/mpicc \
+    MPI_LIBDIR=/sw/ompi/4.1.6-2/lib'
 ```
 
 **Run**: always launch the binary through `mpirun` (even at `-np 1`)
