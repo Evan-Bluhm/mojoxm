@@ -263,6 +263,64 @@ host. On a single-GPU box wall time grows with rank count because
 all ranks time-share one GPU and MPI is host-staged; on a multi-GPU
 cluster with CUDA-aware MPI that relation inverts.
 
+### Running on a cluster: Apptainer image for Klone
+
+Klone (UW Hyak) is Rocky Linux 8.9 with glibc 2.28 on both login and
+compute nodes, but the Modular nightly Mojo wheel requires glibc
+≥ 2.34 (`manylinux_2_34_x86_64`).  `mojo.def` at the project root is
+an Apptainer definition that wraps Mojo in an Ubuntu 24.04 base
+(glibc 2.39) and layers just enough compiler + OpenMPI-dev to
+cross-compile mojoxm drivers against the host's `cuda/12.9.1` +
+`ompi/4.1.6-2` modules.
+
+**One-time build** (takes ~3 min on the login node; no GPU required
+for this step):
+
+```bash
+apptainer build --fakeroot mojo.sif mojo.def
+```
+
+**Compile the shim** with the host's OpenMPI (no module-load needed
+on login nodes; use absolute paths):
+
+```bash
+mkdir -p build
+LD_LIBRARY_PATH=/sw/gcc/13.2.0/lib64:/sw/gcc/13.2.0/lib:/sw/ompi/4.1.6-2/lib \
+PATH=/sw/gcc/13.2.0/bin:/sw/ompi/4.1.6-2/bin:$PATH \
+/sw/ompi/4.1.6-2/bin/mpicc -O2 -fPIC -c src/mpi_shim.c -o build/mpi_shim.o
+```
+
+**Compile a GPU-using driver on a compute node** (Mojo elaborates GPU
+kernels at build time, so this must happen where a GPU is visible):
+
+```bash
+srun -A aaplasma -p ckpt --gres=gpu:a40:1 -c 4 --mem=16G --time=30:00 \
+    apptainer exec --nv --bind /sw --bind /gscratch mojo.sif \
+    mojo build -O3 -g0 -I . examples/mpi_advection_gaussian.mojo \
+        -o mpi_advection_gaussian \
+        -Xlinker build/mpi_shim.o \
+        -Xlinker -L/sw/ompi/4.1.6-2/lib -Xlinker -lmpi \
+        -Xlinker -lm -Xlinker -lpthread
+```
+
+**Run**: always launch the binary through `mpirun` (even at `-np 1`)
+and wrap each rank in `apptainer exec --nv` so the Mojo runtime
+library is on the rank's `LD_LIBRARY_PATH`:
+
+```bash
+srun -A aaplasma -p ckpt --gres=gpu:a40:1 -n 4 --cpus-per-task=2 \
+    --mem=16G --time=30:00 \
+    bash -c '
+LD_LIBRARY_PATH=/sw/ompi/4.1.6-2/lib:/sw/cuda/12.9.1/lib64:/sw/gcc/13.2.0/lib64 \
+PATH=/sw/ompi/4.1.6-2/bin:$PATH \
+mpirun -np 4 apptainer exec --nv --bind /sw --bind /gscratch mojo.sif \
+    ./mpi_advection_gaussian'
+```
+
+Verified on A40: at `np = 4` the driver reports identical
+conservation / max to the WSL2 single-GPU `np = 8` run
+(drift 3.56·10⁻⁵, overshoot 1.003426).
+
 **Known limitations and future work:**
 
 - Mojo 0.26.2 doesn't expose stream-targeted `enqueue_copy` or

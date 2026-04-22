@@ -27,6 +27,7 @@ mpi_partition
 mpi_patch_mesh
 mpi_halo_pingpong
 mpi_advection_gaussian
+mojo.sif
 
 # build products
 build/*.o

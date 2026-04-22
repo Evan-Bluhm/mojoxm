@@ -1,0 +1,68 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+# ======================================================================
+# mojoxm build container for Klone (Rocky 8 / glibc 2.28 host)
+# ======================================================================
+#
+# Why: the Modular nightly Mojo wheel ships as manylinux_2_34_x86_64,
+# so it needs glibc >= 2.34 at runtime.  Klone is glibc 2.28.  Ubuntu
+# 24.04 has glibc 2.39, which comfortably satisfies the wheel.
+#
+# What is inside:
+#   * Python 3 + uv
+#   * Mojo (nightly) installed into a system venv at /opt/mojoenv
+#   * gcc/g++
+#   * OpenMPI dev headers (so the Mojo build can link against host
+#     /sw/ompi.../libmpi.so via bind mount; no MPI runtime is used
+#     inside the container).
+#
+# Build:
+#   apptainer build --fakeroot mojo.sif mojo.def
+#
+# Use (from the project root):
+#   mpicc -O2 -fPIC -c src/mpi_shim.c -o build/mpi_shim.o
+#   apptainer exec --nv --bind /sw mojo.sif \
+#       mojo build -O3 -g0 -I . examples/mpi_advection_gaussian.mojo \
+#           -o mpi_advection_gaussian \
+#           -Xlinker build/mpi_shim.o \
+#           -Xlinker -L/sw/ompi/4.1.6-2/lib -Xlinker -lmpi
+# ======================================================================
+
+%post
+    set -eux
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl git \
+        build-essential \
+        python3 python3-pip python3-venv \
+        libc6-dev \
+        libopenmpi-dev
+    rm -rf /var/lib/apt/lists/*
+
+    # Install uv.
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    mv /root/.local/bin/uv /usr/local/bin/uv
+
+    # Create Mojo venv and install the nightly.
+    mkdir -p /opt/mojoenv
+    uv venv /opt/mojoenv
+    . /opt/mojoenv/bin/activate
+    uv pip install mojo \
+        --index https://whl.modular.com/nightly/simple/ \
+        --prerelease allow
+    deactivate
+    chmod -R a+rX /opt/mojoenv
+
+%environment
+    export PATH=/opt/mojoenv/bin:/usr/local/bin:/usr/bin:/bin
+    export LIBRARY_PATH=/sw/ompi/4.1.6-2/lib:${LIBRARY_PATH:-}
+
+%runscript
+    exec "$@"
+
+%help
+    Mojo build container for Klone (Rocky 8 / glibc 2.28 host).
+    Compiles mojoxm drivers that link against host CUDA + OpenMPI
+    via --bind /sw and --nv.
