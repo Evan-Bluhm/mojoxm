@@ -202,6 +202,8 @@ make nonmpi        # single-rank GPU drivers (advection_gaussian, etc.)
 make mpi           # all MPI drivers
 make cpu           # just the MPI drivers that don't touch the GPU
 make <driver>      # e.g. `make mpi_hello`
+make test          # MPI correctness test: np=1 vs np=4, must agree to FP precision
+make test-klone    # same, dispatched through scripts/klone-run on the cluster
 make clean
 make help
 ```

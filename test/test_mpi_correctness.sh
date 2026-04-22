@@ -3,14 +3,13 @@
 # test_mpi_correctness.sh -- verify np=1 and np=4 produce the same
 # final q field (within FP tolerance).
 #
-# Runs examples/mpi_advection_test.mojo for 50 steps at np=1 and np=4,
-# dumping each rank's owned q to output/final_q_rank_<rank>.bin.  Moves
-# the dumps into per-config directories and invokes
-# scripts/diff_mpi_dumps.py to compare.
+# Runs test/mpi_advection_test.mojo for 50 steps at np=1 and np=4,
+# moves each rank's owned q dump into test/dumps_np<N>/, and invokes
+# test/diff_mpi_dumps.py to compare.
 #
 # Usage:
-#     scripts/test_mpi_correctness.sh                    # local WSL2 path
-#     scripts/test_mpi_correctness.sh --klone            # cluster path
+#     test/test_mpi_correctness.sh                    # local WSL2 path
+#     test/test_mpi_correctness.sh --klone            # cluster path
 #
 # Exits 0 on PASS, 1 on FAIL.
 # ======================================================================
@@ -25,7 +24,7 @@ MODE="${1:-local}"
 
 run_np() {
     # $1 = np (1 or 4)
-    # $2 = output-subdir
+    # $2 = output-subdir  (under test/)
     local np="$1"
     local subdir="$2"
     rm -rf "$subdir"
@@ -33,37 +32,33 @@ run_np() {
     rm -rf output && mkdir output
 
     if [[ "$MODE" == "--klone" ]]; then
-        NP="$np" "$SCRIPT_DIR/klone-run" mpi_advection_test > "$subdir/run.log" 2>&1
+        NP="$np" "$PROJECT_DIR/scripts/klone-run" mpi_advection_test \
+            > "$subdir/run.log" 2>&1
     else
-        if [[ "$np" == "1" ]]; then
-            mpirun -np 1 ./mpi_advection_test > "$subdir/run.log" 2>&1
-        else
-            mpirun -np "$np" ./mpi_advection_test > "$subdir/run.log" 2>&1
-        fi
+        mpirun -np "$np" ./mpi_advection_test > "$subdir/run.log" 2>&1
     fi
     mv output/final_q_rank_*.bin "$subdir/"
 }
 
 echo "=== build mpi_advection_test ==="
 if [[ "$MODE" == "--klone" ]]; then
-    # klone-run takes care of Apptainer + host MPI linkage itself.
-    # We still need the binary present before launching, but klone-run
-    # builds it as part of the job.  Nothing to do here.
+    # klone-run takes care of Apptainer + host MPI linkage itself and
+    # rebuilds inside each srun allocation so PTX matches the GPU.
     :
 else
-    make mpi_advection_test -s
+    make -s mpi_advection_test
 fi
 
 echo "=== run np=1 ==="
-run_np 1 "test_dumps_np1"
+run_np 1 "test/dumps_np1"
 
 echo "=== run np=4 ==="
-run_np 4 "test_dumps_np4"
+run_np 4 "test/dumps_np4"
 
 echo "=== diff ==="
 if python3 "$SCRIPT_DIR/diff_mpi_dumps.py" \
-    --a test_dumps_np1 \
-    --b test_dumps_np4 \
+    --a test/dumps_np1 \
+    --b test/dumps_np4 \
     --tol-abs 1e-5 \
     --tol-rel 1e-4
 then
@@ -71,6 +66,6 @@ then
     exit 0
 else
     echo "=== MPI correctness test FAILED ==="
-    echo "    inspect test_dumps_np1/run.log and test_dumps_np4/run.log"
+    echo "    inspect test/dumps_np1/run.log and test/dumps_np4/run.log"
     exit 1
 fi

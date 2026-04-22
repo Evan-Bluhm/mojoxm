@@ -16,8 +16,9 @@ wheels/
 
 # output
 output/*
-test_dumps_np1/
-test_dumps_np4/
+
+# test dump outputs (produced by test/test_mpi_correctness.sh)
+test/dumps_np*/
 
 # binaries
 mojoxm
