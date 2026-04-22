@@ -131,6 +131,69 @@ def gather_owned_nodes_kernel(
 # halo flag is written into `o_halo_flag` as 0 (interior) or 1 (halo).
 # ----------------------------------------------------------------------
 
+# ----------------------------------------------------------------------
+# Kernels: apply an element permutation to the per-element mesh arrays
+# and remap element-id values inside face_elem.
+#
+# The permutation is stored as two parallel Int32 arrays:
+#   perm[old_id]     = new_id   (forward, used to remap face_elem values)
+#   inv_perm[new_id] = old_id   (inverse, used to gather-into-new-layout)
+#
+# Every per-element array has a stride of (sizeof entry / sizeof Float32
+# or Int32) per element.  `gather_stride_*_kernel` reads from the old
+# layout using inv_perm and writes to the new layout at contiguous
+# positions.
+# ----------------------------------------------------------------------
+
+def gather_stride_f32_kernel(
+    new_arr: UnsafePointer[Float32, MutAnyOrigin],
+    old_arr: UnsafePointer[Float32, MutAnyOrigin],
+    inv_perm: UnsafePointer[Int32, MutAnyOrigin],  # [num_local] new -> old
+    num_local: Int,
+    stride: Int,
+):
+    var idx = Int(global_idx.x)
+    var total = num_local * stride
+    if idx >= total:
+        return
+    var new_id = idx // stride
+    var offset = idx % stride
+    var old_id = Int(inv_perm[new_id])
+    new_arr[new_id * stride + offset] = old_arr[old_id * stride + offset]
+
+
+def gather_stride_i32_kernel(
+    new_arr: UnsafePointer[Int32, MutAnyOrigin],
+    old_arr: UnsafePointer[Int32, MutAnyOrigin],
+    inv_perm: UnsafePointer[Int32, MutAnyOrigin],
+    num_local: Int,
+    stride: Int,
+):
+    var idx = Int(global_idx.x)
+    var total = num_local * stride
+    if idx >= total:
+        return
+    var new_id = idx // stride
+    var offset = idx % stride
+    var old_id = Int(inv_perm[new_id])
+    new_arr[new_id * stride + offset] = old_arr[old_id * stride + offset]
+
+
+def remap_face_elem_values_kernel(
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],   # [num_faces * 2]
+    perm: UnsafePointer[Int32, MutAnyOrigin],        # [num_local] old -> new
+    num_entries: Int,                                 # = num_faces * 2
+):
+    var idx = Int(global_idx.x)
+    if idx >= num_entries:
+        return
+    var old_v = Int(face_elem[idx])
+    # Element ids in face_elem should always be valid indices into the
+    # local element array, but guard defensively.
+    if old_v >= 0:
+        face_elem[idx] = perm[old_v]
+
+
 def classify_owned_kernel(
     o_halo_flag:      UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned]
     o_primary_ring:   UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned], -1 if interior
@@ -227,14 +290,31 @@ struct PatchMesh(Movable):
     # Per-direction (primary-ring-ordered) halo element counts.  For
     # each of the 6 face directions [-x, +x, -y, +y, -z, +z] this is
     # the number of halo tets whose PRIMARY (lowest-priority-wins)
-    # ghost neighbour lies in that direction.  Used by a future
-    # pack-free HaloExchange to slice q into contiguous primary send
-    # regions; the existing pack-kernel HaloExchange ignores these.
+    # ghost neighbour lies in that direction.
     var halo_primary_count: List[Int]
     # Ring counts per direction on the ghost side (equals the owned
     # halo ring counts for face-adjacent rings -- each ghost cube on
     # a face ring has exactly one primary sender).
     var ghost_ring_count: List[Int]
+
+    # Permutation of local element IDs.  After PatchMesh construction
+    # the mesh arrays have been rearranged so that:
+    #
+    #   [0, num_interior)                             owned interior
+    #   [num_interior, num_interior + halo_primary_count[0]) halo -x
+    #   next block: halo +x,  then -y, +y, -z, +z
+    #   [num_owned, num_owned + ghost_ring_count[0])  ghost -x
+    #   next 5 ghost blocks by direction
+    #   [end_of_ghost_rings, num_local_elements)      unused edge/corner
+    #                                                  ghost cubes (not
+    #                                                  exchanged; never
+    #                                                  read by the solver)
+    #
+    # `d_perm` maps the BUILD-time (cube_id * 6 + tet) element id to
+    # the post-permutation id; `d_inv_perm` is the reverse.  Kept on
+    # the device so HaloExchange can remap its pack-index lists.
+    var d_perm:     DeviceBuffer[patch_i]
+    var d_inv_perm: DeviceBuffer[patch_i]
 
     def __init__(
         out self,
@@ -420,6 +500,273 @@ struct PatchMesh(Movable):
         ctx.enqueue_copy(self.d_interior_elem_ids, h_int)
         ctx.synchronize()
 
-        # Finally, move the partition into place.  We had to keep it
-        # readable above for coordinate computations.
+        # Move the partition into place *before* the element reordering
+        # step, because _permute_mesh_arrays passes self around and
+        # Mojo requires every struct field initialised before that.
         self.part = part^
+
+        # -------- Element reordering (phase 5) ----------------------
+        # Compute a permutation of ALL local elements (owned + ghost)
+        # so the mesh arrays layout becomes:
+        #   [interior] [halo_-x] [halo_+x] [halo_-y] [halo_+y] [halo_-z] [halo_+z]
+        #   [ghost_-x] [ghost_+x] [ghost_-y] [ghost_+y] [ghost_-z] [ghost_+z]
+        #   [unused ghost: edge/corner cubes that no rank exchanges]
+        # This is the structural foundation for pack-free halo
+        # exchange (future work); the current HaloExchange still
+        # uses pack kernels.  Correctness is preserved.
+        var num_local = self.mesh.num_elements
+        var h_perm = ctx.enqueue_create_host_buffer[patch_i](num_local)
+        var h_inv = ctx.enqueue_create_host_buffer[patch_i](num_local)
+
+        # Initialise perm to -1 (sentinel), then fill in bucket-by-bucket.
+        var pp = h_perm.unsafe_ptr()
+        var pi = h_inv.unsafe_ptr()
+        for i in range(num_local):
+            pp[i] = Int32(-1)
+            pi[i] = Int32(-1)
+
+        # Compute per-direction owned-halo offsets.
+        var halo_offset_abs = InlineArray[Int, 6](fill=0)
+        halo_offset_abs[0] = interior_count
+        for d in range(1, 6):
+            halo_offset_abs[d] = (
+                halo_offset_abs[d - 1] + halo_per_dir[d - 1]
+            )
+        # Cumulative ghost-ring offsets after owned region.
+        var ghost_offset_abs = InlineArray[Int, 7](fill=0)
+        ghost_offset_abs[0] = self.num_owned_elements
+        for d in range(1, 7):
+            ghost_offset_abs[d] = (
+                ghost_offset_abs[d - 1] + self.ghost_ring_count[d - 1]
+            )
+        var unused_start = ghost_offset_abs[6]
+
+        # --- Owned bucket assignment (from the already-ordered
+        # d_halo_elem_ids / d_interior_elem_ids above). ---
+        for i in range(interior_count):
+            var old_id = Int(p_int[i])
+            pp[old_id] = Int32(i)
+        for i in range(halo_count):
+            var old_id = Int(p_halo[i])
+            pp[old_id] = Int32(interior_count + i)
+
+        # --- Ghost bucket assignment (walk the 6 face rings on the
+        # local grid). ---
+        # Face-ring tuples describe the lcx/lcy/lcz constants and
+        # iterate-ranges in the canonical order used by HaloExchange
+        # (y-inner, z-outer for x-axis rings; x-inner, z-outer for
+        # y-axis; x-inner, y-outer for z-axis -- matching what
+        # _pack_list_for_dir in halo_exchange.mojo uses).
+        var ghost_cursor = List[Int]()
+        for d in range(6):
+            ghost_cursor.append(ghost_offset_abs[d])
+
+        fn _assign_ghost_ring(
+            mut perm_p: UnsafePointer[Int32, MutAnyOrigin],
+            mut cursor: List[Int],
+            d: Int, fx: Int, fy: Int, fz: Int,
+            iter_a_lo: Int, iter_a_hi: Int,
+            iter_b_lo: Int, iter_b_hi: Int,
+            axis: Int, loc_nx_cap: Int, loc_ny_cap: Int,
+        ) capturing:
+            # `axis` == 0 means x-axis ring: fx set, iterate (lcy, lcz).
+            # `axis` == 1 means y-axis ring: fy set, iterate (lcx, lcz).
+            # `axis` == 2 means z-axis ring: fz set, iterate (lcx, lcy).
+            for a in range(iter_a_lo, iter_a_hi):
+                for b in range(iter_b_lo, iter_b_hi):
+                    var lcx: Int
+                    var lcy: Int
+                    var lcz: Int
+                    if axis == 0:
+                        lcx = fx; lcy = a; lcz = b
+                    elif axis == 1:
+                        lcx = a;  lcy = fy; lcz = b
+                    else:
+                        lcx = a;  lcy = b;  lcz = fz
+                    var cell = lcx + loc_nx_cap * (
+                        lcy + loc_ny_cap * lcz
+                    )
+                    for t in range(KUHN_TETS_PER_CELL):
+                        var old_id = cell * KUHN_TETS_PER_CELL + t
+                        perm_p[old_id] = Int32(cursor[d])
+                        cursor[d] = cursor[d] + 1
+
+        var nx_p = self.part.nx
+        var ny_p = self.part.ny
+        var nz_p = self.part.nz
+        # -x ghost ring (lcx=0), iterate (lcy, lcz).
+        _assign_ghost_ring(
+            pp, ghost_cursor, 0, 0, -1, -1,
+            1, ny_p + 1, 1, nz_p + 1,
+            0, nx_loc, ny_loc,
+        )
+        # +x ghost ring (lcx=nx+1).
+        _assign_ghost_ring(
+            pp, ghost_cursor, 1, nx_p + 1, -1, -1,
+            1, ny_p + 1, 1, nz_p + 1,
+            0, nx_loc, ny_loc,
+        )
+        # -y ghost ring (lcy=0), iterate (lcx, lcz).
+        _assign_ghost_ring(
+            pp, ghost_cursor, 2, -1, 0, -1,
+            1, nx_p + 1, 1, nz_p + 1,
+            1, nx_loc, ny_loc,
+        )
+        # +y ghost ring (lcy=ny+1).
+        _assign_ghost_ring(
+            pp, ghost_cursor, 3, -1, ny_p + 1, -1,
+            1, nx_p + 1, 1, nz_p + 1,
+            1, nx_loc, ny_loc,
+        )
+        # -z ghost ring (lcz=0), iterate (lcx, lcy).
+        _assign_ghost_ring(
+            pp, ghost_cursor, 4, -1, -1, 0,
+            1, nx_p + 1, 1, ny_p + 1,
+            2, nx_loc, ny_loc,
+        )
+        # +z ghost ring (lcz=nz+1).
+        _assign_ghost_ring(
+            pp, ghost_cursor, 5, -1, -1, nz_p + 1,
+            1, nx_p + 1, 1, ny_p + 1,
+            2, nx_loc, ny_loc,
+        )
+
+        # --- Unused buckets: everything still at -1 (edge/corner
+        # ghost cubes and any interior gaps). ---
+        var leftover_cursor = unused_start
+        for old_id in range(num_local):
+            if pp[old_id] < 0:
+                pp[old_id] = Int32(leftover_cursor)
+                leftover_cursor += 1
+
+        # Build inverse permutation.
+        for old_id in range(num_local):
+            var nid = Int(pp[old_id])
+            pi[nid] = Int32(old_id)
+
+        # Upload perm / inv_perm.
+        self.d_perm = ctx.enqueue_create_buffer[patch_i](num_local)
+        self.d_inv_perm = ctx.enqueue_create_buffer[patch_i](num_local)
+        ctx.enqueue_copy(self.d_perm, h_perm)
+        ctx.enqueue_copy(self.d_inv_perm, h_inv)
+        ctx.synchronize()
+
+        # --- Apply permutation to per-element mesh arrays by
+        # allocating new buffers and gathering through inv_perm. ---
+        self._permute_mesh_arrays(ctx, num_local)
+
+        # --- Update the owned/interior/halo id lists to the new
+        # canonical ranges. ---
+        for i in range(interior_count):
+            p_int[i] = Int32(i)
+        for i in range(halo_count):
+            p_halo[i] = Int32(interior_count + i)
+        ctx.enqueue_copy(self.d_interior_elem_ids, h_int)
+        ctx.enqueue_copy(self.d_halo_elem_ids, h_halo)
+
+        # owned_elem_ids just becomes [0..num_owned).
+        var h_owned_new = ctx.enqueue_create_host_buffer[patch_i](
+            self.num_owned_elements
+        )
+        var po = h_owned_new.unsafe_ptr()
+        for i in range(self.num_owned_elements):
+            po[i] = Int32(i)
+        ctx.enqueue_copy(self.d_owned_elem_ids, h_owned_new)
+        ctx.synchronize()
+
+        # --- Regenerate the host-side owned node coordinates now
+        # that element ids have been permuted. ---
+        var d_owned_nodes_new = ctx.enqueue_create_buffer[patch_f](
+            owned_points * 3
+        )
+        ctx.enqueue_function[
+            gather_owned_nodes_kernel, gather_owned_nodes_kernel,
+        ](
+            d_owned_nodes_new.unsafe_ptr(),
+            self.d_owned_elem_ids.unsafe_ptr(),
+            self.mesh.d_elem_node_xyz.unsafe_ptr(),
+            self.num_owned_elements,
+            grid_dim=ceildiv(owned_points, PATCH_BLOCK),
+            block_dim=PATCH_BLOCK,
+        )
+        d_owned_nodes_new.enqueue_copy_to(self.owned_node_xyz_f32_ptr)
+        ctx.synchronize()
+
+    def _permute_mesh_arrays(
+        mut self, mut ctx: DeviceContext, num_local: Int,
+    ) raises:
+        """Apply `d_inv_perm` to every per-element mesh array and
+        remap element-id values in `face_elem`.  Each per-element
+        array is gathered into a fresh buffer, which then replaces
+        the original via move-assignment."""
+        var inv = self.d_inv_perm.unsafe_ptr()
+        var perm = self.d_perm.unsafe_ptr()
+
+        # Per-element Float32 arrays (elem_node_xyz, elem_invJ,
+        # elem_inv_6V).
+        @parameter
+        def _gather_f32(
+            mut old: DeviceBuffer[patch_f], stride: Int,
+        ) raises -> DeviceBuffer[patch_f]:
+            var new = ctx.enqueue_create_buffer[patch_f](
+                num_local * stride
+            )
+            var total = num_local * stride
+            ctx.enqueue_function[
+                gather_stride_f32_kernel, gather_stride_f32_kernel,
+            ](
+                new.unsafe_ptr(), old.unsafe_ptr(), inv,
+                num_local, stride,
+                grid_dim=ceildiv(total, PATCH_BLOCK),
+                block_dim=PATCH_BLOCK,
+            )
+            return new^
+
+        @parameter
+        def _gather_i32(
+            mut old: DeviceBuffer[patch_i], stride: Int,
+        ) raises -> DeviceBuffer[patch_i]:
+            var new = ctx.enqueue_create_buffer[patch_i](
+                num_local * stride
+            )
+            var total = num_local * stride
+            ctx.enqueue_function[
+                gather_stride_i32_kernel, gather_stride_i32_kernel,
+            ](
+                new.unsafe_ptr(), old.unsafe_ptr(), inv,
+                num_local, stride,
+                grid_dim=ceildiv(total, PATCH_BLOCK),
+                block_dim=PATCH_BLOCK,
+            )
+            return new^
+
+        self.mesh.d_elem_node_xyz = _gather_f32(
+            self.mesh.d_elem_node_xyz, N_P * 3
+        )
+        self.mesh.d_elem_invJ = _gather_f32(
+            self.mesh.d_elem_invJ, 9
+        )
+        self.mesh.d_elem_inv_6V = _gather_f32(
+            self.mesh.d_elem_inv_6V, 1
+        )
+        self.mesh.d_elem_faces = _gather_i32(
+            self.mesh.d_elem_faces, N_F
+        )
+        self.mesh.d_elem_face_side = _gather_i32(
+            self.mesh.d_elem_face_side, N_F
+        )
+        self.mesh.d_elem_canon_to_ref = _gather_i32(
+            self.mesh.d_elem_canon_to_ref, N_F * 6,
+        )
+
+        # Remap element-id VALUES inside face_elem (face entries
+        # reference elements by id).
+        var n_entries = self.mesh.num_faces * 2
+        ctx.enqueue_function[
+            remap_face_elem_values_kernel, remap_face_elem_values_kernel,
+        ](
+            self.mesh.d_face_elem.unsafe_ptr(), perm, n_entries,
+            grid_dim=ceildiv(n_entries, PATCH_BLOCK),
+            block_dim=PATCH_BLOCK,
+        )
+        ctx.synchronize()

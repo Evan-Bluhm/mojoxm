@@ -67,7 +67,9 @@ def main() raises:
     var patch = PatchMesh(
         ctx, build_partition(rank, size, NX, NY, NZ), LX, LX, LX
     )
-    var halo = HaloExchange(ctx, patch.part, NC)
+    var halo = HaloExchange(
+        ctx, patch.part, NC, patch.d_perm.unsafe_ptr(),
+    )
 
     # Allocate scalar q on the local mesh (NC=1).
     var total_dof = patch.mesh.num_elements * 10 * NC

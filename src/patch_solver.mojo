@@ -296,11 +296,20 @@ struct PatchSolver[PhysT: Physics](Movable):
         var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](
             self.num_owned_elements
         )
+        # inv_perm[new_id] -> original build-time id.  After the
+        # PatchMesh element reordering, owned_elem_ids entries are
+        # new-numbering ids; we need the original id to decode cube
+        # coordinates from the simple (cube, tet) formula.
+        var h_invperm = self.ctx.enqueue_create_host_buffer[DType.int32](
+            self.patch.mesh.num_elements
+        )
         self.ctx.enqueue_copy(hbuf,  self.d_q)
         self.ctx.enqueue_copy(h_ids, self.patch.d_owned_elem_ids)
+        self.ctx.enqueue_copy(h_invperm, self.patch.d_inv_perm)
         self.ctx.synchronize()
-        var q_p   = hbuf.unsafe_ptr()
-        var ids_p = h_ids.unsafe_ptr()
+        var q_p    = hbuf.unsafe_ptr()
+        var ids_p  = h_ids.unsafe_ptr()
+        var inv_p  = h_invperm.unsafe_ptr()
         var stride = Self.NC
 
         # Local grid dimensions used to decode cube coords from element id.
@@ -311,23 +320,24 @@ struct PatchSolver[PhysT: Physics](Movable):
         var cz0 = self.patch.part.cz0
 
         for i in range(self.num_owned_elements):
-            var e = Int(ids_p[i])
-            # Kuhn tets per cube is 6; N_F is faces-per-tet (4).
-            var cube = e // 6
-            var tet = e - cube * 6
+            var e_new = Int(ids_p[i])          # post-permutation id
+            var e_old = Int(inv_p[e_new])       # build-time id (decodable)
+            var cube = e_old // 6
+            var tet = e_old - cube * 6
             var lcz = cube // (loc_nx * loc_ny)
             var rem = cube - lcz * loc_nx * loc_ny
             var lcy = rem // loc_nx
             var lcx = rem - lcy * loc_nx
-            # Local -> global: owned cubes are at (lcx in [1, nx+1)).
             var gcx = cx0 + (lcx - 1)
             var gcy = cy0 + (lcy - 1)
             var gcz = cz0 + (lcz - 1)
             var gcube = gcx + nx_global * (gcy + ny_global * gcz)
             global_elem_ids_host[i] = Int32(gcube * 6 + tet)
+            # q is stored under the NEW id (that's how the permuted
+            # mesh addresses it).
             for nn in range(N_P):
                 scalar_host[i * N_P + nn] = q_p[
-                    (e * N_P + nn) * stride + c
+                    (e_new * N_P + nn) * stride + c
                 ]
         nvtx.pop_range()
 

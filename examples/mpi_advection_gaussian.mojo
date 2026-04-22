@@ -134,7 +134,10 @@ def main() raises:
               patch.num_halo_elements, ", interior=",
               patch.num_interior_elements, ")")
 
-    var halo = HaloExchange(ctx, patch.part, Advection.NUM_COMPONENTS)
+    var halo = HaloExchange(
+        ctx, patch.part, Advection.NUM_COMPONENTS,
+        patch.d_perm.unsafe_ptr(),
+    )
     var physics = Advection(VX, VY, VZ)
     var solver = PatchSolver[Advection](
         ctx^, patch^, halo^, physics^, D_ref^, Lift_ref^,

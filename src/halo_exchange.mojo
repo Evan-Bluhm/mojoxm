@@ -34,6 +34,23 @@ from std.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from std.math import ceildiv
 from std.memory import memcpy
 
+
+# ----------------------------------------------------------------------
+# Kernel: remap an array of element-id VALUES through a permutation.
+# ----------------------------------------------------------------------
+
+def remap_ids_kernel(
+    ids:  UnsafePointer[Int32, MutAnyOrigin],
+    perm: UnsafePointer[Int32, MutAnyOrigin],   # perm[old] = new
+    n: Int,
+):
+    var idx = Int(global_idx.x)
+    if idx >= n:
+        return
+    var old_v = Int(ids[idx])
+    if old_v >= 0:
+        ids[idx] = perm[old_v]
+
 # Kuhn tets per Cartesian cube (keep in sync with src/mesh.mojo).
 comptime KUHN_TETS = 6
 comptime halo_f = DType.float32
@@ -204,6 +221,7 @@ struct HaloExchange(Movable):
         mut ctx: DeviceContext,
         part: Partition,
         nc: Int,
+        d_perm: UnsafePointer[Int32, MutAnyOrigin],
     ) raises:
         self.nc = nc
         self.cuda_aware = mpi.is_cuda_aware()
@@ -248,8 +266,23 @@ struct HaloExchange(Movable):
                     "HaloExchange: owned/ghost ring size mismatch"
                 )
             self.ring_count.append(n_owned)
-            self.d_pack_idx.append(_upload_i32(ctx, owned_list))
-            self.d_unpack_idx.append(_upload_i32(ctx, ghost_list))
+            # Upload the build-time (pre-permutation) IDs, then remap
+            # through the PatchMesh element permutation so references
+            # match the reordered mesh arrays.
+            var d_pack = _upload_i32(ctx, owned_list)
+            var d_unpack = _upload_i32(ctx, ghost_list)
+            ctx.enqueue_function[remap_ids_kernel, remap_ids_kernel](
+                d_pack.unsafe_ptr(), d_perm, n_owned,
+                grid_dim=ceildiv(n_owned, HALO_BLOCK),
+                block_dim=HALO_BLOCK,
+            )
+            ctx.enqueue_function[remap_ids_kernel, remap_ids_kernel](
+                d_unpack.unsafe_ptr(), d_perm, n_ghost,
+                grid_dim=ceildiv(n_ghost, HALO_BLOCK),
+                block_dim=HALO_BLOCK,
+            )
+            self.d_pack_idx.append(d_pack^)
+            self.d_unpack_idx.append(d_unpack^)
             var buf_floats = n_owned * N_P * nc
             self.d_send_buf.append(
                 ctx.enqueue_create_buffer[halo_f](buf_floats)
