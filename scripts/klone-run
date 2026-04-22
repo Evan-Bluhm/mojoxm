@@ -33,6 +33,16 @@
 #   SIF         path to Apptainer image                 (default mojo.sif
 #                                                        in project root)
 #   NO_BUILD=1  skip the `make` step, run pre-built binary only
+#   PROFILE_WRAPPER  path to a host-side wrapper that gets spliced
+#                    between the MPI launcher and `apptainer exec` (or
+#                    at the front of the command for non-MPI drivers).
+#                    The wrapper receives the full `apptainer exec ...
+#                    ./driver <args>` invocation as positional args and
+#                    is expected to exec it (typically inside a `nsys
+#                    profile ... "$@"` or equivalent).  Since mpirun
+#                    runs on the host on Klone and spawns `apptainer
+#                    exec` per rank, the wrapper itself stays host-side
+#                    and can use the host's cuda/nsys module.
 #
 # Examples:
 #
@@ -41,6 +51,8 @@
 #   NP=4 GPU=a100 TIME=1:00:00 scripts/klone-run mpi_advection_gaussian
 #   NP=4 CONSTRAINT='a100|a40|l40|l40s' scripts/klone-run mpi_advection_gaussian
 #   scripts/klone-run euler_taylor_green     # single rank, no MPI
+#   NP=4 PROFILE_WRAPPER=scripts/nsys_wrapper.sh \
+#       scripts/klone-run mpi_advection_gaussian
 # ======================================================================
 
 set -euo pipefail
@@ -60,10 +72,11 @@ cd "$PROJECT_DIR"
 : "${MEM:=16G}"
 : "${SIF:=$PROJECT_DIR/mojo.sif}"
 : "${NO_BUILD:=0}"
+: "${PROFILE_WRAPPER:=}"
 
 # --- Parse args -------------------------------------------------------
 if [ $# -eq 0 ]; then
-    sed -n '7,45p' "$0"
+    sed -n '7,56p' "$0"
     exit 1
 fi
 DRIVER="$1"; shift
@@ -77,6 +90,18 @@ if [ ! -f "$SIF" ]; then
     echo "error: Apptainer image not found at $SIF" >&2
     echo "       build it with: apptainer build --fakeroot mojo.sif mojo.def" >&2
     exit 1
+fi
+
+# Resolve PROFILE_WRAPPER to an absolute path so it survives the `cd`
+# into PROJECT_DIR that runs inside the srun allocation.  Validate up
+# front so bad paths fail on the login node, not after waiting in the
+# SLURM queue.
+if [ -n "$PROFILE_WRAPPER" ]; then
+    if [ ! -x "$PROFILE_WRAPPER" ]; then
+        echo "error: PROFILE_WRAPPER=$PROFILE_WRAPPER is not an executable file" >&2
+        exit 1
+    fi
+    PROFILE_WRAPPER="$(cd "$(dirname "$PROFILE_WRAPPER")" && pwd)/$(basename "$PROFILE_WRAPPER")"
 fi
 
 # --- Classify the driver ---------------------------------------------
@@ -137,6 +162,7 @@ export MOJOXM_IS_MPI="$IS_MPI"
 export MOJOXM_NP="$NP"
 export MOJOXM_NO_BUILD="$NO_BUILD"
 export MOJOXM_DRIVER_ARGS="${DRIVER_ARGS[*]}"
+export MOJOXM_PROFILE_WRAPPER="$PROFILE_WRAPPER"
 
 GPU_DESCR="$GPU"
 [ -n "$CONSTRAINT" ] && GPU_DESCR="any of [$CONSTRAINT]"
@@ -170,19 +196,34 @@ fi
 # tokens (no shell metachars needed for our examples).
 read -r -a DRV_ARGS <<< "$MOJOXM_DRIVER_ARGS"
 
+# Optional host-side profiler wrapper.  When set, the wrapper is
+# spliced in front of `apptainer exec ...`, so it receives the full
+# container invocation as its positional arguments and is expected to
+# exec them (e.g. `nsys profile $OPTS "$@"`).  mpirun runs it once per
+# rank on the host; the wrapper can read SLURM_PROCID / SLURM_LOCALID
+# to decide which ranks to profile.
+PROFILER_PREFIX=()
+PROFILER_DISPLAY=""
+if [ -n "$MOJOXM_PROFILE_WRAPPER" ]; then
+    PROFILER_PREFIX=("$MOJOXM_PROFILE_WRAPPER")
+    PROFILER_DISPLAY="$MOJOXM_PROFILE_WRAPPER "
+fi
+
 if [ "$MOJOXM_IS_MPI" = "1" ]; then
     # SLURM allocated 1 task + N*cores_per_rank cpus.  OpenMPI's
     # SLURM integration otherwise sees SLURM_NTASKS=1 and refuses to
     # launch NP ranks; --oversubscribe tells it to ignore that count.
     # We have enough cores to back NP processes -- the allocation
     # requested N*cores_per_rank dedicated CPUs above.
-    echo "===> mpirun -np $MOJOXM_NP --oversubscribe apptainer exec $MOJOXM_APPTAINER_FLAGS $MOJOXM_SIF ./$MOJOXM_DRIVER ${DRV_ARGS[*]-}"
+    echo "===> mpirun -np $MOJOXM_NP --oversubscribe ${PROFILER_DISPLAY}apptainer exec $MOJOXM_APPTAINER_FLAGS $MOJOXM_SIF ./$MOJOXM_DRIVER ${DRV_ARGS[*]-}"
     mpirun -np "$MOJOXM_NP" --oversubscribe \
+        ${PROFILER_PREFIX[@]+"${PROFILER_PREFIX[@]}"} \
         apptainer exec $MOJOXM_APPTAINER_FLAGS "$MOJOXM_SIF" \
         "./$MOJOXM_DRIVER" ${DRV_ARGS[@]+"${DRV_ARGS[@]}"}
 else
-    echo "===> apptainer exec $MOJOXM_APPTAINER_FLAGS $MOJOXM_SIF ./$MOJOXM_DRIVER ${DRV_ARGS[*]-}"
-    apptainer exec $MOJOXM_APPTAINER_FLAGS "$MOJOXM_SIF" \
+    echo "===> ${PROFILER_DISPLAY}apptainer exec $MOJOXM_APPTAINER_FLAGS $MOJOXM_SIF ./$MOJOXM_DRIVER ${DRV_ARGS[*]-}"
+    ${PROFILER_PREFIX[@]+"${PROFILER_PREFIX[@]}"} \
+        apptainer exec $MOJOXM_APPTAINER_FLAGS "$MOJOXM_SIF" \
         "./$MOJOXM_DRIVER" ${DRV_ARGS[@]+"${DRV_ARGS[@]}"}
 fi
 INNER_SCRIPT
