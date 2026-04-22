@@ -249,9 +249,33 @@ End-to-end correctness is verified by `mpi_advection_gaussian`: at
 overshoot come out identical (conservation drift 3.56×10⁻⁵; max
 1.003426 across all rank counts).
 
-On a single-GPU box wall time grows with rank count because all
-ranks time-share one GPU and MPI is host-staged; on a multi-GPU
+Each SSPRK3 stage runs in **split-kernel / MPI-overlap mode**:
+
+```
+halo.submit_pack(q)       # pack + D→H + MPI_Isend/Irecv (non-blocking)
+rk_stage_kernel(interior) # runs on default stream while MPI progresses
+halo.complete_exchange(q) # MPI_Waitall + H→D + unpack
+rk_stage_kernel(halo)     # reads ghost q on default stream
+```
+
+so interior compute on the device overlaps with MPI progress on the
+host. On a single-GPU box wall time grows with rank count because
+all ranks time-share one GPU and MPI is host-staged; on a multi-GPU
 cluster with CUDA-aware MPI that relation inverts.
+
+**Known limitations and future work:**
+
+- Mojo 0.26.2 doesn't expose stream-targeted `enqueue_copy` or
+  cross-stream `wait_event`, so the device-side D↔H transfers still
+  serialise with the RK kernel on the default stream. The overlap
+  today is specifically *host MPI* ↔ *device interior compute*.
+- OpenMPI on this system isn't CUDA-aware, so `HaloExchange`
+  host-stages through pinned `HostBuffer`s. With CUDA-aware MPI, the
+  D↔H stage can be dropped.
+- **Element reordering** (WARPXM-style) would make each face-ring
+  contiguous in `q` so pack/unpack becomes a `memcpy` — and under
+  CUDA-aware MPI could skip pack entirely. Worth ~10–20 µs/stage
+  here; a big deal on a multi-GPU cluster. Not implemented yet.
 
 ### Run
 
