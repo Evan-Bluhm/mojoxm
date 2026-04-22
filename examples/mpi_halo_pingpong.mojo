@@ -114,7 +114,7 @@ def main() raises:
     var loc_nx = nx + 2
     var loc_ny = ny + 2
 
-    fn _dof_at(cube_cell: Int, tet: Int, nn: Int) capturing -> Int:
+    def _dof_at(cube_cell: Int, tet: Int, nn: Int) capturing -> Int:
         return (cube_cell * 6 + tet) * 10 + nn
 
     var neighbours = [

@@ -28,8 +28,15 @@
 from std.ffi import external_call, c_int, c_size_t, c_ssize_t
 from std.memory import alloc, memcpy
 
-# Linux fcntl.h constants: O_WRONLY=1, O_CREAT=0o100, O_TRUNC=0o1000.
-comptime _OPEN_FLAGS = c_int(0o1101)
+# We use creat(path, mode) instead of open(path, flags, mode).  open() is
+# variadic (int open(const char *, int, ...)); on ARM64 Apple Darwin
+# variadic args use a different ABI from fixed args, which garbles the
+# mode argument when called through Mojo's fixed-arity external_call
+# and produces files with nonsense permissions (e.g. 0o300).  creat()
+# has a fixed 2-arg signature equivalent to
+#     open(path, O_WRONLY | O_CREAT | O_TRUNC, mode)
+# on every POSIX platform, so it round-trips cleanly on both Linux and
+# macOS.
 comptime _OPEN_MODE  = c_int(0o644)
 
 
@@ -73,7 +80,7 @@ def _writer_entry(
     var nsegs  = job_ptr[].nsegs
     var path_c = job_ptr[].path_c
 
-    var fd = Int(external_call["open", c_int](path_c, _OPEN_FLAGS, _OPEN_MODE))
+    var fd = Int(external_call["creat", c_int](path_c, _OPEN_MODE))
     if fd >= 0:
         for s in range(nsegs):
             var remaining = segs[s].nbytes
@@ -120,7 +127,7 @@ struct AsyncWriter(Movable):
             _ = external_call["pthread_join", Int32](oldest, retval)
 
         # Copy path into a heap-allocated, null-terminated C string.
-        var pn = len(path)
+        var pn = path.byte_length()
         var path_c = alloc[UInt8](pn + 1)
         memcpy(dest=path_c, src=path.unsafe_ptr(), count=pn)
         path_c[pn] = 0

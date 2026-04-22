@@ -200,7 +200,7 @@ def main() raises:
         solver_ref.download_component(0, q_buf, n)
         var fname = "frame_"
         var sid = String(frame_id)
-        for _ in range(5 - len(sid)):
+        for _ in range(5 - sid.byte_length()):
             fname += "0"
         fname += sid
         fname += ".vtu"

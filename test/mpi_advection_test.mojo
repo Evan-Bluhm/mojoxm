@@ -62,8 +62,15 @@ comptime IC_BLOCK = 256
 # launches, 150 halo exchanges) to catch any comm / ordering bug.
 comptime NUM_TEST_STEPS = 50
 
-# File write constants (Linux open(2) flags).
-comptime _OPEN_FLAGS = c_int(0o1101)   # O_WRONLY | O_CREAT | O_TRUNC
+# We use creat(path, mode) -- equivalent to open(path, O_WRONLY | O_CREAT
+# | O_TRUNC, mode) -- instead of a 3-arg open() because open() is
+# variadic (int open(const char *, int, ...)).  On ARM64 Apple Darwin,
+# variadic args follow a different ABI from fixed args (variadic args
+# are promoted to the stack), and Mojo's external_call signature is
+# fixed-arity, so passing the mode through a 3-arg open() call delivers
+# garbage to the kernel and the file ends up with bits like 0o300
+# instead of the intended 0o644.  creat() is POSIX and has a fixed
+# 2-arg signature that round-trips cleanly through external_call.
 comptime _OPEN_MODE  = c_int(0o644)
 
 
@@ -147,18 +154,18 @@ def dump_final_q(
     path_s += String(".bin")
 
     # Null-terminated C string for open().
-    var pn = len(path_s)
+    var pn = path_s.byte_length()
     var path_c = alloc[UInt8](pn + 1)
     for i in range(pn):
         path_c[i] = UInt8(path_s.unsafe_ptr()[i])
     path_c[pn] = 0
 
-    var fd = Int(external_call["open", c_int](
-        path_c, _OPEN_FLAGS, _OPEN_MODE,
+    var fd = Int(external_call["creat", c_int](
+        path_c, _OPEN_MODE,
     ))
     if fd < 0:
         path_c.free()
-        raise Error("open() failed for " + path_s)
+        raise Error("creat() failed for " + path_s)
 
     # Write the file header.
     var header = InlineArray[UInt32, 5](fill=UInt32(0))

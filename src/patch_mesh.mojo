@@ -561,7 +561,7 @@ struct PatchMesh(Movable):
         for d in range(6):
             ghost_cursor.append(ghost_offset_abs[d])
 
-        fn _assign_ghost_ring(
+        def _assign_ghost_ring(
             mut perm_p: UnsafePointer[Int32, MutAnyOrigin],
             mut cursor: List[Int],
             d: Int, fx: Int, fy: Int, fz: Int,

@@ -70,7 +70,7 @@ struct ByteBuf(Movable):
         self.len += n
 
     def write_str(mut self, s: String):
-        var n = len(s)
+        var n = s.byte_length()
         memcpy(dest=self.ptr + self.len,
                src=s.unsafe_ptr().bitcast[UInt8](),
                count=n)
@@ -248,7 +248,7 @@ struct VtuWriter(Movable):
             rebind[UnsafePointer[UInt8, MutAnyOrigin]](
                 self.xml_header.unsafe_ptr()
             ),
-            len(self.xml_header),
+            self.xml_header.byte_length(),
             False,
         )
 
@@ -289,7 +289,7 @@ struct VtuWriter(Movable):
             rebind[UnsafePointer[UInt8, MutAnyOrigin]](
                 self.xml_tail.unsafe_ptr()
             ),
-            len(self.xml_tail),
+            self.xml_tail.byte_length(),
             False,
         )
 
@@ -305,17 +305,17 @@ struct VtuWriter(Movable):
         var total_points = self.total_points
         var density_bytes = total_points * 4
         var total_size = (
-            len(self.xml_header)
+            self.xml_header.byte_length()
             + 4 + density_bytes
             + self.static_pre.len
             + self.pts_byte_len
             + self.static_post.len
-            + len(self.xml_tail)
+            + self.xml_tail.byte_length()
         )
         var out_ptr = alloc[UInt8](total_size)
         var cursor = 0
 
-        var hn = len(self.xml_header)
+        var hn = self.xml_header.byte_length()
         memcpy(dest=out_ptr + cursor,
                src=self.xml_header.unsafe_ptr().bitcast[UInt8](), count=hn)
         cursor += hn
@@ -342,7 +342,7 @@ struct VtuWriter(Movable):
                src=self.static_post.ptr, count=self.static_post.len)
         cursor += self.static_post.len
 
-        var tn = len(self.xml_tail)
+        var tn = self.xml_tail.byte_length()
         memcpy(dest=out_ptr + cursor,
                src=self.xml_tail.unsafe_ptr().bitcast[UInt8](), count=tn)
         cursor += tn

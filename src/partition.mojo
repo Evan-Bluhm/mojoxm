@@ -166,10 +166,10 @@ def build_partition(
     var cy0 = ry * ly
     var cz0 = rz * lz
 
-    fn _rank_of(rrx: Int, rry: Int, rrz: Int) capturing -> Int:
+    def _rank_of(rrx: Int, rry: Int, rrz: Int) capturing -> Int:
         return ((rrx * grid.py) + rry) * grid.pz + rrz
 
-    fn _wrap(v: Int, mod: Int) capturing -> Int:
+    def _wrap(v: Int, mod: Int) capturing -> Int:
         # Periodic wrap (for triply periodic BCs).  v is in [-1, mod].
         if v < 0: return v + mod
         if v >= mod: return v - mod
