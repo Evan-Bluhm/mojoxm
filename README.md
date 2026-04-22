@@ -176,6 +176,9 @@ round-off expectations.
 - `uv` (or `pip`) to install Mojo.
 - A C toolchain (linker). On Linux, `libm` and `libpthread` via the
   system `glibc`.
+- For the MPI examples (`mpi_hello`, `mpi_partition`, future
+  multi-rank drivers): OpenMPI 4.x (`apt install openmpi-bin
+  libopenmpi-dev` on Ubuntu) and `mpicc` on PATH.
 
 ### Install Mojo
 
@@ -208,6 +211,31 @@ from the project root with `-I .` on the search path:
 - **`-g0` is critical** — the default Mojo debug info inflates register
   pressure from 40 → 114 per thread in the advection RK kernel and drops
   ncu's reported memory throughput from 98% to 8%.
+
+### MPI examples
+
+Drivers under `examples/mpi_*.mojo` use the `src.mpi` module which
+binds OpenMPI through a tiny C shim (`src/mpi_shim.c`).  Build the
+shim once, then link it into each MPI driver:
+
+```bash
+mkdir -p build
+mpicc -O2 -fPIC -c src/mpi_shim.c -o build/mpi_shim.o
+
+.venv/bin/mojo build -O3 -g0 -I . examples/mpi_hello.mojo -o mpi_hello \
+    -Xlinker build/mpi_shim.o \
+    -Xlinker -L/usr/lib/x86_64-linux-gnu/openmpi/lib \
+    -Xlinker -lmpi \
+    -Xlinker -lm -Xlinker -lpthread
+
+mpirun -np 4 ./mpi_hello
+mpirun -np 8 ./mpi_partition       # exercises the cube-grid Partition
+```
+
+`src/partition.mojo` picks the `(PX, PY, PZ)` factorisation of
+`nprocs` that minimises per-patch surface area subject to evenly
+dividing the global cube grid; for triply periodic BCs each rank's
+6 face-neighbours form a 3D torus.
 
 ### Run
 

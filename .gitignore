@@ -22,3 +22,8 @@ mojoxm
 advection_gaussian
 euler_vortex
 euler_taylor_green
+mpi_hello
+mpi_partition
+
+# build products
+build/*.o
