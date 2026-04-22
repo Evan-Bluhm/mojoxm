@@ -25,6 +25,7 @@ euler_taylor_green
 mpi_hello
 mpi_partition
 mpi_patch_mesh
+mpi_halo_pingpong
 
 # build products
 build/*.o
