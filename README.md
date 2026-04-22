@@ -189,17 +189,18 @@ The compiler binary ends up at `.venv/bin/mojo`.
 
 ### Compile a driver
 
-Drivers under `examples/` import the core modules from `src/`, so the
-build needs `-I src` on its search path:
+`src/` is a Mojo package (it contains `__init__.mojo`), so drivers
+import the core modules as `from src.solver import Solver`, etc. Build
+from the project root with `-I .` on the search path:
 
 ```bash
-.venv/bin/mojo build -O3 -g0 -I src examples/advection_gaussian.mojo \
+.venv/bin/mojo build -O3 -g0 -I . examples/advection_gaussian.mojo \
     -o advection_gaussian -Xlinker -lm -Xlinker -lpthread
 
-.venv/bin/mojo build -O3 -g0 -I src examples/euler_vortex.mojo \
+.venv/bin/mojo build -O3 -g0 -I . examples/euler_vortex.mojo \
     -o euler_vortex -Xlinker -lm -Xlinker -lpthread
 
-.venv/bin/mojo build -O3 -g0 -I src examples/euler_taylor_green.mojo \
+.venv/bin/mojo build -O3 -g0 -I . examples/euler_taylor_green.mojo \
     -o euler_taylor_green -Xlinker -lm -Xlinker -lpthread
 ```
 
@@ -229,8 +230,8 @@ Open `output/solution.pvd` in ParaView.
    an instance of your physics, and a `Solver[MyPhysics]`, plus an
    initial-condition kernel you launch once. Copy the structure of
    `examples/advection_gaussian.mojo`.
-3. Compile with `-I src` and run — no changes to `solver.mojo`,
-   `mesh.mojo`, or `vtu.mojo` are needed.
+3. Compile with `-I .` from the project root — no changes to
+   `solver.mojo`, `mesh.mojo`, or `vtu.mojo` are needed.
 
 ## Profiling
 

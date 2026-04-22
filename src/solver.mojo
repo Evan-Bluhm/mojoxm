@@ -29,9 +29,9 @@
 #   Lift_ref   [N_F * N_P * N_FP]        reference face-lift operator
 # ======================================================================
 
-from reference import N_P, N_F, N_FP, N_D
-from nvtx import NvtxContext
-from mesh import Mesh
+from src.reference import N_P, N_F, N_FP, N_D
+from src.nvtx import NvtxContext
+from src.mesh import Mesh
 from std.gpu import thread_idx, block_idx, barrier
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu.host.device_context import DevicePassable

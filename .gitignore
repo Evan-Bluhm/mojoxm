@@ -19,3 +19,6 @@ output/*
 
 # binaries
 mojoxm
+advection_gaussian
+euler_vortex
+euler_taylor_green

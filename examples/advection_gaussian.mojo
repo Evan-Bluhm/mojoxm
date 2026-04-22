@@ -26,13 +26,13 @@ from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, exp
 from std.time import perf_counter_ns
 
-from reference import ReferenceElement, N_P, N_F, N_FP, N_D, to_float32
-from mesh import Mesh
-from solver import Solver
-from advection import Advection
-from vtu import VtuWriter, write_pvd
-from nvtx import NvtxContext
-from async_writer import AsyncWriter
+from src.reference import ReferenceElement, N_P, N_F, N_FP, N_D, to_float32
+from src.mesh import Mesh
+from src.solver import Solver
+from src.advection import Advection
+from src.vtu import VtuWriter, write_pvd
+from src.nvtx import NvtxContext
+from src.async_writer import AsyncWriter
 
 comptime NX = 48
 comptime NY = 48

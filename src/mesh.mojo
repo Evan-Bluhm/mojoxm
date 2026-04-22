@@ -31,7 +31,7 @@
 # struct -- no post-build host-to-device upload pass.
 # ======================================================================
 
-from reference import N_P, N_F, N_FP, N_D
+from src.reference import N_P, N_F, N_FP, N_D
 from std.math import sqrt, ceildiv
 from std.gpu import global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer

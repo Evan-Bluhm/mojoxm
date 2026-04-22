@@ -31,13 +31,13 @@ from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, sin, cos, pi
 from std.time import perf_counter_ns
 
-from reference import ReferenceElement, N_P, N_F, N_FP, N_D, to_float32
-from mesh import Mesh
-from solver import Solver
-from euler import Euler, FLUX_HLLEC
-from vtu import VtuWriter, write_pvd
-from nvtx import NvtxContext
-from async_writer import AsyncWriter
+from src.reference import ReferenceElement, N_P, N_F, N_FP, N_D, to_float32
+from src.mesh import Mesh
+from src.solver import Solver
+from src.euler import Euler, FLUX_HLLEC
+from src.vtu import VtuWriter, write_pvd
+from src.nvtx import NvtxContext
+from src.async_writer import AsyncWriter
 
 # Domain is the natural 2 pi cube so sin/cos of coordinates are periodic
 # without any wrap-around algebra.

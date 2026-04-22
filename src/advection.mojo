@@ -13,7 +13,7 @@
 # no runtime dispatch overhead.
 # ======================================================================
 
-from solver import Physics
+from src.solver import Physics
 
 
 @fieldwise_init

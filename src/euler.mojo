@@ -527,7 +527,7 @@ def euler_flux_from_fluctuations(
 # Euler struct
 # ======================================================================
 
-from solver import Physics
+from src.solver import Physics
 
 
 @fieldwise_init

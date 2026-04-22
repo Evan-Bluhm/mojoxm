@@ -28,9 +28,9 @@
 from std.pathlib import Path
 from std.memory import memcpy, memset, alloc
 from std.os import FileDescriptor, open
-from reference import N_P, N_F, N_FP
-from nvtx import NvtxContext
-from async_writer import WriteSegment
+from src.reference import N_P, N_F, N_FP
+from src.nvtx import NvtxContext
+from src.async_writer import WriteSegment
 
 comptime VTK_QUADRATIC_TETRA = 24
 
