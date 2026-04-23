@@ -24,15 +24,14 @@ from std.sys import has_accelerator
 from std.gpu import global_idx
 from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, exp
-from std.time import perf_counter_ns
 
-from src.reference import ReferenceElement, N_P, N_F, N_FP, N_D, to_float32
+from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
 from src.solver import Solver
 from src.advection import Advection
-from src.vtu import VtuWriter, write_pvd
 from src.nvtx import NvtxContext
-from src.async_writer import AsyncWriter
+from src.frame_writer import FrameWriter
+from src.time_integrator import run_ssprk3_loop
 
 comptime NX = 48
 comptime NY = 48
@@ -120,31 +119,24 @@ def main() raises:
     var nvtx = NvtxContext()
     print("  NVTX:", "enabled" if nvtx.is_enabled() else "unavailable")
 
-    # Build reference element operators.
-    nvtx.push_range("reference_element")
-    var re = ReferenceElement()
-    var D_ref = to_float32(re.D_ref)
-    var Lift_ref = to_float32(re.Lift_ref)
-    nvtx.pop_range()
+    var refs = build_reference_operators(nvtx)
 
-    # Create DeviceContext first so the mesh can build on-device.
     nvtx.push_range("device_context_create")
     var ctx = DeviceContext()
     nvtx.pop_range()
 
-    # Build mesh directly on the GPU.
     nvtx.push_range("build_mesh")
     var mesh = Mesh(ctx, NX, NY, NZ, LX, LY, LZ)
     nvtx.pop_range()
     print("  num elements:", mesh.num_elements,
           " num faces:", mesh.num_faces)
 
-    # Physics: constant-velocity scalar advection.
     var physics = Advection(VX, VY, VZ)
 
-    # Solver takes ownership of ctx + mesh.
     nvtx.push_range("solver_setup")
-    var solver = Solver[Advection](ctx^, mesh^, physics^, D_ref^, Lift_ref^)
+    var solver = Solver[Advection](
+        ctx^, mesh^, physics^, refs.D_ref^, refs.Lift_ref^,
+    )
     nvtx.pop_range()
 
     # Initial condition -- computed directly on the device from the
@@ -167,118 +159,23 @@ def main() raises:
     solver.ctx.synchronize()
     nvtx.pop_range()
 
-    # VTU writer with pre-serialized static mesh data.
-    nvtx.push_range("init_vtu_writer")
-    var vtu = VtuWriter(
-        solver.mesh.num_elements, solver.mesh.elem_node_xyz_f32_ptr
-    )
-    nvtx.pop_range()
-    nvtx.push_range("init_async_writer")
-    var async_writer = AsyncWriter(max_concurrent=8)
-    nvtx.pop_range()
+    # Frame output (density == full scalar solution for Advection).
+    var writer = FrameWriter[Advection](solver, nvtx)
 
-    # Write frame 0.
-    var vtu_paths = List[String]()
-    var times = List[Float64]()
-
-    # Persistent host buffer for scalar density downloads, reused each
-    # frame.  For scalar advection this is the full solution.
-    nvtx.push_range("init_snapshot_buffer")
-    var q_snapshot = List[Float32]()
-    for _ in range(solver.total_dof):
-        q_snapshot.append(Float32(0.0))
-    nvtx.pop_range()
-
-    def do_write_frame(
-        frame_id: Int, t: Float64,
-        mut solver_ref: Solver[Advection], mut writer: VtuWriter,
-        mut aw: AsyncWriter, mut q_buf: List[Float32],
-        mut paths: List[String], mut ts: List[Float64],
-        mut n: NvtxContext,
-    ) raises:
-        n.push_range("write_frame")
-        solver_ref.download_component(0, q_buf, n)
-        var fname = "frame_"
-        var sid = String(frame_id)
-        for _ in range(5 - sid.byte_length()):
-            fname += "0"
-        fname += sid
-        fname += ".vtu"
-        n.push_range("vtu_build_segments")
-        var segs = writer.build_segments(q_buf)
-        n.pop_range()
-        n.push_range("vtu_submit")
-        aw.submit("output/" + fname, segs)
-        n.pop_range()
-        paths.append(fname)
-        ts.append(t)
-        n.pop_range()
-
-    do_write_frame(0, 0.0, solver, vtu, async_writer,
-                    q_snapshot, vtu_paths, times, nvtx)
-    print("  wrote initial frame")
-
-    # Time loop.
     var dt = choose_dt()
-    var t: Float32 = 0.0
-    var frame_dt = T_FINAL / Float32(NUM_FRAMES)
-    var next_frame_t = frame_dt
-    var frame_id = 1
-    var step = 0
-
     print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    # Time the main loop excluding write_frame overhead.
-    var tloop: Float64 = 0.0
-    var twrite: Float64 = 0.0
-    var wall_start = perf_counter_ns()
-    while t < T_FINAL:
-        var step_dt = dt
-        if t + step_dt > next_frame_t:
-            step_dt = next_frame_t - t
-        if step_dt <= 0.0:
-            step_dt = dt
-        if t + step_dt > T_FINAL:
-            step_dt = T_FINAL - t
-        var s0 = perf_counter_ns()
-        solver.step_ssprk3(step_dt, nvtx)
-        var s1 = perf_counter_ns()
-        tloop += Float64(s1 - s0) * 1e-9
-        t += step_dt
-        step += 1
-        if t >= next_frame_t - Float32(1e-12) and frame_id < NUM_FRAMES + 1:
-            var w0 = perf_counter_ns()
-            nvtx.push_range("frame_boundary_sync")
-            solver.ctx.synchronize()
-            nvtx.pop_range()
-            do_write_frame(frame_id, Float64(t),
-                           solver, vtu, async_writer, q_snapshot,
-                           vtu_paths, times, nvtx)
-            nvtx.mark("frame_submitted")
-            var w1 = perf_counter_ns()
-            twrite += Float64(w1 - w0) * 1e-9
-            frame_id += 1
-            next_frame_t += frame_dt
-    var sync_start = perf_counter_ns()
-    solver.ctx.synchronize()
-    var sync_end = perf_counter_ns()
-    print("  final sync:", Float64(sync_end - sync_start) * 1e-9, "s")
+    var result = run_ssprk3_loop[Advection](
+        solver, writer, dt, T_FINAL, NUM_FRAMES, nvtx,
+    )
+    print("  final sync:", result.final_sync_sec, "s")
 
-    # Wait for all outstanding writes to flush before exiting so the
-    # .pvd collection file references complete files.
-    nvtx.push_range("wait_async_writes")
-    var wait_start = perf_counter_ns()
-    async_writer.wait_all()
-    var wait_end = perf_counter_ns()
-    nvtx.pop_range()
-    print("  wait for async writes:",
-          Float64(wait_end - wait_start) * 1e-9, "s")
+    writer.finalize("output/solution.pvd", nvtx)
 
-    var wall_end = perf_counter_ns()
-    var wall_sec = Float64(wall_end - wall_start) * 1e-9
-    print("  total steps:", step, " wall time:", wall_sec, "s")
-    print("    step-loop time (enqueue only, no sync):", tloop, "s")
-    print("    frame-write time (download + VTU):", twrite, "s")
-
-    write_pvd("output/solution.pvd", vtu_paths, times)
+    print("  total steps:", result.total_steps,
+          " wall time:", result.wall_sec, "s")
+    print("    step-loop time (enqueue only, no sync):",
+          result.step_loop_sec, "s")
+    print("    frame-write time (download + VTU):",
+          result.frame_write_sec, "s")
     print("  wrote output/solution.pvd")
