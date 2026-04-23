@@ -614,6 +614,88 @@ def bj_limit_2d[P: Int, PhysT: Physics2D](
                 q[offset] = base_vec[c] + theta * (q[offset] - base_vec[c])
 
 
+def ssprk2_step_2d[P: Int, PhysT: Physics2D](
+    mesh: LocalMesh2D[P],
+    re: ReferenceElement2D[P],
+    physics: PhysT,
+    dt: Float64,
+    mut q: List[Float64],
+    mut scratch_q1: List[Float64],
+    mut scratch_rhs: List[Float64],
+) raises:
+    """Heun / 2nd-order SSP Runge-Kutta.  Same SSP property as SSPRK3
+    but cheaper (2 rhs calls per step vs 3).  Lower CFL limit, so the
+    trade-off is problem-dependent; useful for smooth problems where
+    the 3rd-order accuracy of SSPRK3 isn't needed."""
+    var n = len(q)
+    if len(scratch_q1) != n or len(scratch_rhs) != n:
+        raise Error("ssprk2_step_2d: scratch buffer size mismatch")
+
+    #  q1 = q + dt L(q)
+    dg_rhs_2d[P, PhysT](mesh, re, physics, q, scratch_rhs)
+    for k in range(n):
+        scratch_q1[k] = q[k] + dt * scratch_rhs[k]
+
+    # q <- 1/2 q + 1/2 (q1 + dt L(q1))
+    dg_rhs_2d[P, PhysT](mesh, re, physics, scratch_q1, scratch_rhs)
+    for k in range(n):
+        q[k] = 0.5 * q[k] + 0.5 * (scratch_q1[k] + dt * scratch_rhs[k])
+
+
+def rk4_step_2d[P: Int, PhysT: Physics2D](
+    mesh: LocalMesh2D[P],
+    re: ReferenceElement2D[P],
+    physics: PhysT,
+    dt: Float64,
+    mut q: List[Float64],
+    mut scratch_k: List[Float64],
+    mut scratch_accum: List[Float64],
+    mut scratch_temp: List[Float64],
+    mut scratch_rhs: List[Float64],
+) raises:
+    """Classical RK4: 4 rhs evaluations per step, 4th-order accurate
+    for smooth solutions.  Not SSP (no built-in monotonicity), so
+    combine with limiters at your own risk on discontinuous problems.
+    The four scratch buffers split as:
+      * `scratch_k`     -- holds the current stage's rhs
+      * `scratch_accum` -- accumulates (k1 + 2 k2 + 2 k3 + k4)
+      * `scratch_temp`  -- q + alpha * dt * k_prev for the next stage
+      * `scratch_rhs`   -- dg_rhs_2d output slot (alias of scratch_k)"""
+    var n = len(q)
+    if (len(scratch_k) != n or len(scratch_accum) != n
+            or len(scratch_temp) != n or len(scratch_rhs) != n):
+        raise Error("rk4_step_2d: scratch buffer size mismatch")
+    var half_dt = 0.5 * dt
+
+    # k1 = L(q)
+    dg_rhs_2d[P, PhysT](mesh, re, physics, q, scratch_k)
+    for k in range(n):
+        scratch_accum[k] = scratch_k[k]
+        scratch_temp[k] = q[k] + half_dt * scratch_k[k]
+
+    # k2 = L(q + dt/2 k1)
+    dg_rhs_2d[P, PhysT](mesh, re, physics, scratch_temp, scratch_k)
+    for k in range(n):
+        scratch_accum[k] += 2.0 * scratch_k[k]
+        scratch_temp[k] = q[k] + half_dt * scratch_k[k]
+
+    # k3 = L(q + dt/2 k2)
+    dg_rhs_2d[P, PhysT](mesh, re, physics, scratch_temp, scratch_k)
+    for k in range(n):
+        scratch_accum[k] += 2.0 * scratch_k[k]
+        scratch_temp[k] = q[k] + dt * scratch_k[k]
+
+    # k4 = L(q + dt k3)
+    dg_rhs_2d[P, PhysT](mesh, re, physics, scratch_temp, scratch_k)
+    for k in range(n):
+        scratch_accum[k] += scratch_k[k]
+
+    # q <- q + dt/6 * (k1 + 2 k2 + 2 k3 + k4)
+    var one_sixth_dt = dt / 6.0
+    for k in range(n):
+        q[k] = q[k] + one_sixth_dt * scratch_accum[k]
+
+
 def ssprk3_step_2d[P: Int, PhysT: Physics2D](
     mesh: LocalMesh2D[P],
     re: ReferenceElement2D[P],
