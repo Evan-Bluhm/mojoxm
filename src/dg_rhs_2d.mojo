@@ -29,6 +29,53 @@ from src.reference_2d import (
 )
 
 
+# ----------------------------------------------------------------------
+# SSPRK3 time step wrapper (host-side, 2D advection)
+# ----------------------------------------------------------------------
+# Standard strong-stability-preserving RK3 (Gottlieb-Shu):
+#   q1   = q       + dt * L(q)
+#   q2   = 3/4 * q + 1/4 * (q1 + dt * L(q1))
+#   qnew = 1/3 * q + 2/3 * (q2 + dt * L(q2))
+# where L(q) = advection_rhs_2d(q).  Mutates `q` in place on the final
+# stage so the caller can chain steps without buffer management.
+# ----------------------------------------------------------------------
+
+def ssprk3_step_2d[P: Int](
+    mesh: LocalMesh2D[P],
+    re: ReferenceElement2D[P],
+    vx: Float64, vy: Float64,
+    dt: Float64,
+    mut q: List[Float64],
+    mut scratch_q1: List[Float64],
+    mut scratch_q2: List[Float64],
+    mut scratch_rhs: List[Float64],
+) raises:
+    var n = len(q)
+    if len(scratch_q1) != n or len(scratch_q2) != n or len(scratch_rhs) != n:
+        raise Error("ssprk3_step_2d: scratch buffer size mismatch")
+
+    # Stage 1: q1 = q + dt * L(q)
+    advection_rhs_2d[P](mesh, re, vx, vy, q, scratch_rhs)
+    for k in range(n):
+        scratch_q1[k] = q[k] + dt * scratch_rhs[k]
+
+    # Stage 2: q2 = 3/4 q + 1/4 (q1 + dt * L(q1))
+    advection_rhs_2d[P](mesh, re, vx, vy, scratch_q1, scratch_rhs)
+    for k in range(n):
+        scratch_q2[k] = (
+            0.75 * q[k]
+            + 0.25 * (scratch_q1[k] + dt * scratch_rhs[k])
+        )
+
+    # Stage 3: q <- 1/3 q + 2/3 (q2 + dt * L(q2))
+    advection_rhs_2d[P](mesh, re, vx, vy, scratch_q2, scratch_rhs)
+    for k in range(n):
+        q[k] = (
+            (1.0 / 3.0) * q[k]
+            + (2.0 / 3.0) * (scratch_q2[k] + dt * scratch_rhs[k])
+        )
+
+
 def advection_rhs_2d[P: Int](
     mesh: LocalMesh2D[P],
     re: ReferenceElement2D[P],

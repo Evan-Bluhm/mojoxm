@@ -87,7 +87,7 @@ ALL_DRIVERS  = $(CPU_DRIVERS) $(GPU_DRIVERS)
 # that the test harness diffs across rank counts.
 TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-diagnostics test-p3 test-all test-klone
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-diagnostics test-p3 test-all test-klone
 
 help:
 	@echo 'mojoxm build targets'
@@ -164,6 +164,13 @@ test-local-mesh-2d:
 test-dg-rhs-2d:
 	.venv/bin/mojo run -I . test/dg_rhs_2d_test.mojo
 
+# End-to-end 2D DG advection: run SSPRK3 for one full period on a
+# periodic Gaussian IC and verify L2 error against the initial state is
+# small (< 10%).  Proves the mesh + rhs + time stepper compose without
+# sign/scale mistakes.  Host-only (Float64 CPU reference path).
+test-advection-step-2d:
+	.venv/bin/mojo run -I . test/advection_step_2d_test.mojo
+
 # GPU diagnostics writer test: uniform-field integrals recover
 # analytic values; max_abs reports the peak on a checkerboard field;
 # empty configuration doesn't crash.  Runs at np=1.
@@ -180,7 +187,7 @@ test-p3: p3_smoke_test
 
 # Convenience target: run every test in the suite.  Stops on the first
 # failure.  Doesn't include test-klone (that's for cluster submission).
-test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-diagnostics test-p3 test test-bc
+test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-diagnostics test-p3 test test-bc
 	@echo '=== ALL TESTS PASSED ==='
 
 test-klone:
