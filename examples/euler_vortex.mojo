@@ -39,12 +39,14 @@ from src import mpi
 from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
+from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
 from src.nvtx import NvtxContext
 from src.frame_writer import FrameWriter
-from src.time_integrator import run_ssprk3_loop
+from src.time_integrator import run_ssprk3_loop_with_diagnostics
+from src.diagnostics import DiagnosticsWriter, NamedComponent
 
 comptime NX = 32
 comptime NY = 32
@@ -167,6 +169,7 @@ def main() raises:
     nvtx.push_range("build_mesh")
     var mesh = Mesh(
         ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ,
+        BoundaryConditions.periodic(),
     )
     nvtx.pop_range()
 
@@ -187,7 +190,8 @@ def main() raises:
               ", interior=", mesh.num_interior_elements, ")")
 
     var physics = Euler(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True
+        GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True,
+        Float32(0.0), Float32(0.0), Float32(0.0),
     )
 
     nvtx.push_range("solver_setup")
@@ -216,12 +220,28 @@ def main() raises:
     # Frame output (density is component 0 of the 5-component Euler state).
     var writer = FrameWriter[Euler](solver, nvtx, component=0)
 
+    # Diagnostics: the classical vortex is a smooth periodic solution,
+    # so all 5 conserved integrals should be EXACTLY conserved.  Any
+    # drift visible in the CSV = scheme-level dissipation plus
+    # nodal-quadrature aliasing.
+    var diag_linear = List[NamedComponent]()
+    diag_linear.append(NamedComponent("mass",         0))
+    diag_linear.append(NamedComponent("momentum_x",   1))
+    diag_linear.append(NamedComponent("momentum_y",   2))
+    diag_linear.append(NamedComponent("momentum_z",   3))
+    diag_linear.append(NamedComponent("total_energy", 4))
+    var diag = DiagnosticsWriter[Euler](
+        solver, "output/diagnostics.csv",
+        diag_linear, List[NamedComponent](), List[NamedComponent](),
+        LX, LY, LZ,
+    )
+
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop[Euler](
-        solver, writer, dt, T_FINAL, NUM_FRAMES, nvtx,
+    var result = run_ssprk3_loop_with_diagnostics[Euler](
+        solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx,
     )
 
     writer.finalize("output/solution.pvd", nvtx)

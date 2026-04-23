@@ -37,12 +37,14 @@ from src import mpi
 from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
+from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
 from src.nvtx import NvtxContext
 from src.frame_writer import FrameWriter
-from src.time_integrator import run_ssprk3_loop
+from src.time_integrator import run_ssprk3_loop_with_diagnostics
+from src.diagnostics import DiagnosticsWriter, NamedComponent
 
 # Domain is the natural 2 pi cube so sin/cos of coordinates are periodic
 # without any wrap-around algebra.
@@ -161,6 +163,7 @@ def main() raises:
     nvtx.push_range("build_mesh")
     var mesh = Mesh(
         ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ,
+        BoundaryConditions.periodic(),
     )
     nvtx.pop_range()
 
@@ -181,7 +184,8 @@ def main() raises:
               ", interior=", mesh.num_interior_elements, ")")
 
     var physics = Euler(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True
+        GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True,
+        Float32(0.0), Float32(0.0), Float32(0.0),
     )
 
     nvtx.push_range("solver_setup")
@@ -208,12 +212,32 @@ def main() raises:
     # Frame output (density is component 0 of the 5-component Euler state).
     var writer = FrameWriter[Euler](solver, nvtx, component=0)
 
+    # Diagnostics: Taylor-Green develops into turbulence, so we track
+    # both the 5 linear conserved integrals AND the momentum L2^2
+    # components -- the sum (0.5 / rho) * int|rho u|^2 approximates
+    # kinetic energy (the enstrophy cascade's observable).
+    var diag_linear = List[NamedComponent]()
+    diag_linear.append(NamedComponent("mass",         0))
+    diag_linear.append(NamedComponent("momentum_x",   1))
+    diag_linear.append(NamedComponent("momentum_y",   2))
+    diag_linear.append(NamedComponent("momentum_z",   3))
+    diag_linear.append(NamedComponent("total_energy", 4))
+    var diag_squared = List[NamedComponent]()
+    diag_squared.append(NamedComponent("momentum_sq_x", 1))
+    diag_squared.append(NamedComponent("momentum_sq_y", 2))
+    diag_squared.append(NamedComponent("momentum_sq_z", 3))
+    var diag = DiagnosticsWriter[Euler](
+        solver, "output/diagnostics.csv",
+        diag_linear, diag_squared, List[NamedComponent](),
+        LX, LY, LZ,
+    )
+
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop[Euler](
-        solver, writer, dt, T_FINAL, NUM_FRAMES, nvtx,
+    var result = run_ssprk3_loop_with_diagnostics[Euler](
+        solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx,
     )
 
     writer.finalize("output/solution.pvd", nvtx)

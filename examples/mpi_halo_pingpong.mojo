@@ -16,6 +16,7 @@
 from src import mpi
 from src.partition import build_partition
 from src.mesh import Mesh
+from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
 from std.gpu.host import DeviceContext
 from std.sys import has_accelerator
@@ -65,7 +66,8 @@ def main() raises:
 
     var ctx = DeviceContext()
     var patch = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LX, LX
+        ctx, build_partition(rank, size, NX, NY, NZ), LX, LX, LX,
+        BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
         ctx, patch.part, NC, patch.d_perm.unsafe_ptr(),

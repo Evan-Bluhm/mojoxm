@@ -76,16 +76,18 @@ SRC_MOJO    := $(wildcard src/*.mojo)
 #                  require a GPU at build time (Mojo elaborates the RK
 #                  kernel at compile time).
 CPU_DRIVERS  = mpi_hello mpi_partition
-GPU_DRIVERS  = advection_gaussian euler_vortex euler_taylor_green \
+GPU_DRIVERS  = advection_gaussian euler_vortex euler_taylor_green euler_sod \
+               euler_rising_bubble maxwell_cavity shallow_water_drop \
+               mhd_alfven two_fluid_langmuir \
                mpi_patch_mesh mpi_halo_pingpong
 ALL_DRIVERS  = $(CPU_DRIVERS) $(GPU_DRIVERS)
 
 # Test drivers live under test/; they use the same Physics / Solver
 # machinery as the examples/ drivers but emit per-rank binary dumps
 # that the test harness diffs across rank counts.
-TEST_DRIVERS = mpi_advection_test
+TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test
 
-.PHONY: all cpu gpu clean help test test-klone
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-diagnostics test-p3 test-all test-klone
 
 help:
 	@echo 'mojoxm build targets'
@@ -94,7 +96,11 @@ help:
 	@echo '  make gpu                 GPU-using drivers: $(GPU_DRIVERS)'
 	@echo '  make <driver>            build a single driver by name'
 	@echo '  make shim                build just build/mpi_shim.o'
-	@echo '  make test                run MPI correctness test (np=1 vs np=4)'
+	@echo '  make test                run MPI correctness test (np=1 vs np=4, periodic)'
+	@echo '  make test-bc             run BC correctness test (non-periodic, np=1 vs np=4)'
+	@echo '  make test-reference      run reference-element unit test (P=1..4, host-side)'
+	@echo '  make test-diagnostics    run DiagnosticsWriter unit test (GPU, np=1)'
+	@echo '  make test-all            run every test above'
 	@echo '  make test-klone          run MPI correctness test on Klone'
 	@echo '  make clean               remove driver binaries + $(BUILD_DIR)/'
 	@echo ''
@@ -123,6 +129,59 @@ $(TEST_DRIVERS): %: test/%.mojo $(BUILD_DIR)/mpi_shim.o $(SRC_MOJO)
 # (no up-front build dependency: klone-run rebuilds each invocation).
 test: $(TEST_DRIVERS)
 	test/test_mpi_correctness.sh
+
+# Same structure as `make test`, but routes through mpi_bc_test which
+# uses BC_OUTFLOW on all 6 domain faces -- exercises the non-periodic
+# BC code path through the full single-rank-vs-multi-rank diff.
+test-bc: $(TEST_DRIVERS)
+	test/test_mpi_bc_correctness.sh
+
+# Host-side reference-element unit test: validates Lagrange basis
+# construction (Vandermonde + analytic integration) at orders P=1..4
+# via SPD mass matrix + node-position + face-to-element map checks.
+# No GPU, no MPI -- runs as a plain `mojo run`.
+test-reference:
+	.venv/bin/mojo run -I . test/reference_element_test.mojo
+
+# Same for the 2D triangular reference element (ReferenceElement2D[P]).
+# Covers node positions, SPD 2D mass matrix, edge-to-element map.
+# Host-only; future 2D mesh/solver/VTU work will build on this.
+test-reference-2d:
+	.venv/bin/mojo run -I . test/reference_element_2d_test.mojo
+
+# 2D triangulated Cartesian mesh topology: element / face counts,
+# elem_faces <-> face_elem round-trip, side-0 / side-1 node coordinate
+# agreement across shared edges, Jacobian positivity.  Host-only.
+test-local-mesh-2d:
+	.venv/bin/mojo run -I . test/local_mesh_2d_test.mojo
+
+# Host-side 2D DG advection rhs: constant-state preservation.  On a
+# periodic domain a constant q has zero divergence of v.q and the face
+# fluxes cancel pair-wise around each cell (divergence theorem), so
+# `advection_rhs_2d` must produce rhs = 0 to within roundoff.  Tests
+# that the mesh Jacobian, D_ref / Lift_ref operators, face-normal
+# convention, and elem_canon_to_ref mapping are internally consistent.
+test-dg-rhs-2d:
+	.venv/bin/mojo run -I . test/dg_rhs_2d_test.mojo
+
+# GPU diagnostics writer test: uniform-field integrals recover
+# analytic values; max_abs reports the peak on a checkerboard field;
+# empty configuration doesn't crash.  Runs at np=1.
+test-diagnostics: diagnostics_test
+	./diagnostics_test
+
+# P=3 plumbing smoke test.  Builds Mesh[3] + Solver[Advection, 3],
+# fills q with a constant, downloads it back, verifies round-trip at
+# the higher-order buffer layout (NP=20).  Does NOT check physical
+# accuracy; it only validates that every buffer allocation and GPU
+# kernel launch is correctly parameterized for P != 2.  Runs at np=1.
+test-p3: p3_smoke_test
+	./p3_smoke_test
+
+# Convenience target: run every test in the suite.  Stops on the first
+# failure.  Doesn't include test-klone (that's for cluster submission).
+test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-diagnostics test-p3 test test-bc
+	@echo '=== ALL TESTS PASSED ==='
 
 test-klone:
 	test/test_mpi_correctness.sh --klone

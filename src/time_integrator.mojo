@@ -20,6 +20,7 @@
 
 from src.solver import Solver, Physics
 from src.frame_writer import FrameWriter
+from src.diagnostics import DiagnosticsWriter
 from src.nvtx import NvtxContext
 from std.time import perf_counter_ns
 
@@ -39,10 +40,10 @@ struct TimeLoopResult(Copyable, Movable):
 
 
 def run_ssprk3_loop[
-    PhysT: Physics,
+    PhysT: Physics, P: Int = 2,
 ](
-    mut solver: Solver[PhysT],
-    mut writer: FrameWriter[PhysT],
+    mut solver: Solver[PhysT, P],
+    mut writer: FrameWriter[PhysT, P],
     dt: Float32,
     t_final: Float32,
     num_frames: Int,
@@ -93,6 +94,75 @@ def run_ssprk3_loop[
 
     # Final sync so wall time accounts for any work still queued after
     # the last frame write.
+    var sync_start = perf_counter_ns()
+    solver.ctx.synchronize()
+    var sync_end = perf_counter_ns()
+    var wall_end = perf_counter_ns()
+
+    return TimeLoopResult(
+        total_steps=step,
+        wall_sec=Float64(wall_end - wall_start) * 1e-9,
+        step_loop_sec=tloop,
+        frame_write_sec=twrite,
+        final_sync_sec=Float64(sync_end - sync_start) * 1e-9,
+    )
+
+
+def run_ssprk3_loop_with_diagnostics[
+    PhysT: Physics, P: Int = 2,
+](
+    mut solver: Solver[PhysT, P],
+    mut writer: FrameWriter[PhysT, P],
+    mut diag: DiagnosticsWriter[PhysT, P],
+    dt: Float32,
+    t_final: Float32,
+    num_frames: Int,
+    mut nvtx: NvtxContext,
+) raises -> TimeLoopResult:
+    """Same as `run_ssprk3_loop` but also invokes `diag.record()` at
+    every frame boundary (including the t=0 frame).  The diagnostic
+    read requires an extra download_owned_component per tracked
+    component per frame, so this is opt-in -- drivers that don't want
+    the bookkeeping keep using the plain `run_ssprk3_loop`."""
+    writer.write_frame(solver, 0.0, nvtx)
+    diag.record(0.0, solver, nvtx)
+
+    var t: Float32 = 0.0
+    var frame_dt = t_final / Float32(num_frames)
+    var next_frame_t = frame_dt
+    var frame_id = 1
+    var step = 0
+    var tloop: Float64 = 0.0
+    var twrite: Float64 = 0.0
+
+    var wall_start = perf_counter_ns()
+    while t < t_final:
+        var step_dt = dt
+        if t + step_dt > next_frame_t:
+            step_dt = next_frame_t - t
+        if step_dt <= 0.0:
+            step_dt = dt
+        if t + step_dt > t_final:
+            step_dt = t_final - t
+        var s0 = perf_counter_ns()
+        solver.step_ssprk3(step_dt, nvtx)
+        var s1 = perf_counter_ns()
+        tloop += Float64(s1 - s0) * 1e-9
+        t += step_dt
+        step += 1
+        if t >= next_frame_t - Float32(1e-12) and frame_id < num_frames + 1:
+            var w0 = perf_counter_ns()
+            nvtx.push_range("frame_boundary_sync")
+            solver.ctx.synchronize()
+            nvtx.pop_range()
+            writer.write_frame(solver, Float64(t), nvtx)
+            diag.record(Float64(t), solver, nvtx)
+            nvtx.mark("frame_submitted")
+            var w1 = perf_counter_ns()
+            twrite += Float64(w1 - w0) * 1e-9
+            frame_id += 1
+            next_frame_t += frame_dt
+
     var sync_start = perf_counter_ns()
     solver.ctx.synchronize()
     var sync_end = perf_counter_ns()

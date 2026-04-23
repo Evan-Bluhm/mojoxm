@@ -17,21 +17,35 @@ wheels/
 # output
 output/*
 
-# test dump outputs (produced by test/test_mpi_correctness.sh)
+# test dump outputs (produced by test/test_mpi_correctness.sh +
+# test/test_mpi_bc_correctness.sh)
 test/dumps_np*/
+test/dumps_bc_np*/
 
 # binaries
 mojoxm
 advection_gaussian
 euler_vortex
 euler_taylor_green
+euler_sod
+euler_rising_bubble
+maxwell_cavity
+shallow_water_drop
+mhd_alfven
+two_fluid_langmuir
 mpi_hello
 mpi_partition
 mpi_patch_mesh
 mpi_halo_pingpong
 mpi_advection_gaussian
 mpi_advection_test
+mpi_bc_test
+diagnostics_test
+p3_smoke_test
 mojo.sif
 
 # build products
 build/*.o
+
+# cron-scheduled task state (Claude Code session-local)
+.claude/scheduled_tasks.lock

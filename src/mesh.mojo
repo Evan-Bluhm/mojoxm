@@ -46,9 +46,10 @@
 # values are populated via MPI halo exchange.
 # ======================================================================
 
-from src.reference import N_P, N_F
+from src.reference import N_F, num_tet_nodes
 from src.local_mesh import LocalMesh, KUHN_TETS_PER_CELL
 from src.partition import Partition
+from src.boundary import BoundaryConditions, BC_INTERIOR
 from std.gpu import global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.math import ceildiv
@@ -128,22 +129,22 @@ def build_owned_elem_ids_kernel(
 # ghost geometry.
 # ----------------------------------------------------------------------
 
-def gather_owned_nodes_kernel(
-    o_owned_node_xyz: UnsafePointer[Float32, MutAnyOrigin],  # [num_owned*N_P*3]
+def gather_owned_nodes_kernel[NP: Int](
+    o_owned_node_xyz: UnsafePointer[Float32, MutAnyOrigin],  # [num_owned*NP*3]
     owned_ids:  UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned]
-    local_node_xyz: UnsafePointer[Float32, MutAnyOrigin],    # [num_local_elements*N_P*3]
+    local_node_xyz: UnsafePointer[Float32, MutAnyOrigin],    # [num_local_elements*NP*3]
     num_owned: Int,
 ):
     var tid = Int(global_idx.x)
-    var total = num_owned * N_P
+    var total = num_owned * NP
     if tid >= total:
         return
-    var owned_idx = tid // N_P
-    var nn = tid % N_P
+    var owned_idx = tid // NP
+    var nn = tid % NP
     var src_elem = Int(owned_ids[owned_idx])
     for d in range(3):
-        o_owned_node_xyz[(owned_idx * N_P + nn) * 3 + d] = (
-            local_node_xyz[(src_elem * N_P + nn) * 3 + d]
+        o_owned_node_xyz[(owned_idx * NP + nn) * 3 + d] = (
+            local_node_xyz[(src_elem * NP + nn) * 3 + d]
         )
 
 
@@ -285,7 +286,12 @@ def classify_owned_kernel(
 # Mesh
 # ----------------------------------------------------------------------
 
-struct Mesh(Movable):
+struct Mesh[P: Int = 2](Movable):
+    # Per-P nodal-DOF count.  Kept as a comptime alias so any Mesh
+    # method can multiply / divide by `Self.NP` without rebuilding
+    # it from `num_tet_nodes(Self.P)` every time.
+    comptime NP = num_tet_nodes(Self.P)
+
     var part: Partition
 
     # Underlying Kuhn-tet mesh (defined in src/local_mesh.mojo).  For
@@ -293,7 +299,7 @@ struct Mesh(Movable):
     # cubes with the origin shifted to match this rank's patch.  For
     # single-patch (np=1) it covers just the owned (nx, ny, nz) cubes
     # with no ghost ring -- see ghost_width.
-    var local: LocalMesh
+    var local: LocalMesh[Self.P]
 
     # Width of the ghost ring around the owned region, in cube units.
     # 1 for the multi-patch path (the DG halo is always one element
@@ -357,6 +363,7 @@ struct Mesh(Movable):
         mut ctx: DeviceContext,
         var part: Partition,
         Lx: Float64, Ly: Float64, Lz: Float64,
+        bcs: BoundaryConditions,
     ) raises:
         # Single-patch fast path: at np=1 the entire global domain lives
         # on this rank, so we drop the ghost ring, the shift origin, the
@@ -370,7 +377,9 @@ struct Mesh(Movable):
         # flow-sensitive init analysis can't verify across a method
         # call that every struct field gets initialised.
         if part.px * part.py * part.pz == 1:
-            self.local = LocalMesh(ctx, part.nx, part.ny, part.nz, Lx, Ly, Lz)
+            self.local = LocalMesh[Self.P](
+                ctx, part.nx, part.ny, part.nz, Lx, Ly, Lz, bcs,
+            )
             self.ghost_width = 0
 
             var n = self.local.num_elements
@@ -396,7 +405,7 @@ struct Mesh(Movable):
             # fresh copy so the pointer's ownership model matches the
             # multi-patch path (the writer takes ownership of a
             # dedicated buffer in both cases).
-            var owned_points = n * N_P
+            var owned_points = n * Self.NP
             self.owned_node_xyz_f32_len = owned_points * 3
             self.owned_node_xyz_f32_ptr = alloc[Float32](
                 self.owned_node_xyz_f32_len
@@ -419,9 +428,30 @@ struct Mesh(Movable):
         var Ly_loc = Float64(ny_loc) * dy
         var Lz_loc = Float64(nz_loc) * dz
 
+        # Filter the user's BC config down to only the sides where
+        # THIS rank sits on the global boundary.  For interior ranks
+        # every side stays BC_INTERIOR so LocalMesh's periodic-wrap
+        # face builder handles them normally (with halo exchange
+        # feeding the ghost ring).
+        var rank_bcs = BoundaryConditions(
+            bcs.bc_x_lo if part.rx == 0           else BC_INTERIOR,
+            bcs.bc_x_hi if part.rx == part.px - 1 else BC_INTERIOR,
+            bcs.bc_y_lo if part.ry == 0           else BC_INTERIOR,
+            bcs.bc_y_hi if part.ry == part.py - 1 else BC_INTERIOR,
+            bcs.bc_z_lo if part.rz == 0           else BC_INTERIOR,
+            bcs.bc_z_hi if part.rz == part.pz - 1 else BC_INTERIOR,
+        )
+
         # Build the underlying mesh.  Its coordinates run from
         # (0, 0, 0) to (Lx_loc, Ly_loc, Lz_loc); we offset them below.
-        self.local = LocalMesh(ctx, nx_loc, ny_loc, nz_loc, Lx_loc, Ly_loc, Lz_loc)
+        # bnd_off=1 tells the BC overlay kernels to target the first
+        # OWNED cube layer (local lcx=1, lcy=1, lcz=1 etc.), skipping
+        # the 1-cube ghost ring.
+        self.local = LocalMesh[Self.P](
+            ctx, nx_loc, ny_loc, nz_loc,
+            Lx_loc, Ly_loc, Lz_loc,
+            rank_bcs, 1,
+        )
         self.ghost_width = 1
 
         # Shift every stored node coordinate so the mesh sits in the
@@ -431,7 +461,7 @@ struct Mesh(Movable):
         var ox = Float32(Float64(part.cx0 - 1) * dx)
         var oy = Float32(Float64(part.cy0 - 1) * dy)
         var oz = Float32(Float64(part.cz0 - 1) * dz)
-        var num_points = self.local.num_elements * N_P
+        var num_points = self.local.num_elements * Self.NP
         ctx.enqueue_function[offset_nodes_kernel, offset_nodes_kernel](
             self.local.d_elem_node_xyz.unsafe_ptr(),
             num_points, ox, oy, oz,
@@ -459,13 +489,12 @@ struct Mesh(Movable):
 
         # Gather owned-element node coordinates into a contiguous
         # device buffer, then download to host for the VTU writer.
-        var owned_points = self.num_owned_elements * N_P
+        var owned_points = self.num_owned_elements * Self.NP
         var d_owned_nodes = ctx.enqueue_create_buffer[patch_f](
             owned_points * 3
         )
-        ctx.enqueue_function[
-            gather_owned_nodes_kernel, gather_owned_nodes_kernel,
-        ](
+        comptime _gather_owned_initial = gather_owned_nodes_kernel[Self.NP]
+        ctx.enqueue_function[_gather_owned_initial, _gather_owned_initial](
             d_owned_nodes.unsafe_ptr(),
             self.d_owned_elem_ids.unsafe_ptr(),
             self.local.d_elem_node_xyz.unsafe_ptr(),
@@ -754,9 +783,8 @@ struct Mesh(Movable):
         var d_owned_nodes_new = ctx.enqueue_create_buffer[patch_f](
             owned_points * 3
         )
-        ctx.enqueue_function[
-            gather_owned_nodes_kernel, gather_owned_nodes_kernel,
-        ](
+        comptime _gather_owned_post = gather_owned_nodes_kernel[Self.NP]
+        ctx.enqueue_function[_gather_owned_post, _gather_owned_post](
             d_owned_nodes_new.unsafe_ptr(),
             self.d_owned_elem_ids.unsafe_ptr(),
             self.local.d_elem_node_xyz.unsafe_ptr(),
@@ -816,7 +844,7 @@ struct Mesh(Movable):
             return new^
 
         self.local.d_elem_node_xyz = _gather_f32(
-            self.local.d_elem_node_xyz, N_P * 3
+            self.local.d_elem_node_xyz, Self.NP * 3
         )
         self.local.d_elem_invJ = _gather_f32(
             self.local.d_elem_invJ, 9

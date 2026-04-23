@@ -28,11 +28,17 @@
 from std.pathlib import Path
 from std.memory import memcpy, memset, alloc
 from std.os import FileDescriptor, open
-from src.reference import N_P, N_F, N_FP
 from src.nvtx import NvtxContext
 from src.async_writer import WriteSegment
 
+# At P=2 each tet has 10 nodes laid out as 4 vertices + 6 edge midpoints,
+# which matches VTK_QUADRATIC_TETRA's node ordering bit-for-bit.  For
+# P != 2 we emit VTK_LAGRANGE_TETRAHEDRON (arbitrary-order Lagrange tet)
+# and rely on the canonical node ordering produced by
+# `_lagrange_tet_exponents(P)` in src.local_mesh matching VTK's
+# expected Lagrange ordering.
 comptime VTK_QUADRATIC_TETRA = 24
+comptime VTK_LAGRANGE_TETRAHEDRON = 71
 
 # ----------------------------------------------------------------------
 # Bulk writer: owns a malloc'd byte buffer + write cursor.
@@ -93,6 +99,7 @@ struct ByteBuf(Movable):
 
 struct VtuWriter(Movable):
     var num_elements: Int
+    var nodes_per_elem: Int
     var total_points: Int
 
     # We keep three static pieces on the host:
@@ -126,12 +133,20 @@ struct VtuWriter(Movable):
     ](out self,
         num_elements: Int,
         elem_node_xyz_ptr: UnsafePointer[Float32, origin],
+        nodes_per_elem: Int = 10,
     ) raises:
-        # `elem_node_xyz_ptr` points to num_elements * N_P * 3 Float32s,
-        # laid out (elem, node, component).  We only read it.
+        # `elem_node_xyz_ptr` points to num_elements * nodes_per_elem * 3
+        # Float32s, laid out (elem, node, component).  We only read it.
+        # `nodes_per_elem` defaults to 10 (Lagrange P=2), but any
+        # num_tet_nodes(P) value is accepted.
         self.num_elements = num_elements
-        self.total_points = num_elements * N_P
+        self.nodes_per_elem = nodes_per_elem
+        self.total_points = num_elements * nodes_per_elem
         var total_points = self.total_points
+        var cell_type = (
+            VTK_QUADRATIC_TETRA if nodes_per_elem == 10
+            else VTK_LAGRANGE_TETRAHEDRON
+        )
 
         var pts_bytes = total_points * 3 * 4
         var conn_bytes = total_points * 4
@@ -163,20 +178,20 @@ struct VtuWriter(Movable):
             conn_ptr[i] = Int32(i)
         self.static_post.len += conn_bytes
 
-        # Offsets (Int32): (k+1) * N_P
+        # Offsets (Int32): (k+1) * nodes_per_elem
         self.static_post.write_u32_le(UInt32(off_bytes))
         var off_ptr = (
             self.static_post.ptr + self.static_post.len
         ).bitcast[Int32]()
         for e in range(num_elements):
-            off_ptr[e] = Int32((e + 1) * N_P)
+            off_ptr[e] = Int32((e + 1) * nodes_per_elem)
         self.static_post.len += off_bytes
 
-        # Types (UInt8): all VTK_QUADRATIC_TETRA -> memset.
+        # Types (UInt8): memset with the chosen cell type.
         self.static_post.write_u32_le(UInt32(typ_bytes))
         memset(
             ptr=self.static_post.ptr + self.static_post.len,
-            value=UInt8(VTK_QUADRATIC_TETRA),
+            value=UInt8(cell_type),
             count=num_elements,
         )
         self.static_post.len += typ_bytes

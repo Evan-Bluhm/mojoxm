@@ -1,31 +1,76 @@
 # mojoxm — GPU DG hyperbolic solver in Mojo
 
-A minimum viable GPU-accelerated [discontinuous
+A GPU-accelerated [discontinuous
 Galerkin](https://en.wikipedia.org/wiki/Discontinuous_Galerkin_method)
 finite-element solver in [Mojo](https://docs.modular.com/mojo/manual),
 inspired by [WARPXM](https://doi.org/10.1016/j.cpc.2010.12.048).
 
 The solver is parameterized by a `Physics` trait; each simulation is
 its own single-file Mojo driver that composes a mesh, a physics type,
-an initial condition, and a time integrator. Two physics implementations
+an initial condition, and a time integrator. Six physics implementations
 ship today:
 
-- **Advection** — scalar linear advection, upwind flux. Single component.
+- **Advection** — scalar linear advection, upwind flux. 1 component.
 - **Euler** — 5-moment compressible gas dynamics with four selectable
-  numerical fluxes (Rusanov, Roe, HLLE, HLLEC) and an optional
-  Harten-Hyman entropy fix.
+  numerical fluxes (Rusanov, Roe, HLLE, HLLEC), optional Harten-Hyman
+  entropy fix, and optional uniform gravity source.  5 components.
+- **ShallowWater** — 2D shallow water (h, h·u, h·v) embedded in 3D
+  with `F^z = 0`. Rusanov flux, slip-wall BC. 3 components.
+- **Maxwell** — vacuum Maxwell (E, B) with Rusanov flux, PEC / outflow
+  boundary conditions, and an optional uniform current source.
+  6 components.
+- **IdealMHD** — single-fluid ideal MHD with Dedner GLM div(B)
+  cleaning. 8 conservation components + 1 GLM scalar = 9 total.
+- **FiveMomentTwoFluid** — electron + ion fluids + full Maxwell + GLM.
+  17 components. Lorentz force + current coupling through the
+  source-term hook.
 
-Three reference drivers under `examples/`:
+Nine reference drivers under `examples/`:
 
-- `examples/advection_gaussian.mojo` — Gaussian pulse on `[0, 1]³` with
-  `v = (1, 1, 1)`, triply periodic. After `T = 1` the exact solution
-  returns to the IC.
-- `examples/euler_vortex.mojo` — classical isentropic vortex (Shu form)
-  on `[0, 10]³` with background velocity `(1, 1, 0)` and HLLEC Riemann
-  solver.
-- `examples/euler_taylor_green.mojo` — compressible Taylor-Green vortex
-  on a 2π cube at Ma ≈ 0.3. Two counter-rotating vortex sheets stretch
-  and cascade toward turbulence.
+- `advection_gaussian` — Gaussian pulse on `[0, 1]³` with `v = (1, 1, 1)`,
+  triply periodic. After `T = 1` the exact solution returns to the IC.
+- `euler_vortex` — classical isentropic vortex (Shu form) on `[0, 10]³`
+  with background velocity `(1, 1, 0)` and HLLEC Riemann solver.
+- `euler_taylor_green` — compressible Taylor-Green vortex on a 2π cube
+  at Ma ≈ 0.3. Kinetic-energy cascade toward turbulence.
+- `euler_sod` — smoothed Sod shock tube with non-periodic BCs
+  (transmissive outflow on x, slip walls on y/z).
+- `euler_rising_bubble` — buoyant thermal bubble in a hydrostatic
+  atmosphere, closed reflecting box. Demonstrates the gravity source
+  term.
+- `shallow_water_drop` — radial Gaussian perturbation in a closed
+  basin, slip walls.
+- `maxwell_cavity` — PEC-bounded standing wave, analytic round-trip
+  verification.
+- `mhd_alfven` — linearly polarised Alfvén wave in a periodic box.
+- `two_fluid_langmuir` — electron plasma oscillation at the plasma
+  frequency, analytic two-fluid period match.
+
+## Capabilities at a glance
+
+- **Boundary conditions**: periodic, slip wall (`BC_WALL`), transmissive
+  outflow (`BC_OUTFLOW`). Single- and multi-rank supported. Drivers
+  declare BCs via a `BoundaryConditions` struct; the mesh builder
+  allocates BC-side faces and routes them to a physics-provided
+  `boundary_flux(q, bc_type, n)` hook.
+- **Source-term hook**: physics types provide a `source_term(q, x, s_out)`
+  method evaluated per-node and added pointwise to the SSPRK3 RHS.
+  Used for gravity (Euler), current / charge coupling (Maxwell,
+  two-fluid), GLM damping (MHD).
+- **Diagnostics**: every driver can register linear, squared, and
+  max-norm conserved-quantity integrals via `DiagnosticsWriter`. One
+  CSV row per frame, with MPI allreduce at np>1.
+- **Animated dashboard**: `scripts/animate_dashboard.py` reads the VTU
+  frames + diagnostics CSV and emits a 2×2 animated GIF (density
+  field + auto-grouped time-series panels). Lazy frame loader scales
+  to large meshes.
+- **Higher-order reference element**: `ReferenceElement[P]` computes
+  Lagrange basis, mass, stiffness, and lift operators at arbitrary
+  order via Vandermonde inverse + analytic integration. Node ordering
+  matches VTK_LAGRANGE_TETRAHEDRON and is back-compatible with
+  VTK_QUADRATIC_TETRA at P=2. Full propagation of `P` through the
+  mesh / solver / VTU layers is pending; today every driver runs at
+  P=2.
 
 ## Numerical scheme
 
@@ -59,28 +104,34 @@ Three reference drivers under `examples/`:
 
 ## System architecture
 
-The project is ~3900 lines of Mojo. Core components live under
-`src/`; problem-specific drivers live under `examples/`.
+Roughly 10k lines of Mojo + a thin MPI shim in C. Core components live
+under `src/`; problem-specific drivers live under `examples/`.
 
-| file                                | lines | role                                                                               |
-|-------------------------------------|-------|------------------------------------------------------------------------------------|
-| `src/reference.mojo`                |   453 | P2 reference element: analytic monomial integration, `D_ref`, `Lift_ref`           |
-| `src/local_mesh.mojo`               |   766 | raw periodic Kuhn-tet mesh builder, **GPU-resident**                               |
-| `src/mesh.mojo`                     |   847 | patch-aware `Mesh`: wraps `LocalMesh` with partition / ghost ring / permutation    |
-| `src/partition.mojo`                |   192 | `(PX, PY, PZ)` factorisation of nprocs, minimising ghost-exchange surface          |
-| `src/halo_exchange.mojo`            |   451 | MPI pack / Isend / Irecv / unpack on the 6 face rings                              |
-| `src/solver.mojo`                   |   577 | `Physics` trait, cooperative `rk_stage_kernel`, `Solver[PhysT]`, SSPRK3 stepper    |
-| `src/advection.mojo`                |    81 | `Advection` physics: scalar upwind flux                                            |
-| `src/euler.mojo`                    |   678 | `Euler` physics: 5-moment, 4 Riemann solvers, Harten-Hyman entropy fix, face rotation |
-| `src/vtu.mojo`                      |   372 | zero-copy binary-appended VTU writer (writes one scalar field per frame)           |
-| `src/async_writer.mojo`             |   167 | pthread-based `writev()` scatter-gather file writer                                |
-| `src/frame_writer.mojo`             |   148 | per-rank frame output: `FrameWriter[PhysT]` with auto rank-subdir for MPI          |
-| `src/time_integrator.mojo`          |   107 | `run_ssprk3_loop[PhysT]`: drives the loop, frame cadence, timings                  |
-| `src/nvtx.mojo`                     |    84 | runtime-loaded NVTX shim for Nsight Systems timelines                              |
-| `src/mpi.mojo` + `src/mpi_shim.c`   |   ~250| Mojo / C-shim bindings for OpenMPI                                                 |
-| `examples/advection_gaussian.mojo`  |   224 | driver: Gaussian-pulse advection (any rank count)                                  |
-| `examples/euler_vortex.mojo`        |   239 | driver: isentropic Euler vortex, Shu 1997 (any rank count)                         |
-| `examples/euler_taylor_green.mojo`  |   231 | driver: compressible Taylor-Green vortex (any rank count)                          |
+| file                                | lines | role                                                                                   |
+|-------------------------------------|-------|----------------------------------------------------------------------------------------|
+| `src/reference.mojo`                |   729 | Reference element: arbitrary-order equispaced Lagrange (Vandermonde inverse + analytic integration), `D_ref`, `Lift_ref`, `face_to_elem` table |
+| `src/local_mesh.mojo`               |  1189 | Raw periodic Kuhn-tet mesh builder + BC overlay kernels, **GPU-resident**              |
+| `src/mesh.mojo`                     |   872 | Patch-aware `Mesh`: `LocalMesh` + partition / ghost ring / permutation + BC filtering  |
+| `src/boundary.mojo`                 |    52 | `BoundaryConditions` + `BC_WALL` / `BC_OUTFLOW` constants                              |
+| `src/partition.mojo`                |   192 | `(PX, PY, PZ)` factorisation of nprocs, minimising ghost-exchange surface              |
+| `src/halo_exchange.mojo`            |   476 | MPI pack / Isend / Irecv / unpack + per-direction BC skip flag                         |
+| `src/solver.mojo`                   |   667 | `Physics` trait, cooperative `rk_stage_kernel`, `Solver[PhysT]`, SSPRK3 stepper, per-NC shared-memory budget |
+| `src/advection.mojo`                |   102 | `Advection`: scalar upwind flux + wall / outflow BC                                    |
+| `src/euler.mojo`                    |   746 | `Euler`: 5-moment, 4 Riemann solvers, entropy fix, face rotation, gravity source       |
+| `src/maxwell.mojo`                  |   213 | `Maxwell`: vacuum E+B, Rusanov, PEC / outflow BC, uniform J / M source                 |
+| `src/shallow_water.mojo`            |   167 | `ShallowWater`: 2D shallow water embedded in 3D                                        |
+| `src/mhd.mojo`                      |   326 | `IdealMHD`: single-fluid MHD + Dedner GLM div(B) cleaning                              |
+| `src/two_fluid.mojo`                |   440 | `FiveMomentTwoFluid`: electron + ion + Maxwell + GLM, 17 components                    |
+| `src/vtu.mojo`                      |   372 | Zero-copy binary-appended VTU writer (one scalar field per frame)                      |
+| `src/async_writer.mojo`             |   167 | pthread-based `writev()` scatter-gather file writer                                    |
+| `src/frame_writer.mojo`             |   173 | Per-rank frame output: `FrameWriter[PhysT]`, auto rank-subdir + `mkdir -p` at init     |
+| `src/diagnostics.mojo`              |   ~250| `DiagnosticsWriter[PhysT]`: domain-integrated linear / squared / max-abs per-frame with allreduce |
+| `src/time_integrator.mojo`          |   177 | `run_ssprk3_loop` and `run_ssprk3_loop_with_diagnostics`                               |
+| `src/nvtx.mojo`                     |    84 | Runtime-loaded NVTX shim for Nsight Systems timelines                                  |
+| `src/mpi.mojo` + `src/mpi_shim.c`   |   ~300| Mojo / C-shim bindings for OpenMPI (init, point-to-point, allreduce, request handling) |
+
+Example drivers exercise various combinations of physics, BC kind,
+and diagnostics; see the list at the top of this README.
 
 ### The `Physics` trait
 
@@ -91,18 +142,20 @@ trait Physics(Copyable, Movable, ImplicitlyDestructible, DevicePassable):
     comptime NUM_COMPONENTS: Int
 
     def internal_flux(
-        self,
-        q:    UnsafePointer[Float32, MutAnyOrigin],
-        flux: UnsafePointer[Float32, MutAnyOrigin],
+        self, q, flux,
     ) -> Float32: ...      # writes flux[d * NC + c] = F_d_c(q)
 
     def numerical_flux(
-        self,
-        q_l:  UnsafePointer[Float32, MutAnyOrigin],
-        q_r:  UnsafePointer[Float32, MutAnyOrigin],
-        nx: Float32, ny: Float32, nz: Float32,
-        flux: UnsafePointer[Float32, MutAnyOrigin],
-    ) -> Float32: ...      # writes NC-vector upwind / Riemann flux
+        self, q_l, q_r, nx, ny, nz, flux,
+    ) -> Float32: ...      # writes NC-vector two-sided Riemann flux
+
+    def boundary_flux(
+        self, q_int, bc_type, nx, ny, nz, flux,
+    ) -> Float32: ...      # Riemann flux against a BC-synthesised ghost
+
+    def source_term(
+        self, q, x, y, z, source_out,
+    ): ...                 # pointwise S(q, x) added to RHS at every node
 ```
 
 `DevicePassable` is required because the physics instance is passed
@@ -148,6 +201,61 @@ Only the density section is copied per frame; the mesh coord segment
 is a pointer into `Mesh`'s host-side download. Up to
 `max_concurrent=8` writer threads in flight, joined lazily in the
 next `submit()` or at `wait_all()`.
+
+## Diagnostics & visualization
+
+### Per-frame CSV
+
+Drivers register conservation-law integrals via `DiagnosticsWriter`:
+
+```mojo
+var linear = List[NamedComponent]()
+linear.append(NamedComponent("mass",         0))
+linear.append(NamedComponent("momentum_x",   1))
+linear.append(NamedComponent("total_energy", 4))
+
+var squared = List[NamedComponent]()
+squared.append(NamedComponent("Bx_sq", 5))     # magnetic energy tracker
+
+var max_abs = List[NamedComponent]()
+max_abs.append(NamedComponent("max_abs_psi", 8))   # GLM div(B) noise
+
+var diag = DiagnosticsWriter[IdealMHD](
+    solver, "output/diagnostics.csv",
+    linear, squared, max_abs, LX, LY, LZ,
+)
+var result = run_ssprk3_loop_with_diagnostics[IdealMHD](
+    solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx,
+)
+```
+
+At np>1 each value is gathered across ranks via `MPI_Allreduce` and
+rank 0 appends one CSV row per frame. The writer supports three
+reduction kinds:
+- `linear` — `∫q[c] dV` (conservation-law integrals: mass, momentum,
+  total energy).
+- `squared` — `∫q[c]² dV` (L²² norms, EM / magnetic / kinetic energy
+  components).
+- `max_abs` — `max_x |q[c]|` (peak-value tracker for shocks, div(B)
+  noise, overshoots).
+
+### Animated dashboard
+
+`scripts/animate_dashboard.py` reads the VTU frame series and the
+CSV, and emits `output/dashboard.gif` with a 2×2 layout:
+- field panel: `tricontourf` of the leading scalar on a thin-z slice
+- three time-series panels, auto-grouped from the CSV column names
+  (mass / momentum / everything-else)
+
+Frames are loaded lazily (one VTU at a time), so RAM usage scales
+with a single frame, not with the run length. A 32³ Taylor-Green
+dashboard with 81 frames peaks at under 1 GB of resident memory.
+
+```bash
+./euler_rising_bubble
+.venv/bin/python scripts/animate_dashboard.py
+# ... writes output/dashboard.gif
+```
 
 ## Performance
 
@@ -204,12 +312,12 @@ Everything builds through a `Makefile` at the project root:
 
 ```bash
 make               # build every driver (CPU + GPU, MPI + non-MPI)
-make nonmpi        # single-rank GPU drivers (advection_gaussian, etc.)
-make mpi           # all MPI drivers
 make cpu           # just the MPI drivers that don't touch the GPU
 make <driver>      # e.g. `make mpi_hello`
-make test          # MPI correctness test: np=1 vs np=4, must agree to FP precision
-make test-klone    # same, dispatched through scripts/klone-run on the cluster
+make test          # periodic MPI correctness: np=1 vs np=4 (bit-identical)
+make test-bc       # non-periodic BC correctness: np=1 vs np=4 (bit-identical)
+make test-reference  # host-side reference-element unit test (P=1..4)
+make test-klone    # test dispatched through scripts/klone-run on the cluster
 make clean
 make help
 ```
@@ -248,9 +356,18 @@ mpirun -np 8 ./mpi_halo_pingpong              # end-to-end halo exchange
 | `src/halo_exchange.mojo` | Pack / `MPI_Isend` + `MPI_Irecv` / unpack on the 6 face rings. Host-staged (OpenMPI 4.1.6 on this system isn't CUDA-aware; pinned `HostBuffer` is used as the staging layer). Short-circuits at np=1 where there are no ghost elements. |
 | `src/solver.mojo` | `Solver[PhysT]` built on `Mesh` + `HaloExchange`. `rk_stage_kernel` is the cooperative-shared-memory kernel; thanks to the element reordering in `Mesh`, each RK stage dispatches over a contiguous `[elem_base, elem_base + num_elems)` range with no scatter indirection. `step_ssprk3` runs one kernel per stage at np=1, and the classical split-kernel / MPI-overlap pattern at np>1. |
 
-End-to-end correctness is verified by `make test`: at np=1 vs np=4 the
-final per-owned-element q values are **bit-identical** after 50
-SSPRK3 steps (`max |a - b| = 0` over 196,608 elements × 10 DOFs each).
+End-to-end correctness is verified by three tests:
+
+- `make test` — periodic Gaussian advection at np=1 vs np=4 must be
+  **bit-identical** after 50 SSPRK3 steps (`max |a - b| = 0` over
+  196,608 elements × 10 DOFs).
+- `make test-bc` — same structure but with `BC_OUTFLOW` on all six
+  domain faces, so every rank sees a different mix of periodic peer
+  boundaries vs non-periodic global boundaries. Also **bit-identical**.
+- `make test-reference` — host-side unit test of the arbitrary-order
+  Lagrange reference element at P=1, 2, 3, 4: mass matrix SPD, node
+  positions inside the reference simplex with correct pairwise
+  separation, face-to-element lookup covers every face-local index.
 
 At np>1 each SSPRK3 stage runs in **split-kernel / MPI-overlap mode**:
 

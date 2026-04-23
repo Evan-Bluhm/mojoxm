@@ -14,6 +14,7 @@
 # ======================================================================
 
 from src.solver import Physics
+from src.boundary import BC_WALL, BC_OUTFLOW
 
 
 @fieldwise_init
@@ -79,3 +80,38 @@ struct Advection(Physics, ImplicitlyCopyable):
             (nc + absnc) * q_l[0] + (nc - absnc) * q_r[0]
         )
         return absnc
+
+    # Boundary flux.  Scalars don't have a normal component to reflect,
+    # so the two BCs are: BC_WALL = zero-Dirichlet (q_ghost = 0), which
+    # makes the boundary a perfect absorber; BC_OUTFLOW = zero-gradient
+    # (q_ghost = q_int), the natural upwind-through pass-through.  Any
+    # other bc_type falls through to zero-gradient defensively.
+    def boundary_flux(
+        self,
+        q_int: UnsafePointer[Float32, MutAnyOrigin],
+        bc_type: Int32,
+        nx: Float32, ny: Float32, nz: Float32,
+        flux: UnsafePointer[Float32, MutAnyOrigin],
+    ) -> Float32:
+        var q_ghost = Float32(0.0) if bc_type == BC_WALL else q_int[0]
+        var nc = self.vx * nx + self.vy * ny + self.vz * nz
+        var absnc = nc if nc >= Float32(0.0) else -nc
+        flux[0] = Float32(0.5) * (
+            (nc + absnc) * q_int[0] + (nc - absnc) * q_ghost
+        )
+        return absnc
+
+    # Pure hyperbolic conservation law -- no source.
+    def source_term(
+        self,
+        q: UnsafePointer[Float32, MutAnyOrigin],
+        x: Float32, y: Float32, z: Float32,
+        source_out: UnsafePointer[Float32, MutAnyOrigin],
+    ):
+        source_out[0] = Float32(0.0)
+
+    def limit_state(
+        self,
+        q: UnsafePointer[Float32, MutAnyOrigin],
+    ):
+        pass

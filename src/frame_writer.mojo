@@ -34,9 +34,32 @@ from src.solver import Solver, Physics
 from src.vtu import VtuWriter, write_pvd
 from src.async_writer import AsyncWriter
 from src.nvtx import NvtxContext
+from src.reference import num_tet_nodes
+from std.pathlib import Path
 
 
-struct FrameWriter[PhysT: Physics](Movable):
+# --- mkdir -p equivalent ---------------------------------------------
+# The AsyncWriter's `creat()` call (src/async_writer.mojo) silently
+# fails if a path component doesn't exist yet, so before submitting any
+# async frame writes we make sure every directory in `path` exists.
+# `Path.write_text` (used for the PVD file at finalize) creates parent
+# directories on its own, which previously masked the problem:
+# finalize() produced a solution.pvd but every frame_NNNNN.vtu
+# silently vanished.
+#
+# We piggyback on the same write_text path here by writing a zero-byte
+# sentinel file into the target directory.  That forces Mojo's pathlib
+# to mkdir -p the parents, after which the sentinel serves no purpose
+# -- we leave it in place because the cost is one 0-byte inode per
+# ParaView run and the alternative (a POSIX `mkdir` external_call) has
+# been fighting Mojo's type inference (see git history of this file).
+def _ensure_dir(dir_path: String) raises:
+    if dir_path.byte_length() == 0:
+        return
+    Path(dir_path + "/.mojoxm_keep").write_text("")
+
+
+struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
     var _vtu: VtuWriter
     var _aw: AsyncWriter
     var _snapshot: List[Float32]
@@ -47,7 +70,7 @@ struct FrameWriter[PhysT: Physics](Movable):
 
     def __init__(
         out self,
-        mut solver: Solver[Self.PhysT],
+        mut solver: Solver[Self.PhysT, Self.P],
         mut nvtx: NvtxContext,
         output_dir: String = String("output"),
         component: Int = 0,
@@ -56,10 +79,13 @@ struct FrameWriter[PhysT: Physics](Movable):
         nvtx.push_range("init_frame_writer")
         # Per-rank VTU: show only this rank's owned elements.  At np=1
         # that is the entire mesh; at np>1 each rank writes its own
-        # file with no ghost geometry.
+        # file with no ghost geometry.  Pass the per-P nodes-per-element
+        # count so VtuWriter picks the right VTK cell type (24 for P=2's
+        # quadratic tet, 71 for higher-order Lagrange).
         self._vtu = VtuWriter(
             solver.mesh.num_owned_elements,
             solver.mesh.owned_node_xyz_f32_ptr,
+            num_tet_nodes(Self.P),
         )
         self._aw = AsyncWriter(max_concurrent=max_concurrent)
         self._snapshot = List[Float32]()
@@ -84,11 +110,14 @@ struct FrameWriter[PhysT: Physics](Movable):
             self._output_dir = output_dir + "/rank_" + r_pad
         else:
             self._output_dir = output_dir
+        # Make sure the output directory exists before any frame-write
+        # thread issues creat() into it.
+        _ensure_dir(self._output_dir)
         nvtx.pop_range()
 
     def write_frame(
         mut self,
-        mut solver: Solver[Self.PhysT],
+        mut solver: Solver[Self.PhysT, Self.P],
         t: Float64,
         mut nvtx: NvtxContext,
     ) raises:

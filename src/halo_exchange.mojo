@@ -29,6 +29,7 @@
 from src import mpi
 from src.reference import N_P
 from src.partition import Partition
+from src.boundary import BoundaryConditions, BC_INTERIOR
 from std.gpu import global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from std.math import ceildiv
@@ -204,6 +205,12 @@ struct HaloExchange(Movable):
     var neighbour: List[Int]
     # Element count in each of the 6 face rings (owned == ghost).
     var ring_count: List[Int]
+    # Per-direction "skip MPI" flag.  True for directions where this
+    # rank sits on a non-periodic global boundary -- there's no peer
+    # to exchange with, so we skip pack / Isend / Irecv / unpack (the
+    # boundary mesh's BC faces handle q for those owned elements, and
+    # the ghost ring on that side is never read by the solver).
+    var skip_mpi: List[Bool]
 
     # Per-direction device buffers.  Index [d] in each list refers to
     # the same (axis, sign) direction encoded above.
@@ -228,6 +235,7 @@ struct HaloExchange(Movable):
         part: Partition,
         nc: Int,
         d_perm: UnsafePointer[Int32, MutAnyOrigin],
+        bcs: BoundaryConditions = BoundaryConditions.periodic(),
     ) raises:
         self.nc = nc
         self.cuda_aware = mpi.is_cuda_aware()
@@ -239,6 +247,19 @@ struct HaloExchange(Movable):
         self.neighbour.append(part.neighbour_plus_y)
         self.neighbour.append(part.neighbour_minus_z)
         self.neighbour.append(part.neighbour_plus_z)
+
+        # Classify each of the 6 directions as "real peer" or "global
+        # non-periodic boundary".  A direction is BC-skipped only when
+        # (a) the user marked that axis/side non-periodic AND (b) this
+        # rank actually sits on that global face.  Interior-of-the-
+        # partition edges still need to exchange with their neighbour.
+        self.skip_mpi = List[Bool]()
+        self.skip_mpi.append(part.rx == 0           and bcs.bc_x_lo != BC_INTERIOR)
+        self.skip_mpi.append(part.rx == part.px - 1 and bcs.bc_x_hi != BC_INTERIOR)
+        self.skip_mpi.append(part.ry == 0           and bcs.bc_y_lo != BC_INTERIOR)
+        self.skip_mpi.append(part.ry == part.py - 1 and bcs.bc_y_hi != BC_INTERIOR)
+        self.skip_mpi.append(part.rz == 0           and bcs.bc_z_lo != BC_INTERIOR)
+        self.skip_mpi.append(part.rz == part.pz - 1 and bcs.bc_z_hi != BC_INTERIOR)
 
         self.ring_count = List[Int]()
         self.d_pack_idx   = List[DeviceBuffer[halo_i]]()
@@ -343,13 +364,17 @@ struct HaloExchange(Movable):
             # over zero requests would read uninitialised req_storage
             # slots -- skip the whole exchange.
             return
+        # Mark all 12 request slots as MPI_REQUEST_NULL up front.  Any
+        # direction we skip (ring empty or global-BC boundary) will
+        # leave its slots null, and MPI_Waitall treats those as no-ops.
+        mpi.fill_request_null(self.req_storage, 12)
         # ---- Phase 1: pack on GPU --------------------------------
         # If MPI is CUDA-aware the Isend/Irecv below use device
         # pointers directly -- no D<->H copy needed.  Otherwise we
         # stage through pinned host buffers.
         for d in range(6):
             var count = self.ring_count[d]
-            if count == 0:
+            if count == 0 or self.skip_mpi[d]:
                 continue
             var total = count * N_P
             ctx.enqueue_function[pack_kernel, pack_kernel](
@@ -368,7 +393,7 @@ struct HaloExchange(Movable):
         # Send toward d => tag = d.  Recv from d => tag = d XOR 1.
         for d in range(6):
             var count_fl = self.ring_count[d] * N_P * self.nc
-            if count_fl == 0:
+            if count_fl == 0 or self.skip_mpi[d]:
                 continue
             var neigh = self.neighbour[d]
             var send_tag = d
@@ -410,7 +435,7 @@ struct HaloExchange(Movable):
         # Copy host->device (if staged) and unpack.
         for d in range(6):
             var count = self.ring_count[d]
-            if count == 0:
+            if count == 0 or self.skip_mpi[d]:
                 continue
             if not self.cuda_aware:
                 ctx.enqueue_copy(self.d_recv_buf[d], self.h_recv_buf[d])

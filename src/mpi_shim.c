@@ -103,6 +103,19 @@ int mxm_mpi_waitall(int n, void* requests) {
     return MPI_Waitall(n, (MPI_Request*) requests, MPI_STATUSES_IGNORE);
 }
 
+/* Fill `n` slots with MPI_REQUEST_NULL so subsequent MPI_Waitall
+ * treats unused slots as no-ops.  Used by the halo-exchange code when
+ * some of the 6 face rings are on a global non-periodic boundary and
+ * thus have no paired Isend/Irecv to post.  Can't zero-init from Mojo:
+ * MPI_REQUEST_NULL is an opaque implementation-defined value
+ * (e.g. `&ompi_request_null.request` in OpenMPI, not NULL). */
+void mxm_mpi_fill_request_null(void* requests, int n) {
+    MPI_Request* r = (MPI_Request*) requests;
+    for (int i = 0; i < n; i++) {
+        r[i] = MPI_REQUEST_NULL;
+    }
+}
+
 int mxm_mpi_sendrecv_float(const void* sendbuf, int sendcount, int dest,   int sendtag,
                                  void* recvbuf, int recvcount, int source, int recvtag) {
     return MPI_Sendrecv(sendbuf, sendcount, MPI_FLOAT, dest,   sendtag,
@@ -118,6 +131,10 @@ int mxm_mpi_allreduce_float_min(const void* sendbuf, void* recvbuf, int count) {
 
 int mxm_mpi_allreduce_float_max(const void* sendbuf, void* recvbuf, int count) {
     return MPI_Allreduce(sendbuf, recvbuf, count, MPI_FLOAT, MPI_MAX, MPI_COMM_WORLD);
+}
+
+int mxm_mpi_allreduce_double_sum(const void* sendbuf, void* recvbuf, int count) {
+    return MPI_Allreduce(sendbuf, recvbuf, count, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 }
 
 int mxm_mpi_allreduce_float_sum(const void* sendbuf, void* recvbuf, int count) {

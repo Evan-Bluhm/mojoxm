@@ -1,31 +1,23 @@
 # ======================================================================
-# mpi_advection_test -- 50-step MPI correctness driver
+# mpi_bc_test -- MPI correctness for non-periodic boundary conditions
 # ======================================================================
 #
-# Runs mpi_advection_gaussian for exactly 50 SSPRK3 steps and dumps
-# every rank's owned q field (plus each element's global-mesh id) to
-# a per-rank binary file.  scripts/test_mpi_correctness.sh builds
-# this driver, runs it at np=1 and np=4, and diffs the two dumps to
-# confirm identical physics across rank counts.
+# Same structural idea as mpi_advection_test (50-step integration +
+# per-rank binary dump) but with BC_OUTFLOW on all 6 domain faces
+# instead of a fully periodic torus.  The point is to exercise
+# boundary_flux + the per-rank BC filtering in Mesh + the
+# skip_mpi flag in HaloExchange, and verify that np=1 and np>1 produce
+# identical owned-element q fields to FP precision.
 #
-# Output (per rank):
-#     output/final_q_rank_<rank>.bin
-#
-# Binary format:
-#     u32     magic  = 0x514D584D  ('MXMQ' little-endian)
-#     u32     version = 1
-#     u32     num_owned_elements
-#     u32     num_components (= 1 for advection)
-#     u32     nodes_per_elem (= N_P = 10)
-#     u32[num_owned] global_elem_ids  -- order matches q values below
-#     f32[num_owned * N_P * NC] q values
-#
+# Output: same binary format as mpi_advection_test (see that file's
+# header for the layout).  Uses a separate file-name prefix so the
+# dumps don't collide with a parallel periodic run.
 # ======================================================================
 
 from src import mpi
 from src.partition import build_partition
 from src.mesh import Mesh
-from src.boundary import BoundaryConditions
+from src.boundary import BoundaryConditions, BC_OUTFLOW
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.reference import ReferenceElement, N_P, to_float32
@@ -58,20 +50,7 @@ comptime GAUSS_SIGMA: Float32 = 0.12
 
 comptime IC_BLOCK = 256
 
-# Target: exactly NUM_TEST_STEPS SSPRK3 steps, short enough that np=1
-# and np=4 agree to machine precision yet long enough (150 kernel
-# launches, 150 halo exchanges) to catch any comm / ordering bug.
 comptime NUM_TEST_STEPS = 50
-
-# We use creat(path, mode) -- equivalent to open(path, O_WRONLY | O_CREAT
-# | O_TRUNC, mode) -- instead of a 3-arg open() because open() is
-# variadic (int open(const char *, int, ...)).  On ARM64 Apple Darwin,
-# variadic args follow a different ABI from fixed args (variadic args
-# are promoted to the stack), and Mojo's external_call signature is
-# fixed-arity, so passing the mode through a 3-arg open() call delivers
-# garbage to the kernel and the file ends up with bits like 0o300
-# instead of the intended 0o644.  creat() is POSIX and has a fixed
-# 2-arg signature that round-trips cleanly through external_call.
 comptime _OPEN_MODE  = c_int(0o644)
 
 
@@ -81,7 +60,6 @@ def gaussian_ic_kernel(
     elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
     cx: Float32, cy: Float32, cz: Float32,
-    Lx: Float32, Ly: Float32, Lz: Float32,
     inv_two_sigma2: Float32,
 ):
     var idx = Int(global_idx.x)
@@ -95,14 +73,8 @@ def gaussian_ic_kernel(
     var py = elem_node_xyz[(e * N_P + nn) * 3 + 1]
     var pz = elem_node_xyz[(e * N_P + nn) * 3 + 2]
     var dx = px - cx
-    if dx >  Lx * Float32(0.5): dx -= Lx
-    if dx < -Lx * Float32(0.5): dx += Lx
     var dy = py - cy
-    if dy >  Ly * Float32(0.5): dy -= Ly
-    if dy < -Ly * Float32(0.5): dy += Ly
     var dz = pz - cz
-    if dz >  Lz * Float32(0.5): dz -= Lz
-    if dz < -Lz * Float32(0.5): dz += Lz
     q[e * N_P + nn] = exp(
         -(dx * dx + dy * dy + dz * dz) * inv_two_sigma2
     )
@@ -135,7 +107,6 @@ def dump_final_q(
     nx_global: Int, ny_global: Int, nz_global: Int,
     mut nvtx: NvtxContext,
 ) raises:
-    # Gather per-rank q + global element ids into host buffers.
     var num_owned = solver.num_owned_elements
     var q_buf = List[Float32]()
     for _ in range(num_owned * N_P):
@@ -149,12 +120,10 @@ def dump_final_q(
         nvtx,
     )
 
-    # Build path `output/final_q_rank_<rank>.bin`.
     var path_s = String("output/final_q_rank_")
     path_s += String(rank)
     path_s += String(".bin")
 
-    # Null-terminated C string for open().
     var pn = path_s.byte_length()
     var path_c = alloc[UInt8](pn + 1)
     for i in range(pn):
@@ -168,25 +137,22 @@ def dump_final_q(
         path_c.free()
         raise Error("creat() failed for " + path_s)
 
-    # Write the file header.
     var header = InlineArray[UInt32, 5](fill=UInt32(0))
-    header[0] = UInt32(0x514D584D)        # "MXMQ" in little-endian
-    header[1] = UInt32(1)                  # version
+    header[0] = UInt32(0x514D584D)
+    header[1] = UInt32(1)
     header[2] = UInt32(num_owned)
-    header[3] = UInt32(1)                  # NC for scalar advection
+    header[3] = UInt32(1)
     header[4] = UInt32(N_P)
     var header_ptr = rebind[
         UnsafePointer[UInt8, MutAnyOrigin]
     ](header.unsafe_ptr())
     _write_bytes(fd, header_ptr, 5 * 4)
 
-    # Global element IDs.
     var ids_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
         id_buf.unsafe_ptr().bitcast[UInt8]()
     )
     _write_bytes(fd, ids_ptr, num_owned * 4)
 
-    # q values (Float32).
     var q_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
         q_buf.unsafe_ptr().bitcast[UInt8]()
     )
@@ -203,8 +169,8 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print("mpi_advection_test:",
-              NUM_TEST_STEPS, "step dump for correctness check, ",
+        print("mpi_bc_test:",
+              NUM_TEST_STEPS, "step dump with BC_OUTFLOW on all 6 sides, ",
               size, "ranks")
 
     var nvtx = NvtxContext()
@@ -213,13 +179,23 @@ def main() raises:
     var D_ref    = to_float32(re.D_ref)
     var Lift_ref = to_float32(re.Lift_ref)
 
+    # Outflow on all 6 domain faces.  At np=1 the Mesh applies BC
+    # overlays on every external face; at np>1 the Mesh filter keeps
+    # only the sides where THIS rank sits on the global boundary, and
+    # the HaloExchange skip_mpi flag suppresses pack/Isend/Irecv on
+    # those same rings.
+    var bcs = BoundaryConditions(
+        BC_OUTFLOW, BC_OUTFLOW,
+        BC_OUTFLOW, BC_OUTFLOW,
+        BC_OUTFLOW, BC_OUTFLOW,
+    )
+
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ,
-        BoundaryConditions.periodic(),
+        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
     )
     var halo = HaloExchange(
         ctx, mesh.part, Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
+        mesh.d_perm.unsafe_ptr(), bcs,
     )
     var physics = Advection(VX, VY, VZ)
     var solver = Solver[Advection](
@@ -235,7 +211,6 @@ def main() raises:
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
         Float32(GAUSS_CX), Float32(GAUSS_CY), Float32(GAUSS_CZ),
-        Float32(LX), Float32(LY), Float32(LZ),
         inv_two_sigma2,
         grid_dim=ceildiv(
             solver.num_owned_elements * N_P, IC_BLOCK

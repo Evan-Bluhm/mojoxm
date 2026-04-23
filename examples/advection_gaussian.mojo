@@ -34,12 +34,14 @@ from src import mpi
 from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
+from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.advection import Advection
 from src.nvtx import NvtxContext
 from src.frame_writer import FrameWriter
-from src.time_integrator import run_ssprk3_loop
+from src.time_integrator import run_ssprk3_loop_with_diagnostics
+from src.diagnostics import DiagnosticsWriter, NamedComponent
 
 comptime NX = 48
 comptime NY = 48
@@ -150,6 +152,7 @@ def main() raises:
     nvtx.push_range("build_mesh")
     var mesh = Mesh(
         ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ,
+        BoundaryConditions.periodic(),
     )
     nvtx.pop_range()
 
@@ -201,12 +204,26 @@ def main() raises:
     # Per-rank VTU output (density == full scalar solution for Advection).
     var writer = FrameWriter[Advection](solver, nvtx)
 
+    # Diagnostics.  For a scalar conservation law the only conserved
+    # integral is int(q) dV ("mass"); tracking int(q^2) dV (L2 norm
+    # squared) gives a direct read-out of Rusanov dissipation, which
+    # should decay slowly from the initial Gaussian's analytic value.
+    var diag_comps = List[NamedComponent]()
+    diag_comps.append(NamedComponent("mass", 0))
+    var diag_squared = List[NamedComponent]()
+    diag_squared.append(NamedComponent("l2_squared", 0))
+    var diag = DiagnosticsWriter[Advection](
+        solver, "output/diagnostics.csv",
+        diag_comps, diag_squared, List[NamedComponent](),
+        LX, LY, LZ,
+    )
+
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop[Advection](
-        solver, writer, dt, T_FINAL, NUM_FRAMES, nvtx,
+    var result = run_ssprk3_loop_with_diagnostics[Advection](
+        solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx,
     )
 
     writer.finalize("output/solution.pvd", nvtx)

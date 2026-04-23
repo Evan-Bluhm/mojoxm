@@ -528,6 +528,7 @@ def euler_flux_from_fluctuations(
 # ======================================================================
 
 from src.solver import Physics
+from src.boundary import BC_WALL, BC_OUTFLOW
 
 
 @fieldwise_init
@@ -539,6 +540,13 @@ struct Euler(Physics, ImplicitlyCopyable):
     var min_pressure: Float32
     var flux_type: Int        # FLUX_RUSANOV / FLUX_ROE / FLUX_HLLE / FLUX_HLLEC
     var entropy_fix: Bool
+
+    # Gravity vector (world frame).  Zero by default -- drivers set
+    # nonzero components to enable the rho*g momentum + rho*(u.g)
+    # energy source terms applied in `source_term`.
+    var gx: Float32
+    var gy: Float32
+    var gz: Float32
 
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
@@ -676,3 +684,111 @@ struct Euler(Physics, ImplicitlyCopyable):
         # Rotate numerical flux back to world frame.
         euler_antirotate(r_flux_p, nx, ny, nz, tb, flux)
         return vmax
+
+    # Boundary flux via the ghost-state approach: build a synthetic
+    # `q_ghost` on the other side of the face that encodes the BC, then
+    # call `numerical_flux(q_int, q_ghost, ...)`.  This keeps every
+    # Riemann solver (Rusanov/Roe/HLLE/HLLEC) applicable at the wall
+    # with no new code paths.
+    #
+    # BC_WALL (slip wall): flip the normal momentum component so
+    #   (q_int + q_ghost) has zero normal momentum at the interface;
+    #   density, energy, and tangential momentum are copied.
+    # BC_OUTFLOW (transmissive): q_ghost = q_int, the zero-gradient
+    #   upwind-through extrapolation.  Supersonic outflow is exact;
+    #   subsonic is marginal but standard for a first implementation.
+    def boundary_flux(
+        self,
+        q_int: UnsafePointer[Float32, MutAnyOrigin],
+        bc_type: Int32,
+        nx: Float32, ny: Float32, nz: Float32,
+        flux: UnsafePointer[Float32, MutAnyOrigin],
+    ) -> Float32:
+        var q_ghost = InlineArray[Float32, 5](fill=0.0)
+        q_ghost[0] = q_int[0]
+        q_ghost[4] = q_int[4]
+        if bc_type == BC_WALL:
+            # Reflect the normal momentum; preserve tangential.
+            var mn = q_int[1] * nx + q_int[2] * ny + q_int[3] * nz
+            q_ghost[1] = q_int[1] - Float32(2.0) * mn * nx
+            q_ghost[2] = q_int[2] - Float32(2.0) * mn * ny
+            q_ghost[3] = q_int[3] - Float32(2.0) * mn * nz
+        else:
+            # BC_OUTFLOW (default): pure zero-gradient extrapolation.
+            q_ghost[1] = q_int[1]
+            q_ghost[2] = q_int[2]
+            q_ghost[3] = q_int[3]
+        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
+            q_ghost.unsafe_ptr()
+        )
+        return self.numerical_flux(q_int, q_ghost_p, nx, ny, nz, flux)
+
+    # Gravitational source term:
+    #   d(rho u_i)/dt += rho * g_i
+    #   dE/dt       += rho * (u . g)
+    # With the default (gx, gy, gz) = (0, 0, 0) this is a no-op that
+    # the compiler elides; a stratified / gravity-driven problem
+    # constructs Euler with a nonzero gravity vector.
+    def source_term(
+        self,
+        q: UnsafePointer[Float32, MutAnyOrigin],
+        x: Float32, y: Float32, z: Float32,
+        source_out: UnsafePointer[Float32, MutAnyOrigin],
+    ):
+        var rho = q[0]
+        var mx = q[1]
+        var my = q[2]
+        var mz = q[3]
+        source_out[0] = Float32(0.0)
+        source_out[1] = rho * self.gx
+        source_out[2] = rho * self.gy
+        source_out[3] = rho * self.gz
+        source_out[4] = mx * self.gx + my * self.gy + mz * self.gz
+
+    # Positivity-preserving floor limiter.  Called on every owned nodal
+    # DOF at the end of each RK stage, before the next stage reads back.
+    # If density drops below `min_density`, clamp it in place; if
+    # pressure drops below `min_pressure`, raise the total energy so the
+    # derived pressure hits the floor exactly.  This is a minimal
+    # stabilization: it does NOT enforce monotonicity or TVD -- shocks
+    # still oscillate -- but it keeps density/pressure positive so the
+    # flux routines don't propagate NaN.  For classical Sod this is
+    # enough to reach T >= 0.2 (unlimited DG NaNs around t ~ 0.15).
+    def limit_state(
+        self,
+        q: UnsafePointer[Float32, MutAnyOrigin],
+    ):
+        # NaN-safe: `not (rho > floor)` catches both NaN and rho <= floor
+        # (NaN comparisons always return False, so a naive `rho < floor`
+        # would let NaN sail right past us).  On density or pressure
+        # collapse we zero the momentum and reset energy to the ambient
+        # pressure -- it's a crude rescue, but it keeps the integration
+        # finite so downstream cells don't propagate NaN.
+        var rho = q[0]
+        var collapsed = not (rho > self.min_density)
+        if collapsed:
+            q[0] = self.min_density
+            q[1] = Float32(0.0)
+            q[2] = Float32(0.0)
+            q[3] = Float32(0.0)
+            q[4] = self.min_pressure / (self.gamma - Float32(1.0))
+            return
+
+        var mx = q[1]
+        var my = q[2]
+        var mz = q[3]
+        # NaN momentum -> treat as collapsed, same rescue above.
+        var m2 = mx * mx + my * my + mz * mz
+        if not (m2 >= Float32(0.0)):
+            q[1] = Float32(0.0)
+            q[2] = Float32(0.0)
+            q[3] = Float32(0.0)
+            q[4] = self.min_pressure / (self.gamma - Float32(1.0))
+            return
+
+        var ke = Float32(0.5) * m2 / rho
+        var E = q[4]
+        var p = (self.gamma - Float32(1.0)) * (E - ke)
+        # `not (p > floor)` again catches NaN energy.
+        if not (p > self.min_pressure):
+            q[4] = ke + self.min_pressure / (self.gamma - Float32(1.0))

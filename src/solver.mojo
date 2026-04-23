@@ -26,15 +26,15 @@
 #   Per block:
 #       elem_in_block = thread // N_P
 #       i             = thread %  N_P
-#       owned_idx     = block_idx * ELEMS_PER_BLOCK + elem_in_block
+#       owned_idx     = block_idx * EPB + elem_in_block
 #       e             = owned_elem_ids[owned_idx]   (local elem id)
 # ======================================================================
 
-from src.reference import N_P, N_F, N_FP, N_D
+from src.reference import num_tet_nodes, num_tri_nodes
 from src.mesh import Mesh
 from src.halo_exchange import HaloExchange
 from src.nvtx import NvtxContext
-from std.gpu import thread_idx, block_idx, barrier
+from std.gpu import thread_idx, block_idx, barrier, global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu.host.device_context import DevicePassable
 from std.gpu.memory import AddressSpace
@@ -43,13 +43,35 @@ from std.memory import memcpy, stack_allocation
 
 comptime dtype = DType.float32
 
-# One block handles ELEMS_PER_BLOCK elements cooperatively.  Each
+# One block handles EPB elements cooperatively.  Each
 # element gets N_P threads (one per nodal DOF).  At N_P = 10 and 16
 # elements the block is 160 threads = 5 warps.  The block size is a
 # multiple of N_P so the (element, node-in-element) mapping is
 # contiguous and there's no cross-block element split.
-comptime ELEMS_PER_BLOCK = 16
-comptime THREADS_PER_BLOCK = ELEMS_PER_BLOCK * N_P
+#
+# Shared-memory usage scales linearly with NC: the volume-flux slab is
+# `EPB * N_P * N_D * NC` floats and the face-flux slab is
+# `EPB * N_F * N_FP * NC`.  At NC=17 (two-fluid plasma) a
+# block of 16 elements overruns the default 48 KB cap, so we pick the
+# block size per-NC at comptime from a small cascade.
+comptime EPB_DEFAULT = 16
+
+def elems_per_block_for(NC: Int, P: Int = 2) -> Int:
+    # Keep the per-block shared slab below ~40 KB (leaves headroom for
+    # register spills and locals).  Shared slab per element per block
+    # = (NP * 3 + 4 * NFP) * NC * 4 bytes, where NP = num_tet_nodes(P)
+    # and NFP = num_tri_nodes(P).  At P=2 that's (10*3 + 4*6) * NC * 4
+    # = 216 * NC bytes per elem, matching the hand-computed P=2 value.
+    var NP = num_tet_nodes(P)
+    var NFP = num_tri_nodes(P)
+    var bytes_per_elem = (NP * 3 + 4 * NFP) * NC * 4
+    var budget = 40 * 1024
+    var max_elems = budget // bytes_per_elem
+    if max_elems >= 16: return 16
+    if max_elems >= 8:  return 8
+    if max_elems >= 4:  return 4
+    if max_elems >= 2:  return 2
+    return 1
 
 
 # ----------------------------------------------------------------------
@@ -83,6 +105,53 @@ trait Physics(Copyable, Movable, ImplicitlyDestructible, DevicePassable):
     ) -> Float32:
         ...
 
+    # Boundary-face flux.  Called on any face whose `face_bc_type` is
+    # non-zero, i.e. a face sitting on a non-periodic global boundary.
+    # `q_int` is the interior state at the face node; `bc_type` is one
+    # of the `BC_*` constants from src.boundary that the physics module
+    # chooses how to interpret.  The normal (nx, ny, nz) points OUTWARD
+    # from the interior element into the (non-existent) ghost.  Returns
+    # the max |wave speed| at the interface, same semantics as
+    # `numerical_flux`'s return.
+    def boundary_flux(
+        self,
+        q_int: UnsafePointer[Float32, MutAnyOrigin],
+        bc_type: Int32,
+        nx: Float32, ny: Float32, nz: Float32,
+        flux: UnsafePointer[Float32, MutAnyOrigin],
+    ) -> Float32:
+        ...
+
+    # Pointwise source term S(q, x).  Evaluated per nodal DOF and added
+    # directly to the semi-discrete RHS at that node (strong-form nodal
+    # collocation -- the DG mass matrix is diagonal under nodal P2 on
+    # the reference element at the chosen quadrature, so M^-1 * (M * S)
+    # reduces to S evaluated at the node).  Writes NC values to
+    # `source_out`.  Physics types with no source term (pure
+    # conservation law) can just fill with zeros; the compiler elides
+    # the resulting zero-adds in the RK kernel.
+    def source_term(
+        self,
+        q: UnsafePointer[Float32, MutAnyOrigin],
+        x: Float32, y: Float32, z: Float32,
+        source_out: UnsafePointer[Float32, MutAnyOrigin],
+    ):
+        ...
+
+    # Post-stage positivity / bound limiter.  Called on `q_out` at each
+    # nodal DOF after the RK update writes that node, before the next
+    # stage reads it.  Physics types with no positivity requirement
+    # (scalar advection, Maxwell) leave this as a no-op; Euler / MHD /
+    # two-fluid clamp density and pressure to their configured floors.
+    # This is a crude but robust shock-stabilization step: without it,
+    # euler_sod NaNs out around t~0.15 due to Gibbs oscillations pushing
+    # density below zero at the shock.
+    def limit_state(
+        self,
+        q: UnsafePointer[Float32, MutAnyOrigin],
+    ):
+        ...
+
 
 # ----------------------------------------------------------------------
 # Patch-aware RK-stage kernel.
@@ -97,7 +166,7 @@ trait Physics(Copyable, Movable, ImplicitlyDestructible, DevicePassable):
 # ----------------------------------------------------------------------
 
 def rk_stage_kernel[
-    NC: Int, PhysT: Physics,
+    NC: Int, EPB: Int, P: Int, PhysT: Physics,
 ](
     physics: PhysT,
     q_in:  UnsafePointer[Float32, MutAnyOrigin],
@@ -106,6 +175,7 @@ def rk_stage_kernel[
     q_out: UnsafePointer[Float32, MutAnyOrigin],
     elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
     elem_inv_6V:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz:     UnsafePointer[Float32, MutAnyOrigin],
     elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
     elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
     elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
@@ -113,12 +183,20 @@ def rk_stage_kernel[
     face_elem_node:    UnsafePointer[Int32,   MutAnyOrigin],
     face_normal:       UnsafePointer[Float32, MutAnyOrigin],
     face_area:         UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type:      UnsafePointer[Int32,   MutAnyOrigin],
     D_ref:             UnsafePointer[Float32, MutAnyOrigin],
     Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
     elem_base: Int,
     num_elems: Int,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ):
+    # Per-P sizes.  At P=2 these match the legacy module-level
+    # N_P=10 / N_FP=6 exactly; for higher P they grow via the
+    # Lagrange-tet counting formulas in src.reference.
+    comptime NP = num_tet_nodes(P)
+    comptime NFP = num_tri_nodes(P)
+    comptime NF = 4  # tet faces, P-independent
+    comptime ND = 3  # spatial dims
     # The Mesh constructor rearranges per-element arrays so that every
     # subset the solver dispatches over is CONTIGUOUS in element-id
     # space:
@@ -132,9 +210,9 @@ def rk_stage_kernel[
     # the M1 48^3 advection benchmark.
     var tid = Int(thread_idx.x)
     var bid = Int(block_idx.x)
-    var elem_in_block = tid // N_P
-    var i = tid % N_P
-    var owned_idx = bid * ELEMS_PER_BLOCK + elem_in_block
+    var elem_in_block = tid // NP
+    var i = tid % NP
+    var owned_idx = bid * EPB + elem_in_block
     var valid = owned_idx < num_elems
     var e: Int = elem_base + owned_idx
 
@@ -142,19 +220,19 @@ def rk_stage_kernel[
     # src.solver.rk_stage_kernel exactly -- see that file for the
     # invariant and block-size rationale.
     var shared_vol_flux = stack_allocation[
-        ELEMS_PER_BLOCK * N_P * N_D * NC,
+        EPB * NP * ND * NC,
         Scalar[DType.float32],
         address_space=AddressSpace.SHARED,
     ]()
     var shared_face_flux = stack_allocation[
-        ELEMS_PER_BLOCK * N_F * N_FP * NC,
+        EPB * NF * NFP * NC,
         Scalar[DType.float32],
         address_space=AddressSpace.SHARED,
     ]()
 
     # ---- Phase 1: one internal_flux per (element, node) ------------
     if valid:
-        var q_my_ptr = q_in + (e * N_P + i) * NC
+        var q_my_ptr = q_in + (e * NP + i) * NC
         var my_flux_dc = InlineArray[Float32, NC * 3](fill=0.0)
         var my_flux_dc_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
             my_flux_dc.unsafe_ptr()
@@ -163,40 +241,56 @@ def rk_stage_kernel[
             rebind[UnsafePointer[Float32, MutAnyOrigin]](q_my_ptr),
             my_flux_dc_p,
         )
-        var vol_base = (elem_in_block * N_P + i) * N_D * NC
-        for k in range(N_D * NC):
+        var vol_base = (elem_in_block * NP + i) * ND * NC
+        for k in range(ND * NC):
             shared_vol_flux[vol_base + k] = my_flux_dc[k]
 
     # ---- Phase 2: cooperative numerical_flux across element faces --
     if valid:
-        comptime FN_TOTAL = N_F * N_FP
+        comptime FN_TOTAL = NF * NFP
         for k in range(3):
-            var fn_idx = i + k * N_P
+            var fn_idx = i + k * NP
             if fn_idx < FN_TOTAL:
-                var lf = fn_idx // N_FP
-                var m_canon = fn_idx % N_FP
-                var fid = Int(elem_faces[e * N_F + lf])
+                var lf = fn_idx // NFP
+                var m_canon = fn_idx % NFP
+                var fid = Int(elem_faces[e * NF + lf])
                 var nx = face_normal[fid * 3 + 0]
                 var ny = face_normal[fid * 3 + 1]
                 var nz = face_normal[fid * 3 + 2]
                 var e_l = Int(face_elem[fid * 2 + 0])
                 var e_r = Int(face_elem[fid * 2 + 1])
-                var n_l = Int(face_elem_node[fid * 2 * N_FP + 0 * N_FP + m_canon])
-                var n_r = Int(face_elem_node[fid * 2 * N_FP + 1 * N_FP + m_canon])
+                var n_l = Int(face_elem_node[fid * 2 * NFP + 0 * NFP + m_canon])
+                var n_r = Int(face_elem_node[fid * 2 * NFP + 1 * NFP + m_canon])
 
-                var q_l_ptr = q_in + (e_l * N_P + n_l) * NC
-                var q_r_ptr = q_in + (e_r * N_P + n_r) * NC
+                var q_l_ptr = q_in + (e_l * NP + n_l) * NC
+                var q_r_ptr = q_in + (e_r * NP + n_r) * NC
                 var fstar = InlineArray[Float32, NC](fill=0.0)
                 var fstar_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
                     fstar.unsafe_ptr()
                 )
-                _ = physics.numerical_flux(
-                    rebind[UnsafePointer[Float32, MutAnyOrigin]](q_l_ptr),
-                    rebind[UnsafePointer[Float32, MutAnyOrigin]](q_r_ptr),
-                    nx, ny, nz, fstar_p,
-                )
+                # Interior faces take the two-sided numerical flux;
+                # boundary faces (bc_type != 0) use the physics type's
+                # boundary_flux on the interior state only, with the
+                # outward normal pointing from interior to ghost side.
+                # For BC faces the mesh builder guarantees: (a) this
+                # element is on side 0, (b) face_normal points outward
+                # from this element, (c) face_elem[*,1] is safe to
+                # dereference as `q_l_ptr` (either identical to side 0
+                # or a no-op ghost slot).
+                var bc_type = face_bc_type[fid]
+                if bc_type != Int32(0):
+                    _ = physics.boundary_flux(
+                        rebind[UnsafePointer[Float32, MutAnyOrigin]](q_l_ptr),
+                        bc_type, nx, ny, nz, fstar_p,
+                    )
+                else:
+                    _ = physics.numerical_flux(
+                        rebind[UnsafePointer[Float32, MutAnyOrigin]](q_l_ptr),
+                        rebind[UnsafePointer[Float32, MutAnyOrigin]](q_r_ptr),
+                        nx, ny, nz, fstar_p,
+                    )
                 var face_base = (
-                    (elem_in_block * N_F + lf) * N_FP + m_canon
+                    (elem_in_block * NF + lf) * NFP + m_canon
                 ) * NC
                 for c in range(NC):
                     shared_face_flux[face_base + c] = fstar[c]
@@ -217,60 +311,230 @@ def rk_stage_kernel[
     var iJ21 = elem_invJ[invJ_base + 7]
     var iJ22 = elem_invJ[invJ_base + 8]
     var inv_6V = elem_inv_6V[e]
-    var out_base = (e * N_P + i) * NC
+    var out_base = (e * NP + i) * NC
+
+    # Pointwise source term evaluated once per (element, node) thread.
+    # Nodal collocation: the source contribution at node i is just
+    # S(q_i, x_i), added directly to the RHS.  Physics types with no
+    # sources zero-fill here and the compiler elides the add.
+    var my_q_ptr = q_in + (e * NP + i) * NC
+    var my_x = elem_node_xyz[(e * NP + i) * 3 + 0]
+    var my_y = elem_node_xyz[(e * NP + i) * 3 + 1]
+    var my_z = elem_node_xyz[(e * NP + i) * 3 + 2]
+    var source = InlineArray[Float32, NC](fill=0.0)
+    var source_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
+        source.unsafe_ptr()
+    )
+    physics.source_term(
+        rebind[UnsafePointer[Float32, MutAnyOrigin]](my_q_ptr),
+        my_x, my_y, my_z, source_p,
+    )
 
     for c in range(NC):
         var vol_c: Float32 = 0.0
-        for j in range(N_P):
-            var shared_base = (elem_in_block * N_P + j) * N_D * NC
+        for j in range(NP):
+            var shared_base = (elem_in_block * NP + j) * ND * NC
             var fx = shared_vol_flux[shared_base + 0 * NC + c]
             var fy = shared_vol_flux[shared_base + 1 * NC + c]
             var fz = shared_vol_flux[shared_base + 2 * NC + c]
             var fr0 = iJ00 * fx + iJ01 * fy + iJ02 * fz
             var fr1 = iJ10 * fx + iJ11 * fy + iJ12 * fz
             var fr2 = iJ20 * fx + iJ21 * fy + iJ22 * fz
-            var d0 = D_ref[0 * N_P * N_P + i * N_P + j]
-            var d1 = D_ref[1 * N_P * N_P + i * N_P + j]
-            var d2 = D_ref[2 * N_P * N_P + i * N_P + j]
+            var d0 = D_ref[0 * NP * NP + i * NP + j]
+            var d1 = D_ref[1 * NP * NP + i * NP + j]
+            var d2 = D_ref[2 * NP * NP + i * NP + j]
             vol_c += fr0 * d0 + fr1 * d1 + fr2 * d2
 
         var face_c: Float32 = 0.0
-        for lf in range(N_F):
-            var side = Int(elem_face_side[e * N_F + lf])
+        for lf in range(NF):
+            var side = Int(elem_face_side[e * NF + lf])
             var sign = Float32(1.0) if side == 0 else Float32(-1.0)
-            var fid = Int(elem_faces[e * N_F + lf])
+            var fid = Int(elem_faces[e * NF + lf])
             var area = face_area[fid]
-            for m_canon in range(N_FP):
+            for m_canon in range(NFP):
                 var r = Int(
-                    elem_canon_to_ref[(e * N_F + lf) * N_FP + m_canon]
+                    elem_canon_to_ref[(e * NF + lf) * NFP + m_canon]
                 )
-                var Lim = Lift_ref[lf * N_P * N_FP + i * N_FP + r]
+                var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
                 var face_base = (
-                    (elem_in_block * N_F + lf) * N_FP + m_canon
+                    (elem_in_block * NF + lf) * NFP + m_canon
                 ) * NC
                 face_c += sign * area * Lim * shared_face_flux[
                     face_base + c
                 ]
 
-        var rhs_val = vol_c - inv_6V * face_c
+        var rhs_val = vol_c - inv_6V * face_c + source[c]
         q_out[out_base + c] = (
             a * q_a[out_base + c]
             + b * q_b[out_base + c]
             + cc * dt * rhs_val
         )
 
+    # Post-stage limiter.  Runs once per (element, node) thread on
+    # q_out, after the NC RK writes complete.  Physics types without
+    # positivity requirements no-op; Euler / MHD / two-fluid clamp
+    # density + pressure to their configured floors.
+    physics.limit_state(
+        rebind[UnsafePointer[Float32, MutAnyOrigin]](q_out + out_base)
+    )
+
+
+# ----------------------------------------------------------------------
+# Barth-Jespersen (BJ) slope limiter
+# ----------------------------------------------------------------------
+# Two-pass conservation-preserving slope limiter, run once per RK stage.
+#
+#   Pass 1 (`compute_cell_averages_kernel`): one thread per *local* element
+#   (owned + ghost -- every cell whose q might be read as a neighbour by
+#   pass 2), writes the NC-vector cell mean to `d_cell_avg`.
+#
+#   Pass 2 (`bj_limiter_kernel`): one thread per *owned* element.  Reads
+#   own cell average + the 4 face-neighbour cell averages; for every
+#   component independently finds the BJ scaling factor alpha that keeps
+#   every nodal value within
+#       [nbr_min_avg, nbr_max_avg]
+#   where nbr_min/max_avg is the min/max cell average across the owning
+#   cell + its 4 face-neighbours.  theta = min over nodes * components of
+#   alpha (bounded to [0, 1]).  Then applies
+#       q_new[node, c] = own_avg[c] + theta * (q_old[node, c] - own_avg[c])
+#   to every node, every component.  Conservation of mass / momentum /
+#   energy is exact because own_avg is preserved.
+#
+# Smooth regions: theta ~= 1, the limiter is a near no-op.  Shocks:
+# theta << 1, the high-order modes get dampened proportionally while the
+# cell average is untouched.  This is a textbook TVD-in-the-means limiter
+# -- sharper than flatten-to-mean on shocks, and invisibly no-op on smooth
+# flow.
+# ----------------------------------------------------------------------
+
+def compute_cell_averages_kernel[NP: Int, NC: Int](
+    q:            UnsafePointer[Float32, MutAnyOrigin],
+    num_local:    Int,
+    cell_avg_out: UnsafePointer[Float32, MutAnyOrigin],
+):
+    var elem = Int(global_idx.x)
+    if elem >= num_local:
+        return
+    var base_q = elem * NP * NC
+    var base_avg = elem * NC
+    var inv_np = Float32(1.0) / Float32(NP)
+    for c in range(NC):
+        var s: Float32 = 0.0
+        for nn in range(NP):
+            s += q[base_q + nn * NC + c]
+        cell_avg_out[base_avg + c] = s * inv_np
+
+
+def bj_limiter_kernel[NP: Int, NC: Int](
+    q:              UnsafePointer[Float32, MutAnyOrigin],
+    owned_elem_ids: UnsafePointer[Int32,   MutAnyOrigin],
+    num_owned:      Int,
+    cell_avg:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:     UnsafePointer[Int32,   MutAnyOrigin],
+    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
+    venkat_eps:     Float32,
+):
+    var idx = Int(global_idx.x)
+    if idx >= num_owned:
+        return
+    var elem = Int(owned_elem_ids[idx])
+
+    # Load own cell average for every component.
+    var base_avg = elem * NC
+    var own_avg = InlineArray[Float32, NC](fill=Float32(0.0))
+    for c in range(NC):
+        own_avg[c] = cell_avg[base_avg + c]
+
+    # Compute min/max of neighbour cell averages (including self so the
+    # range is never empty, and so BC faces -- where "neighbour" resolves
+    # to self -- don't introduce spurious bounds).
+    var nbr_min = InlineArray[Float32, NC](fill=Float32(0.0))
+    var nbr_max = InlineArray[Float32, NC](fill=Float32(0.0))
+    for c in range(NC):
+        nbr_min[c] = own_avg[c]
+        nbr_max[c] = own_avg[c]
+
+    for lf in range(4):
+        var fid = Int(elem_faces[elem * 4 + lf])
+        var e_l = Int(face_elem[fid * 2 + 0])
+        var e_r = Int(face_elem[fid * 2 + 1])
+        var n = e_r if e_l == elem else e_l
+        var base_n = n * NC
+        for c in range(NC):
+            var a = cell_avg[base_n + c]
+            if a < nbr_min[c]:
+                nbr_min[c] = a
+            if a > nbr_max[c]:
+                nbr_max[c] = a
+
+    # Compute theta: the tightest alpha scaling factor across every
+    # node x component pair.  Venkatakrishnan's smoothing:
+    #   alpha(d, D) = (D^2 + 2*D*d + eps^2) / (D^2 + 2*d^2 + D*d + eps^2)
+    # where d = |delta| = |node - own_avg| and D = |allowed| (the signed
+    # allowed deviation towards that side, which is nbr_max - own_avg if
+    # delta > 0, else own_avg - nbr_min).  eps is the smoothness
+    # tolerance: for d << D (smooth flow), alpha -> 1; for d >> D
+    # (shock), alpha -> D/d (classical Barth-Jespersen).  eps=0
+    # recovers pure BJ, which over-limits P2 DG even in smooth regions.
+    var eps2 = venkat_eps * venkat_eps
+    var base_q = elem * NP * NC
+    var theta: Float32 = 1.0
+    var tiny: Float32 = 1.0e-30
+    for nn in range(NP):
+        for c in range(NC):
+            var node_val = q[base_q + nn * NC + c]
+            var delta_s = node_val - own_avg[c]
+            var d_abs = delta_s if delta_s >= Float32(0.0) else -delta_s
+            if d_abs <= tiny:
+                continue
+            var D: Float32
+            if delta_s > Float32(0.0):
+                D = nbr_max[c] - own_avg[c]
+            else:
+                D = own_avg[c] - nbr_min[c]
+            if D < Float32(0.0):
+                D = Float32(0.0)   # shouldn't happen, but be safe
+            var D2 = D * D
+            var d2 = d_abs * d_abs
+            var Dd = D * d_abs
+            var numer = D2 + Float32(2.0) * Dd + eps2
+            var denom = D2 + Float32(2.0) * d2 + Dd + eps2
+            var alpha = numer / denom
+            if alpha < theta:
+                theta = alpha
+
+    if not (theta < Float32(1.0)):
+        return     # theta is 1 (or NaN -- leave alone; upstream floor catches that)
+
+    # Apply uniform theta across all nodes, all components.  The cell
+    # average is preserved exactly because `own_avg + theta * (x - avg)`
+    # averaged over NP nodes = own_avg + theta * (avg - avg) = own_avg.
+    for nn in range(NP):
+        for c in range(NC):
+            var node_val = q[base_q + nn * NC + c]
+            q[base_q + nn * NC + c] = (
+                own_avg[c] + theta * (node_val - own_avg[c])
+            )
+
 
 # ----------------------------------------------------------------------
 # Solver
 # ----------------------------------------------------------------------
 
-struct Solver[PhysT: Physics](Movable):
+struct Solver[PhysT: Physics, P: Int = 2](Movable):
     comptime NC = Self.PhysT.NUM_COMPONENTS
+    # Nodal-DOF count for the chosen spatial order.  At P=2 this is 10
+    # (the historical hand-coded value).  Every shape computation below
+    # goes through `NP` / `NFP` rather than the module-level N_P / N_FP
+    # aliases so that a higher-P Solver is a drop-in once the mesh
+    # side catches up.
+    comptime NP = num_tet_nodes(Self.P)
+    comptime NFP = num_tri_nodes(Self.P)
 
     var ctx: DeviceContext
     var physics: Self.PhysT
 
-    var mesh: Mesh
+    var mesh: Mesh[Self.P]
     var halo: HaloExchange
 
     var num_local_elements: Int
@@ -289,10 +553,29 @@ struct Solver[PhysT: Physics](Movable):
     var d_D_ref:    DeviceBuffer[dtype]
     var d_Lift_ref: DeviceBuffer[dtype]
 
+    # Cell-level Barth-Jespersen slope-limiter toggle.  False (default)
+    # disables the limiter entirely -- it is a no-op add to the kernel
+    # graph.  True runs `compute_cell_averages_kernel` + `bj_limiter_kernel`
+    # after every RK stage: BJ damps every element's nodal deviations
+    # from its cell average by the tightest factor that keeps each
+    # nodal value within [min, max] of the cell + face-neighbour
+    # averages.  Conservation is exact; smooth flow is untouched
+    # (theta ~= 1); shocks get dampened proportionally.
+    var cell_limiter_enabled: Bool
+    # Venkatakrishnan smoothness parameter for the BJ limiter.  Larger
+    # values preserve more smooth variation (theta -> 1) at the cost of
+    # slightly looser shock capture.  Default is 0.1 which works for
+    # density in O(1) range.  Set to 0 to recover raw Barth-Jespersen
+    # (over-limits P2 DG on smooth flow).
+    var cell_limiter_venkat_eps: Float32
+    # Scratch per-element mean buffer sized for the full local mesh
+    # (owned + ghost).  Populated fresh on each limiter launch.
+    var d_cell_avg: DeviceBuffer[dtype]
+
     def __init__(
         out self,
         var ctx: DeviceContext,
-        var mesh: Mesh,
+        var mesh: Mesh[Self.P],
         var halo: HaloExchange,
         var physics: Self.PhysT,
         D_ref: List[Float32],
@@ -304,9 +587,20 @@ struct Solver[PhysT: Physics](Movable):
         self.physics = physics^
         self.num_local_elements = self.mesh.local.num_elements
         self.num_owned_elements = self.mesh.num_owned_elements
-        self.total_local_dof = self.num_local_elements * N_P
-        self.total_owned_dof = self.num_owned_elements * N_P
+        self.total_local_dof = self.num_local_elements * Self.NP
+        self.total_owned_dof = self.num_owned_elements * Self.NP
         self.total_q_len = self.total_local_dof * Self.NC
+        self.cell_limiter_enabled = False
+        self.cell_limiter_venkat_eps = Float32(0.1)
+        # d_cell_avg is only read when the limiter is enabled, but we
+        # allocate it up-front (cheap) so `enable_cell_limiter()` doesn't
+        # need to be raised and `_launch_cell_limiter` can just branch on
+        # the bool.  Sizing: NC floats per LOCAL element (owned + ghost)
+        # so the limiter can read ghost cell averages as face-neighbour
+        # references without out-of-bounds access.
+        self.d_cell_avg = self.ctx.enqueue_create_buffer[dtype](
+            self.num_local_elements * Self.NC,
+        )
 
         self.d_q  = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
         self.d_q1 = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
@@ -386,9 +680,9 @@ struct Solver[PhysT: Physics](Movable):
             global_elem_ids_host[i] = Int32(gcube * 6 + tet)
             # q is stored under the NEW id (that's how the permuted
             # mesh addresses it).
-            for nn in range(N_P):
-                scalar_host[i * N_P + nn] = q_p[
-                    (e_new * N_P + nn) * stride + c
+            for nn in range(Self.NP):
+                scalar_host[i * Self.NP + nn] = q_p[
+                    (e_new * Self.NP + nn) * stride + c
                 ]
         nvtx.pop_range()
 
@@ -415,9 +709,9 @@ struct Solver[PhysT: Physics](Movable):
         var stride = Self.NC
         for i in range(self.num_owned_elements):
             var e = Int(ids_p[i])
-            for nn in range(N_P):
-                scalar_host[i * N_P + nn] = q_p[
-                    (e * N_P + nn) * stride + c
+            for nn in range(Self.NP):
+                scalar_host[i * Self.NP + nn] = q_p[
+                    (e * Self.NP + nn) * stride + c
                 ]
         nvtx.pop_range()
 
@@ -431,6 +725,56 @@ struct Solver[PhysT: Physics](Movable):
     # contiguous in element-id space, so the kernel computes the local
     # element id as `e = elem_base + owned_idx` without an indirection
     # buffer.
+    def enable_cell_limiter(
+        mut self,
+        enabled: Bool = True,
+        venkat_eps: Float32 = Float32(0.1),
+    ):
+        """Turn the Barth-Jespersen slope limiter on or off.  When on,
+        a two-pass post-RK-stage limiter runs after every SSPRK3 stage:
+        `compute_cell_averages_kernel` writes per-element means and
+        `bj_limiter_kernel` damps nodal deviations via the Venkat-
+        smoothed Barth-Jespersen formula.  `venkat_eps` controls the
+        smoothness tolerance: small values approach classical BJ
+        (over-limits smooth P2 flow); larger values preserve smooth
+        variation.  Default 0.1 is good for density in O(1) range;
+        larger scales should bump eps proportionally."""
+        self.cell_limiter_enabled = enabled
+        self.cell_limiter_venkat_eps = venkat_eps
+
+    def _launch_cell_limiter(
+        mut self,
+        q_ptr: UnsafePointer[Float32, MutAnyOrigin],
+    ) raises:
+        if not self.cell_limiter_enabled:
+            return
+        var num_local = self.num_local_elements
+        var num_owned = self.num_owned_elements
+        if num_owned == 0:
+            return
+
+        # Pass 1: cell averages over every local element.
+        comptime _avg_kernel = compute_cell_averages_kernel[Self.NP, Self.NC]
+        self.ctx.enqueue_function[_avg_kernel, _avg_kernel](
+            q_ptr, num_local, self.d_cell_avg.unsafe_ptr(),
+            grid_dim=ceildiv(num_local, 256),
+            block_dim=256,
+        )
+
+        # Pass 2: BJ limiter over owned elements only.
+        comptime _bj_kernel = bj_limiter_kernel[Self.NP, Self.NC]
+        self.ctx.enqueue_function[_bj_kernel, _bj_kernel](
+            q_ptr,
+            self.mesh.d_owned_elem_ids.unsafe_ptr(),
+            num_owned,
+            self.d_cell_avg.unsafe_ptr(),
+            self.mesh.local.d_elem_faces.unsafe_ptr(),
+            self.mesh.local.d_face_elem.unsafe_ptr(),
+            self.cell_limiter_venkat_eps,
+            grid_dim=ceildiv(num_owned, 256),
+            block_dim=256,
+        )
+
     def _launch_rk_stage(
         mut self,
         elem_base: Int,
@@ -443,12 +787,14 @@ struct Solver[PhysT: Physics](Movable):
     ) raises:
         if num_elems == 0:
             return
-        comptime kernel = rk_stage_kernel[Self.NC, Self.PhysT]
+        comptime EPB = elems_per_block_for(Self.NC, Self.P)
+        comptime kernel = rk_stage_kernel[Self.NC, EPB, Self.P, Self.PhysT]
         self.ctx.enqueue_function[kernel, kernel](
             self.physics,
             q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
             self.mesh.local.d_elem_invJ.unsafe_ptr(),
             self.mesh.local.d_elem_inv_6V.unsafe_ptr(),
+            self.mesh.local.d_elem_node_xyz.unsafe_ptr(),
             self.mesh.local.d_elem_faces.unsafe_ptr(),
             self.mesh.local.d_elem_face_side.unsafe_ptr(),
             self.mesh.local.d_elem_canon_to_ref.unsafe_ptr(),
@@ -456,12 +802,13 @@ struct Solver[PhysT: Physics](Movable):
             self.mesh.local.d_face_elem_node.unsafe_ptr(),
             self.mesh.local.d_face_normal.unsafe_ptr(),
             self.mesh.local.d_face_area.unsafe_ptr(),
+            self.mesh.local.d_face_bc_type.unsafe_ptr(),
             self.d_D_ref.unsafe_ptr(),
             self.d_Lift_ref.unsafe_ptr(),
             elem_base, num_elems,
             a, b, cc, dt,
-            grid_dim=ceildiv(num_elems, ELEMS_PER_BLOCK),
-            block_dim=THREADS_PER_BLOCK,
+            grid_dim=ceildiv(num_elems, EPB),
+            block_dim=EPB * Self.NP,
         )
 
     # Run one RK stage.  Two paths:
@@ -490,6 +837,9 @@ struct Solver[PhysT: Physics](Movable):
                 q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
                 a, b, cc, dt,
             )
+            nvtx.pop_range()
+            nvtx.push_range("cell_limiter")
+            self._launch_cell_limiter(q_out_ptr)
             nvtx.pop_range()
             return
 
@@ -524,6 +874,13 @@ struct Solver[PhysT: Physics](Movable):
             q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
             a, b, cc, dt,
         )
+        nvtx.pop_range()
+
+        # Cell-level limiter: operates on the full owned set (interior +
+        # halo now complete).  No-op when the threshold is 0.  Must run
+        # before the next stage re-reads this q_out as q_in.
+        nvtx.push_range("cell_limiter")
+        self._launch_cell_limiter(q_out_ptr)
         nvtx.pop_range()
 
     # --- SSPRK3 time step with comm-compute overlap ------------------

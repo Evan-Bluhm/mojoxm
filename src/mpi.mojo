@@ -114,6 +114,18 @@ def waitall(n: Int, requests: UnsafePointer[Int64, MutAnyOrigin]) raises:
     if rc != 0:
         raise Error("MPI_Waitall failed, rc=" + String(rc))
 
+
+def fill_request_null(
+    requests: UnsafePointer[Int64, MutAnyOrigin], n: Int,
+):
+    """Set `n` request slots to MPI_REQUEST_NULL so a subsequent
+    `waitall` treats them as no-ops.  Can't zero-init from Mojo:
+    MPI_REQUEST_NULL is implementation-defined (a sentinel pointer,
+    not 0) so we route through the C shim."""
+    _ = external_call["mxm_mpi_fill_request_null", NoneType](
+        requests, c_int(n),
+    )
+
 def sendrecv_float(
     sendbuf: UnsafePointer[Float32, MutAnyOrigin],
     sendcount: Int, dest: Int, sendtag: Int,
@@ -164,6 +176,20 @@ def allreduce_float_sum(
     ))
     if rc != 0:
         raise Error("MPI_Allreduce(SUM) failed, rc=" + String(rc))
+
+def allreduce_double_sum(
+    sendbuf: UnsafePointer[Float64, MutAnyOrigin],
+    recvbuf: UnsafePointer[Float64, MutAnyOrigin],
+    count: Int,
+) raises:
+    """Float64 (double-precision) sum allreduce.  Use this for
+    domain-integrated diagnostics where the Float32 SUM would lose
+    precision from summing O(1M) nodal values."""
+    var rc = Int(external_call["mxm_mpi_allreduce_double_sum", c_int](
+        sendbuf, recvbuf, c_int(count)
+    ))
+    if rc != 0:
+        raise Error("MPI_Allreduce(DOUBLE SUM) failed, rc=" + String(rc))
 
 def allreduce_int_sum(
     sendbuf: UnsafePointer[Int32, MutAnyOrigin],
