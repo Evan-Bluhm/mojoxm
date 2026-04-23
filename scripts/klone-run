@@ -21,8 +21,15 @@
 # tidy:
 #
 #   NP          MPI ranks                               (default 1)
+#               For mpi_* drivers, this also controls the GPU count:
+#               the allocation requests --gres=gpu:$GPU:$NP and each
+#               rank is pinned to one device via CUDA_VISIBLE_DEVICES.
+#               The whole allocation lands on a single node (ntasks=1),
+#               so NP is bounded by the per-node GPU count of the
+#               partition you're using (e.g. 8 on Klone a40 nodes).
+#               Ignored for non-MPI drivers (a warning is printed).
 #   GPU         a40 | a100 | l40 | l40s | ...           (default a40)
-#               Pins --gres=gpu:$GPU:1.  Ignored if CONSTRAINT is set.
+#               Pins --gres=gpu:$GPU:$NP.  Ignored if CONSTRAINT is set.
 #   CONSTRAINT  SLURM --constraint expression           (default empty)
 #               e.g. CONSTRAINT='a100|a40|l40|l40s' lets SLURM pick any
 #               of those GPU types via a generic --gres=gpu:1 request.
@@ -117,6 +124,15 @@ case "$DRIVER" in
     *) IS_MPI=0 ;;
 esac
 
+# Warn if the user set NP > 1 on a non-MPI driver -- the extra ranks
+# would do nothing (the driver doesn't call mpi.init) and NP is
+# silently ignored on this path.  Easy mistake to make, so flag it.
+if [ "$IS_MPI" = "0" ] && [ "$NP" -gt 1 ]; then
+    echo "warning: NP=$NP but '$DRIVER' is not an MPI driver (no mpi_ prefix)." >&2
+    echo "         NP is ignored; a single process will be launched." >&2
+    echo "         For multi-rank runs, pick an mpi_* driver." >&2
+fi
+
 # --- Assemble srun request -------------------------------------------
 # We always run *one* wrapper process under srun (which will then
 # optionally invoke mpirun to spawn the NP ranks).  `-n 1` prevents
@@ -135,13 +151,24 @@ SRUN_ARGS=(
     --mem="$MEM" --time="$TIME"
 )
 if [ "$NEEDS_GPU" = "1" ]; then
+    # GPUs-per-allocation: one per MPI rank, or one for single-rank
+    # drivers.  The whole allocation lives on a single node (we pass
+    # --ntasks=1 above), so the N GPUs will be on the same machine and
+    # each rank gets its own via CUDA_VISIBLE_DEVICES below.  If you
+    # need multi-node runs, this is where to add --nodes=N / --ntasks
+    # tuning.
+    if [ "$IS_MPI" = "1" ]; then
+        NGPUS="$NP"
+    else
+        NGPUS=1
+    fi
     if [ -n "$CONSTRAINT" ]; then
         # Constraint-based GPU selection: any GPU matching the feature
-        # expression.  --gres=gpu:1 asks for 1 GPU of any type;
+        # expression.  --gres=gpu:N asks for N GPUs of any type;
         # --constraint narrows the nodes.
-        SRUN_ARGS+=(--gres="gpu:1" "--constraint=$CONSTRAINT")
+        SRUN_ARGS+=(--gres="gpu:$NGPUS" "--constraint=$CONSTRAINT")
     else
-        SRUN_ARGS+=(--gres="gpu:${GPU}:1")
+        SRUN_ARGS+=(--gres="gpu:${GPU}:$NGPUS")
     fi
 fi
 
@@ -209,14 +236,27 @@ if [ -n "$MOJOXM_PROFILE_WRAPPER" ]; then
     PROFILER_DISPLAY="$MOJOXM_PROFILE_WRAPPER "
 fi
 
+# Per-rank GPU assignment: each MPI rank gets its own device by setting
+# CUDA_VISIBLE_DEVICES = OMPI_COMM_WORLD_LOCAL_RANK (0..N-1 within a
+# node).  OpenMPI sets OMPI_COMM_WORLD_LOCAL_RANK on every spawned rank.
+# We use APPTAINERENV_ so the value crosses the Apptainer boundary.
+# The inline `bash -c ... _ "$@"` wraps whatever follows mpirun (profile
+# wrapper + apptainer exec + driver), sets the env, and exec's it.  For
+# non-MPI launches there is no local-rank env var, so we just set it
+# to 0.
+GPU_PIN_WRAPPER=(
+    bash -c 'export APPTAINERENV_CUDA_VISIBLE_DEVICES="${OMPI_COMM_WORLD_LOCAL_RANK:-0}"; exec "$@"' _
+)
+
 if [ "$MOJOXM_IS_MPI" = "1" ]; then
     # SLURM allocated 1 task + N*cores_per_rank cpus.  OpenMPI's
     # SLURM integration otherwise sees SLURM_NTASKS=1 and refuses to
     # launch NP ranks; --oversubscribe tells it to ignore that count.
     # We have enough cores to back NP processes -- the allocation
     # requested N*cores_per_rank dedicated CPUs above.
-    echo "===> mpirun -np $MOJOXM_NP --oversubscribe ${PROFILER_DISPLAY}apptainer exec $MOJOXM_APPTAINER_FLAGS $MOJOXM_SIF ./$MOJOXM_DRIVER ${DRV_ARGS[*]-}"
+    echo "===> mpirun -np $MOJOXM_NP --oversubscribe [gpu-pin] ${PROFILER_DISPLAY}apptainer exec $MOJOXM_APPTAINER_FLAGS $MOJOXM_SIF ./$MOJOXM_DRIVER ${DRV_ARGS[*]-}"
     mpirun -np "$MOJOXM_NP" --oversubscribe \
+        "${GPU_PIN_WRAPPER[@]}" \
         ${PROFILER_PREFIX[@]+"${PROFILER_PREFIX[@]}"} \
         apptainer exec $MOJOXM_APPTAINER_FLAGS "$MOJOXM_SIF" \
         "./$MOJOXM_DRIVER" ${DRV_ARGS[@]+"${DRV_ARGS[@]}"}
