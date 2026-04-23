@@ -117,6 +117,90 @@ struct Advection2D(Physics2D, ImplicitlyCopyable, Movable):
 
 
 # ----------------------------------------------------------------------
+# Euler2D: compressible gas dynamics (Rusanov / Lax-Friedrichs flux)
+# ----------------------------------------------------------------------
+# State: (rho, rho*u, rho*v, E).  Ideal gas EOS p = (gamma - 1) (E - KE).
+# Numerical flux is plain Rusanov -- robust, monotone, a good default
+# for prototyping.  A full 2D Euler suite (Roe / HLLE / HLLEC) can
+# parallel the 3D module if the demand ever arrives.
+
+@fieldwise_init
+struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
+    comptime NUM_COMPONENTS = 4
+
+    var gamma: Float64
+    var min_density: Float64
+    var min_pressure: Float64
+
+    def internal_flux(
+        self,
+        q:    UnsafePointer[Float64, MutAnyOrigin],
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        var rho = q[0]
+        if rho < self.min_density:
+            rho = self.min_density
+        var mx = q[1]
+        var my = q[2]
+        var E = q[3]
+        var u = mx / rho
+        var v = my / rho
+        var ke = 0.5 * rho * (u * u + v * v)
+        var p = (self.gamma - 1.0) * (E - ke)
+        if p < self.min_pressure:
+            p = self.min_pressure
+        # x-direction
+        flux[0] = mx
+        flux[1] = mx * u + p
+        flux[2] = mx * v
+        flux[3] = u * (E + p)
+        # y-direction
+        flux[4] = my
+        flux[5] = my * u
+        flux[6] = my * v + p
+        flux[7] = v * (E + p)
+        var c = sqrt(self.gamma * p / rho)
+        var vmag = sqrt(u * u + v * v)
+        return vmag + c
+
+    def numerical_flux(
+        self,
+        q_l:  UnsafePointer[Float64, MutAnyOrigin],
+        q_r:  UnsafePointer[Float64, MutAnyOrigin],
+        nx: Float64, ny: Float64,
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        # Rusanov / Lax-Friedrichs:  F* = 0.5 (F_L.n + F_R.n) - 0.5 alpha (q_R - q_L)
+        # alpha = max(|v.n| + c) over the two sides.
+        var f_l_buf = InlineArray[Float64, 8](fill=0.0)
+        var f_r_buf = InlineArray[Float64, 8](fill=0.0)
+        var f_l = rebind[UnsafePointer[Float64, MutAnyOrigin]](
+            f_l_buf.unsafe_ptr()
+        )
+        var f_r = rebind[UnsafePointer[Float64, MutAnyOrigin]](
+            f_r_buf.unsafe_ptr()
+        )
+        var speed_l = self.internal_flux(q_l, f_l)
+        var speed_r = self.internal_flux(q_r, f_r)
+        var alpha = speed_l if speed_l > speed_r else speed_r
+
+        for c in range(4):
+            var Fn_l = f_l[0 * 4 + c] * nx + f_l[1 * 4 + c] * ny
+            var Fn_r = f_r[0 * 4 + c] * nx + f_r[1 * 4 + c] * ny
+            flux[c] = 0.5 * (Fn_l + Fn_r) - 0.5 * alpha * (q_r[c] - q_l[c])
+        return alpha
+
+    def source_term(
+        self,
+        q: UnsafePointer[Float64, MutAnyOrigin],
+        x: Float64, y: Float64,
+        source_out: UnsafePointer[Float64, MutAnyOrigin],
+    ):
+        for c in range(4):
+            source_out[c] = 0.0
+
+
+# ----------------------------------------------------------------------
 # Physics-generic 2D DG rhs
 # ----------------------------------------------------------------------
 
