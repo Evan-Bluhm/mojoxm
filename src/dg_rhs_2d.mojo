@@ -201,6 +201,81 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
 
 
 # ----------------------------------------------------------------------
+# ShallowWater2D: Saint-Venant shallow-water equations
+# ----------------------------------------------------------------------
+# State: (h, h*u, h*v) where h is water column depth and (u, v) is the
+# depth-averaged horizontal velocity.  "Pressure" analog p = g h^2 / 2.
+# Flat bed (no source term).  Rusanov numerical flux -- same pattern
+# as Euler2D, just a simpler 3-component state.
+
+@fieldwise_init
+struct ShallowWater2D(Physics2D, ImplicitlyCopyable, Movable):
+    comptime NUM_COMPONENTS = 3
+
+    var g: Float64            # gravitational acceleration
+    var min_h: Float64        # depth floor (avoids divide-by-zero at dry patches)
+
+    def internal_flux(
+        self,
+        q:    UnsafePointer[Float64, MutAnyOrigin],
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        var h = q[0]
+        if h < self.min_h:
+            h = self.min_h
+        var mx = q[1]
+        var my = q[2]
+        var u = mx / h
+        var v = my / h
+        var p = 0.5 * self.g * h * h
+        # x-direction
+        flux[0] = mx
+        flux[1] = mx * u + p
+        flux[2] = mx * v
+        # y-direction
+        flux[3] = my
+        flux[4] = my * u
+        flux[5] = my * v + p
+        var c = sqrt(self.g * h)
+        var vmag = sqrt(u * u + v * v)
+        return vmag + c
+
+    def numerical_flux(
+        self,
+        q_l:  UnsafePointer[Float64, MutAnyOrigin],
+        q_r:  UnsafePointer[Float64, MutAnyOrigin],
+        nx: Float64, ny: Float64,
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        var f_l_buf = InlineArray[Float64, 6](fill=0.0)
+        var f_r_buf = InlineArray[Float64, 6](fill=0.0)
+        var f_l = rebind[UnsafePointer[Float64, MutAnyOrigin]](
+            f_l_buf.unsafe_ptr()
+        )
+        var f_r = rebind[UnsafePointer[Float64, MutAnyOrigin]](
+            f_r_buf.unsafe_ptr()
+        )
+        var speed_l = self.internal_flux(q_l, f_l)
+        var speed_r = self.internal_flux(q_r, f_r)
+        var alpha = speed_l if speed_l > speed_r else speed_r
+
+        for c in range(3):
+            var Fn_l = f_l[0 * 3 + c] * nx + f_l[1 * 3 + c] * ny
+            var Fn_r = f_r[0 * 3 + c] * nx + f_r[1 * 3 + c] * ny
+            flux[c] = 0.5 * (Fn_l + Fn_r) - 0.5 * alpha * (q_r[c] - q_l[c])
+        return alpha
+
+    def source_term(
+        self,
+        q: UnsafePointer[Float64, MutAnyOrigin],
+        x: Float64, y: Float64,
+        source_out: UnsafePointer[Float64, MutAnyOrigin],
+    ):
+        for c in range(3):
+            source_out[c] = 0.0
+
+
+# ----------------------------------------------------------------------
 # Physics-generic 2D DG rhs
 # ----------------------------------------------------------------------
 
