@@ -514,6 +514,106 @@ def dg_rhs_2d[P: Int, PhysT: Physics2D](
 # stage.
 # ----------------------------------------------------------------------
 
+# ----------------------------------------------------------------------
+# Barth-Jespersen slope limiter (2D, Venkatakrishnan-smoothed)
+# ----------------------------------------------------------------------
+# Conservation-preserving post-stage limiter.  For each element, scales
+# every nodal deviation from the element's mean by the tightest theta
+# that keeps the scaled deviation within the (min, max) cell-average
+# range of the element + its 3 face neighbours (sampled on component 0).
+# Venkat smoothing avoids over-limiting smooth flows (epsilon=0 recovers
+# raw BJ, which kills high-order accuracy even in smooth regions).
+#
+# Apply theta uniformly across all NC components so physically coupled
+# quantities stay consistent (e.g. momentum and density scale together).
+# No-op per-element if theta >= 1 (smooth region).
+# ----------------------------------------------------------------------
+
+def bj_limit_2d[P: Int, PhysT: Physics2D](
+    mesh: LocalMesh2D[P],
+    mut q: List[Float64],
+    venkat_eps: Float64 = 0.1,
+) raises:
+    comptime NC = PhysT.NUM_COMPONENTS
+    comptime NP = num_tri_nodes_2d(P)
+    var inv_np = 1.0 / Float64(NP)
+    var eps2 = venkat_eps * venkat_eps
+
+    # Pre-compute per-element cell averages of component 0 (density).
+    var cell_avg = List[Float64]()
+    for _ in range(mesh.num_elements):
+        cell_avg.append(0.0)
+    for elem in range(mesh.num_elements):
+        var s: Float64 = 0.0
+        for nn in range(NP):
+            s += q[(elem * NP + nn) * NC + 0]
+        cell_avg[elem] = s * inv_np
+
+    for elem in range(mesh.num_elements):
+        var own_avg = cell_avg[elem]
+        # Seed min/max with self so the range is never empty.
+        var nbr_min = own_avg
+        var nbr_max = own_avg
+        for lf in range(3):
+            var fid = Int(mesh.elem_faces[elem * 3 + lf])
+            var e_l = Int(mesh.face_elem[fid * 2 + 0])
+            var e_r = Int(mesh.face_elem[fid * 2 + 1])
+            var n = e_r if e_l == elem else e_l
+            var a = cell_avg[n]
+            if a < nbr_min: nbr_min = a
+            if a > nbr_max: nbr_max = a
+
+        # Venkat-smoothed theta on the density component alone.
+        var theta: Float64 = 1.0
+        var tiny: Float64 = 1.0e-30
+        for nn in range(NP):
+            var node_val = q[(elem * NP + nn) * NC + 0]
+            var delta = node_val - own_avg
+            var d_abs = delta if delta >= 0.0 else -delta
+            if d_abs <= tiny:
+                continue
+            var D: Float64
+            if delta > 0.0:
+                D = nbr_max - own_avg
+            else:
+                D = own_avg - nbr_min
+            if D < 0.0:
+                D = 0.0
+            var D2 = D * D
+            var d2 = d_abs * d_abs
+            var Dd = D * d_abs
+            var numer = D2 + 2.0 * Dd + eps2
+            var denom = D2 + 2.0 * d2 + Dd + eps2
+            var alpha = numer / denom
+            if alpha < theta:
+                theta = alpha
+
+        if not (theta < 1.0):
+            continue    # smooth region; leave alone
+
+        # Precompute per-component nodal means *before* we start
+        # modifying q (a previous version recomputed these inside the
+        # node loop, which read already-scaled values for c>0 and
+        # leaked a few percent of mass into the mean).
+        var base_vec = InlineArray[Float64, NC](fill=0.0)
+        base_vec[0] = own_avg
+        for c in range(1, NC):
+            var s: Float64 = 0.0
+            for m in range(NP):
+                s += q[(elem * NP + m) * NC + c]
+            base_vec[c] = s * inv_np
+
+        # Apply uniform theta to every node, every component.  Nodal
+        # mean is preserved (for a P>1 Lagrange basis the cell average
+        # is a weighted sum -- BJ-on-means is the standard limiter
+        # convention even though it isn't strictly cell-mean-preserving
+        # at high P).
+        for nn in range(NP):
+            for c in range(NC):
+                var offset = (elem * NP + nn) * NC + c
+                q[offset] = base_vec[c] + theta * (q[offset] - base_vec[c])
+
+
 def ssprk3_step_2d[P: Int, PhysT: Physics2D](
     mesh: LocalMesh2D[P],
     re: ReferenceElement2D[P],
@@ -523,6 +623,8 @@ def ssprk3_step_2d[P: Int, PhysT: Physics2D](
     mut scratch_q1: List[Float64],
     mut scratch_q2: List[Float64],
     mut scratch_rhs: List[Float64],
+    use_limiter: Bool = False,
+    venkat_eps: Float64 = 0.1,
 ) raises:
     var n = len(q)
     if len(scratch_q1) != n or len(scratch_q2) != n or len(scratch_rhs) != n:
@@ -531,6 +633,8 @@ def ssprk3_step_2d[P: Int, PhysT: Physics2D](
     dg_rhs_2d[P, PhysT](mesh, re, physics, q, scratch_rhs)
     for k in range(n):
         scratch_q1[k] = q[k] + dt * scratch_rhs[k]
+    if use_limiter:
+        bj_limit_2d[P, PhysT](mesh, scratch_q1, venkat_eps)
 
     dg_rhs_2d[P, PhysT](mesh, re, physics, scratch_q1, scratch_rhs)
     for k in range(n):
@@ -538,6 +642,8 @@ def ssprk3_step_2d[P: Int, PhysT: Physics2D](
             0.75 * q[k]
             + 0.25 * (scratch_q1[k] + dt * scratch_rhs[k])
         )
+    if use_limiter:
+        bj_limit_2d[P, PhysT](mesh, scratch_q2, venkat_eps)
 
     dg_rhs_2d[P, PhysT](mesh, re, physics, scratch_q2, scratch_rhs)
     for k in range(n):
@@ -545,6 +651,8 @@ def ssprk3_step_2d[P: Int, PhysT: Physics2D](
             (1.0 / 3.0) * q[k]
             + (2.0 / 3.0) * (scratch_q2[k] + dt * scratch_rhs[k])
         )
+    if use_limiter:
+        bj_limit_2d[P, PhysT](mesh, q, venkat_eps)
 
 
 # ----------------------------------------------------------------------

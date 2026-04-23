@@ -107,6 +107,11 @@ def main() raises:
 
     for fi in range(1, NUM_FRAMES + 1):
         for _ in range(steps_per_frame):
+            # Limiter is plumbed in but disabled by default: enabling
+            # it on this dam-break IC reduces the Gibbs overshoot from
+            # ~2% to visually none (h confined to roughly [1.37, 1.90])
+            # at the cost of a currently-unresolved 8% drift in the
+            # nodal-mean mass diagnostic.  Investigation pending.
             ssprk3_step_2d[P, ShallowWater2D](
                 mesh, re, physics, dt_used,
                 q, s_q1, s_q2, s_rhs,
