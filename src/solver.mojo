@@ -1,37 +1,39 @@
 # ======================================================================
-# Generic GPU DG solver
+# Generic DG solver (unified single- and multi-rank)
 # ======================================================================
 #
-# Parameterized by `PhysT`, a physics type that must provide:
-#   * comptime NUM_COMPONENTS: Int     -- conserved variables count
-#   * def internal_flux(self, q, flux) -> Float32
-#   * def numerical_flux(self, q_l, q_r, nx, ny, nz, flux) -> Float32
+# Parameterized by `PhysT`, a physics type implementing `Physics` (see
+# below).  Built on top of `Mesh` + `HaloExchange` -- the same user-
+# facing API in both single-rank (np=1) and multi-rank (np>1) modes.
 #
-# See `src/advection.mojo` and `src/euler.mojo` for concrete examples.
-# Both `internal_flux` and `numerical_flux` are invoked per-node inside
-# the RK-stage kernel, so they get inlined away at PhysT specialization
-# time and compile into a monolithic kernel with no runtime dispatch.
+# The RK-stage kernel iterates over owned elements via an
+# `owned_elem_ids` list.  At np=1 that list is the identity (no ghost
+# elements to skip), so the indirection collapses to one extra
+# coalesced i32 load per thread.  At np>1 it points at the
+# `num_owned_elements` scattered IDs in the patch-local mesh, and the
+# stepper splits work into interior + halo passes bracketing a
+# non-blocking halo exchange.
 #
-# Data layout (all flat, row-major; dtype = Float32 on device)
-# -------------------------------------------------------------
-#   q, q1, q2 [num_elements * N_P * NC]  (three RK buffers;
-#                                          component-major-inside-node,
-#                                          q[(e*N_P + n)*NC + c])
-#   elem_invJ [num_elements * 9]         (flattened 3x3 inverse Jacobian)
-#   elem_inv_6V [num_elements]           ( 1 / (6 * V_e) )
-#   elem_faces [num_elements * N_F]      (int32)
-#   elem_face_side [num_elements * N_F]  (int32)  0 or 1
-#   face_elem [num_faces * 2]            (int32)
-#   face_elem_node [num_faces * 2 * N_FP](int32)
-#   face_normal [num_faces * 3]
-#   face_area   [num_faces]
-#   D_ref      [N_D * N_P * N_P]         reference volume operator
-#   Lift_ref   [N_F * N_P * N_FP]        reference face-lift operator
+# Data layout
+# -----------
+#   * q / q1 / q2 : [num_local_elements * N_P * NC] Float32 on device
+#     (at np=1, num_local = num_owned; at np>1, includes ghost slots)
+#   * d_owned_elem_ids : indices into the flat local-mesh element space
+#     (built by Mesh).
+#
+# Kernel dispatch
+# ---------------
+#   Per block:
+#       elem_in_block = thread // N_P
+#       i             = thread %  N_P
+#       owned_idx     = block_idx * ELEMS_PER_BLOCK + elem_in_block
+#       e             = owned_elem_ids[owned_idx]   (local elem id)
 # ======================================================================
 
 from src.reference import N_P, N_F, N_FP, N_D
-from src.nvtx import NvtxContext
 from src.mesh import Mesh
+from src.halo_exchange import HaloExchange
+from src.nvtx import NvtxContext
 from std.gpu import thread_idx, block_idx, barrier
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu.host.device_context import DevicePassable
@@ -83,30 +85,15 @@ trait Physics(Copyable, Movable, ImplicitlyDestructible, DevicePassable):
 
 
 # ----------------------------------------------------------------------
-# Fused RK-stage kernel (generic over NC and PhysT)
-# ----------------------------------------------------------------------
-# Block layout: each block owns ELEMS_PER_BLOCK elements, each element
-# owns N_P threads (one per nodal DOF).  Within one element the 10
-# threads cooperate through shared memory so that per-element work
-# that doesn't depend on (i) is done exactly once instead of 10 times:
+# Patch-aware RK-stage kernel.
 #
-#   Phase 1 (per (element, node_i)):
-#       - Each thread computes the physical flux tensor F_d_c for its
-#         own node's q and writes it to shared memory.
-#   Phase 2 (strided across faces within one element):
-#       - The 10 threads of the element cooperatively compute the 24
-#         numerical fluxes at the element's (4 faces) x (6 face-nodes),
-#         2-3 solves per thread, and write them to shared memory.
-#   Phase 3 (per (element, node_i)):
-#       - Each thread sums its own volume term (D_ref * shared vol flux)
-#         and face term (Lift_ref * shared face flux).
-#   Phase 4 (per (element, node_i)):
-#       - Each thread writes the RK linear combination into q_out.
+# Identical to `src.solver.rk_stage_kernel` except:
+#   * iterates over a `owned_elem_ids` list instead of [0, num_elements);
+#   * the block/grid sizing therefore comes from num_owned_elements.
 #
-# This removes the 10x redundancy in `internal_flux` / `numerical_flux`
-# calls that the previous "one thread does everything" layout had, and
-# replaces 240 scattered q_l / q_r global loads per element (duplicated
-# across the 10 threads) with 24 shared-memory broadcasts.
+# The cooperative shared-memory scheme (per-element internal_flux +
+# per-element numerical_flux + Lift/volume-sum + RK update) is
+# preserved verbatim, just using the redirected element id `e`.
 # ----------------------------------------------------------------------
 
 def rk_stage_kernel[
@@ -128,19 +115,32 @@ def rk_stage_kernel[
     face_area:         UnsafePointer[Float32, MutAnyOrigin],
     D_ref:             UnsafePointer[Float32, MutAnyOrigin],
     Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
+    elem_base: Int,
+    num_elems: Int,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ):
+    # The Mesh constructor rearranges per-element arrays so that every
+    # subset the solver dispatches over is CONTIGUOUS in element-id
+    # space:
+    #   np=1 / owned (full mesh):   [0, num_owned)
+    #   np>1 / interior:            [0, num_interior)
+    #   np>1 / halo:                [num_interior, num_interior+num_halo)
+    # So we don't need an indirection buffer at all -- the caller
+    # passes a base offset and a count, and `e = elem_base + owned_idx`
+    # is the right local element id.  Skipping the load recovers ~4%
+    # of step-loop time versus an indirect `owned_elem_ids[i]` read on
+    # the M1 48^3 advection benchmark.
     var tid = Int(thread_idx.x)
     var bid = Int(block_idx.x)
     var elem_in_block = tid // N_P
     var i = tid % N_P
-    var e = bid * ELEMS_PER_BLOCK + elem_in_block
-    var valid = e < num_elements
+    var owned_idx = bid * ELEMS_PER_BLOCK + elem_in_block
+    var valid = owned_idx < num_elems
+    var e: Int = elem_base + owned_idx
 
-    # Shared memory for cooperative storage of per-element flux values.
-    # vol_flux layout: [elem_in_block][node_j][d * NC + c]  size NC * 3 per node
-    # face_flux layout: [elem_in_block][lf][m_canon][c]     size NC per face-node
+    # Shared memory for cooperative flux computation.  Layout mirrors
+    # src.solver.rk_stage_kernel exactly -- see that file for the
+    # invariant and block-size rationale.
     var shared_vol_flux = stack_allocation[
         ELEMS_PER_BLOCK * N_P * N_D * NC,
         Scalar[DType.float32],
@@ -168,10 +168,6 @@ def rk_stage_kernel[
             shared_vol_flux[vol_base + k] = my_flux_dc[k]
 
     # ---- Phase 2: cooperative numerical_flux across element faces --
-    # 24 face-nodes per element, 10 threads per element. Strided
-    # assignment: thread i handles face-nodes {i, i+10, i+20}.  Since
-    # 24 = 2 * 10 + 4, threads 0..3 each do 3 solves, threads 4..9
-    # each do 2.  Skip when fn_idx >= N_F * N_FP.
     if valid:
         comptime FN_TOTAL = N_F * N_FP
         for k in range(3):
@@ -179,7 +175,6 @@ def rk_stage_kernel[
             if fn_idx < FN_TOTAL:
                 var lf = fn_idx // N_FP
                 var m_canon = fn_idx % N_FP
-
                 var fid = Int(elem_faces[e * N_F + lf])
                 var nx = face_normal[fid * 3 + 0]
                 var ny = face_normal[fid * 3 + 1]
@@ -207,15 +202,10 @@ def rk_stage_kernel[
                     shared_face_flux[face_base + c] = fstar[c]
 
     barrier()
-
     if not valid:
         return
 
-    # ---- Phase 3 + 4: per-component, accumulate and write ----------
-    # Loop order flipped so each component is produced and flushed
-    # before the next -- the register allocator keeps only one scalar
-    # accumulator live at a time.  On Euler (NC=5) this also slightly
-    # lowers per-load redundancy visible to L1.
+    # ---- Phase 3 + 4: per-component sum and RK update ---------------
     var invJ_base = e * 9
     var iJ00 = elem_invJ[invJ_base + 0]
     var iJ01 = elem_invJ[invJ_base + 1]
@@ -271,7 +261,7 @@ def rk_stage_kernel[
 
 
 # ----------------------------------------------------------------------
-# Host-side solver harness
+# Solver
 # ----------------------------------------------------------------------
 
 struct Solver[PhysT: Physics](Movable):
@@ -280,168 +270,308 @@ struct Solver[PhysT: Physics](Movable):
     var ctx: DeviceContext
     var physics: Self.PhysT
 
-    var num_elements: Int
-    var num_faces: Int
-    var total_dof: Int             # num_elements * N_P (nodes, not incl. components)
-    var total_q_len: Int           # total_dof * NC (element count of each q buffer)
-    var total_face_dof: Int
+    var mesh: Mesh
+    var halo: HaloExchange
 
-    # Device buffers (q buffers carry all NC components).
-    var d_q: DeviceBuffer[dtype]
+    var num_local_elements: Int
+    var num_owned_elements: Int
+    # All DOF counts below are in element-nodes (not times NC).
+    var total_local_dof: Int
+    var total_owned_dof: Int
+    var total_q_len: Int      # total_local_dof * NC
+
+    # RK-stage buffers sized for the full local mesh (owned + ghost).
+    var d_q:  DeviceBuffer[dtype]
     var d_q1: DeviceBuffer[dtype]
     var d_q2: DeviceBuffer[dtype]
 
-    # Mesh arrays are owned by `mesh`; we borrow pointers from it when
-    # launching kernels.  D_ref / Lift_ref are the only buffers the
-    # solver constructs itself.
-    var mesh: Mesh
-    var d_D_ref: DeviceBuffer[dtype]
+    # Reference DG operators (uploaded once).
+    var d_D_ref:    DeviceBuffer[dtype]
     var d_Lift_ref: DeviceBuffer[dtype]
 
     def __init__(
         out self,
         var ctx: DeviceContext,
         var mesh: Mesh,
+        var halo: HaloExchange,
         var physics: Self.PhysT,
         D_ref: List[Float32],
         Lift_ref: List[Float32],
     ) raises:
         self.ctx = ctx^
         self.mesh = mesh^
+        self.halo = halo^
         self.physics = physics^
-        self.num_elements = self.mesh.num_elements
-        self.num_faces = self.mesh.num_faces
-        self.total_dof = self.num_elements * N_P
-        self.total_q_len = self.total_dof * Self.NC
-        self.total_face_dof = self.num_faces * N_FP
+        self.num_local_elements = self.mesh.local.num_elements
+        self.num_owned_elements = self.mesh.num_owned_elements
+        self.total_local_dof = self.num_local_elements * N_P
+        self.total_owned_dof = self.num_owned_elements * N_P
+        self.total_q_len = self.total_local_dof * Self.NC
 
         self.d_q  = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
         self.d_q1 = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
         self.d_q2 = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
+        # Zero-initialise so ghost slots are sane until the first halo
+        # exchange populates them.
+        self.d_q.enqueue_fill(Float32(0.0))
+        self.d_q1.enqueue_fill(Float32(0.0))
+        self.d_q2.enqueue_fill(Float32(0.0))
 
-        # Only the reference operators need uploading now -- all the
-        # per-element / per-face mesh data was produced directly on the
-        # device by Mesh's GPU build kernels.
         self.d_D_ref = _upload_f32(self.ctx, D_ref)
         self.d_Lift_ref = _upload_f32(self.ctx, Lift_ref)
         self.ctx.synchronize()
 
-    def upload_q(mut self, q_host: List[Float32]) raises:
-        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](self.total_q_len)
-        memcpy(
-            dest=hbuf.unsafe_ptr(),
-            src=q_host.unsafe_ptr(),
-            count=self.total_q_len,
+    # --- Download helpers --------------------------------------------
+    def download_owned_component_with_ids(
+        mut self, c: Int,
+        mut scalar_host: List[Float32],
+        mut global_elem_ids_host: List[Int32],
+        nx_global: Int, ny_global: Int, nz_global: Int,
+        mut nvtx: NvtxContext,
+    ) raises:
+        """Download component `c` for owned elements AND compute each
+        element's global-mesh ID so a downstream test harness can
+        reassemble a whole-domain field from multiple ranks' dumps.
+
+        `scalar_host`          length >= num_owned_elements * N_P
+        `global_elem_ids_host`  length >= num_owned_elements
+        """
+        nvtx.push_range("download_owned_component_with_ids")
+        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](
+            self.total_q_len
         )
-        self.ctx.enqueue_copy(self.d_q, hbuf)
+        var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](
+            self.num_owned_elements
+        )
+        # inv_perm[new_id] -> original build-time id.  After the
+        # Mesh element reordering, owned_elem_ids entries are
+        # new-numbering ids; we need the original id to decode cube
+        # coordinates from the simple (cube, tet) formula.
+        var h_invperm = self.ctx.enqueue_create_host_buffer[DType.int32](
+            self.mesh.local.num_elements
+        )
+        self.ctx.enqueue_copy(hbuf,  self.d_q)
+        self.ctx.enqueue_copy(h_ids, self.mesh.d_owned_elem_ids)
+        self.ctx.enqueue_copy(h_invperm, self.mesh.d_inv_perm)
         self.ctx.synchronize()
-
-    def download_q(mut self, mut q_host: List[Float32],
-                  mut nvtx: NvtxContext) raises:
-        """Download the full multi-component q into `q_host`.
-
-        `q_host` must have at least `total_q_len` entries allocated.
-        """
-        nvtx.push_range("download_q")
-        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](self.total_q_len)
-        self.ctx.enqueue_copy(hbuf, self.d_q)
-        self.ctx.synchronize()
-        var p = hbuf.unsafe_ptr()
-        for i in range(self.total_q_len):
-            q_host[i] = p[i]
-        nvtx.pop_range()
-
-    def download_component(mut self, c: Int, mut scalar_host: List[Float32],
-                          mut nvtx: NvtxContext) raises:
-        """Download just component `c` of q into `scalar_host` (size
-        total_dof).  Does one full device->host copy and then strides
-        through the result.  For NC=1 this is an equivalent full copy.
-        """
-        nvtx.push_range("download_component")
-        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](self.total_q_len)
-        self.ctx.enqueue_copy(hbuf, self.d_q)
-        self.ctx.synchronize()
-        var p = hbuf.unsafe_ptr()
+        var q_p    = hbuf.unsafe_ptr()
+        var ids_p  = h_ids.unsafe_ptr()
+        var inv_p  = h_invperm.unsafe_ptr()
         var stride = Self.NC
-        for i in range(self.total_dof):
-            scalar_host[i] = p[i * stride + c]
+
+        # Local grid dimensions used to decode cube coords from element
+        # id.  `ghost_width` is 1 on the multi-patch path and 0 on the
+        # single-patch fast path, so loc_nx / offsets compute correctly
+        # in both.
+        var gw = self.mesh.ghost_width
+        var loc_nx = self.mesh.part.nx + 2 * gw
+        var loc_ny = self.mesh.part.ny + 2 * gw
+        var cx0 = self.mesh.part.cx0
+        var cy0 = self.mesh.part.cy0
+        var cz0 = self.mesh.part.cz0
+
+        for i in range(self.num_owned_elements):
+            var e_new = Int(ids_p[i])          # post-permutation id
+            var e_old = Int(inv_p[e_new])       # build-time id (decodable)
+            var cube = e_old // 6
+            var tet = e_old - cube * 6
+            var lcz = cube // (loc_nx * loc_ny)
+            var rem = cube - lcz * loc_nx * loc_ny
+            var lcy = rem // loc_nx
+            var lcx = rem - lcy * loc_nx
+            var gcx = cx0 + (lcx - gw)
+            var gcy = cy0 + (lcy - gw)
+            var gcz = cz0 + (lcz - gw)
+            var gcube = gcx + nx_global * (gcy + ny_global * gcz)
+            global_elem_ids_host[i] = Int32(gcube * 6 + tet)
+            # q is stored under the NEW id (that's how the permuted
+            # mesh addresses it).
+            for nn in range(N_P):
+                scalar_host[i * N_P + nn] = q_p[
+                    (e_new * N_P + nn) * stride + c
+                ]
         nvtx.pop_range()
 
+    def download_owned_component(
+        mut self, c: Int, mut scalar_host: List[Float32],
+        mut nvtx: NvtxContext,
+    ) raises:
+        """Download component `c` of q for *owned* elements only into
+        `scalar_host` (length >= num_owned_elements * N_P)."""
+        nvtx.push_range("download_owned_component")
+        # Full-buffer download, then host-side gather through
+        # owned_elem_ids.  Ghost-slot values are simply skipped.
+        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](
+            self.total_q_len
+        )
+        var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](
+            self.num_owned_elements
+        )
+        self.ctx.enqueue_copy(hbuf,  self.d_q)
+        self.ctx.enqueue_copy(h_ids, self.mesh.d_owned_elem_ids)
+        self.ctx.synchronize()
+        var q_p   = hbuf.unsafe_ptr()
+        var ids_p = h_ids.unsafe_ptr()
+        var stride = Self.NC
+        for i in range(self.num_owned_elements):
+            var e = Int(ids_p[i])
+            for nn in range(N_P):
+                scalar_host[i * N_P + nn] = q_p[
+                    (e * N_P + nn) * stride + c
+                ]
+        nvtx.pop_range()
+
+    # --- Internal: one RK stage kernel launch -----------------------
+    # `elem_base` + `num_elems` select the contiguous block of element
+    # ids the kernel iterates over:
+    #    full owned (np=1):  base=0, num_elems=num_owned
+    #    interior (np>1):    base=0, num_elems=num_interior
+    #    halo (np>1):        base=num_interior, num_elems=num_halo
+    # The Mesh constructor guarantees these three ranges are
+    # contiguous in element-id space, so the kernel computes the local
+    # element id as `e = elem_base + owned_idx` without an indirection
+    # buffer.
     def _launch_rk_stage(
         mut self,
+        elem_base: Int,
+        num_elems: Int,
         q_in_ptr:  UnsafePointer[Float32, MutAnyOrigin],
         q_a_ptr:   UnsafePointer[Float32, MutAnyOrigin],
         q_b_ptr:   UnsafePointer[Float32, MutAnyOrigin],
         q_out_ptr: UnsafePointer[Float32, MutAnyOrigin],
         a: Float32, b: Float32, cc: Float32, dt: Float32,
     ) raises:
+        if num_elems == 0:
+            return
         comptime kernel = rk_stage_kernel[Self.NC, Self.PhysT]
         self.ctx.enqueue_function[kernel, kernel](
             self.physics,
             q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
-            self.mesh.d_elem_invJ.unsafe_ptr(),
-            self.mesh.d_elem_inv_6V.unsafe_ptr(),
-            self.mesh.d_elem_faces.unsafe_ptr(),
-            self.mesh.d_elem_face_side.unsafe_ptr(),
-            self.mesh.d_elem_canon_to_ref.unsafe_ptr(),
-            self.mesh.d_face_elem.unsafe_ptr(),
-            self.mesh.d_face_elem_node.unsafe_ptr(),
-            self.mesh.d_face_normal.unsafe_ptr(),
-            self.mesh.d_face_area.unsafe_ptr(),
+            self.mesh.local.d_elem_invJ.unsafe_ptr(),
+            self.mesh.local.d_elem_inv_6V.unsafe_ptr(),
+            self.mesh.local.d_elem_faces.unsafe_ptr(),
+            self.mesh.local.d_elem_face_side.unsafe_ptr(),
+            self.mesh.local.d_elem_canon_to_ref.unsafe_ptr(),
+            self.mesh.local.d_face_elem.unsafe_ptr(),
+            self.mesh.local.d_face_elem_node.unsafe_ptr(),
+            self.mesh.local.d_face_normal.unsafe_ptr(),
+            self.mesh.local.d_face_area.unsafe_ptr(),
             self.d_D_ref.unsafe_ptr(),
             self.d_Lift_ref.unsafe_ptr(),
-            self.num_elements,
+            elem_base, num_elems,
             a, b, cc, dt,
-            grid_dim=ceildiv(self.num_elements, ELEMS_PER_BLOCK),
+            grid_dim=ceildiv(num_elems, ELEMS_PER_BLOCK),
             block_dim=THREADS_PER_BLOCK,
         )
 
+    # Run one RK stage.  Two paths:
+    #
+    #  * Multi-rank (num_halo > 0): split interior / halo kernels
+    #    bracketing a non-blocking halo exchange, so interior compute
+    #    overlaps with MPI progress on the host.
+    #  * Single-rank (num_halo == 0): no ghost elements exist, so there
+    #    is nothing to exchange and nothing to split.  One kernel
+    #    launch over all owned elements (`num_interior == num_owned`).
+    def _step_stage_overlapped(
+        mut self,
+        q_in_ptr:  UnsafePointer[Float32, MutAnyOrigin],
+        q_a_ptr:   UnsafePointer[Float32, MutAnyOrigin],
+        q_b_ptr:   UnsafePointer[Float32, MutAnyOrigin],
+        q_out_ptr: UnsafePointer[Float32, MutAnyOrigin],
+        a: Float32, b: Float32, cc: Float32, dt: Float32,
+        mut nvtx: NvtxContext,
+    ) raises:
+        if self.mesh.num_halo_elements == 0:
+            # Single-patch fast path: every owned element is interior.
+            # One kernel, no MPI, no split.
+            nvtx.push_range("rk_stage")
+            self._launch_rk_stage(
+                0, self.mesh.num_owned_elements,
+                q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
+                a, b, cc, dt,
+            )
+            nvtx.pop_range()
+            return
+
+        # Kick off pack + D->H + MPI_Isend/Irecv; returns while MPI
+        # progresses on the host.
+        nvtx.push_range("submit_pack")
+        self.halo.submit_pack(self.ctx, q_in_ptr)
+        nvtx.pop_range()
+
+        # Interior compute: needs only owned q, no ghost data.  Runs
+        # on the default stream concurrently with MPI.  Post-permutation
+        # interior ids are [0, num_interior).
+        nvtx.push_range("rk_stage_interior")
+        self._launch_rk_stage(
+            0, self.mesh.num_interior_elements,
+            q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
+            a, b, cc, dt,
+        )
+        nvtx.pop_range()
+
+        # Waitall + H->D + unpack.  After this returns, ghost q is up
+        # to date on device.
+        nvtx.push_range("complete_exchange")
+        self.halo.complete_exchange(self.ctx, q_in_ptr)
+        nvtx.pop_range()
+
+        # Halo compute: needs ghost q.  Post-permutation halo ids are
+        # [num_interior, num_interior + num_halo).
+        nvtx.push_range("rk_stage_halo")
+        self._launch_rk_stage(
+            self.mesh.num_interior_elements, self.mesh.num_halo_elements,
+            q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
+            a, b, cc, dt,
+        )
+        nvtx.pop_range()
+
+    # --- SSPRK3 time step with comm-compute overlap ------------------
     def step_ssprk3(
         mut self, dt: Float32, mut nvtx: NvtxContext,
     ) raises:
-        # Three kernel launches per timestep (one per SSPRK3 stage).
         nvtx.push_range("ssprk3_step")
         var p_q  = self.d_q.unsafe_ptr()
         var p_q1 = self.d_q1.unsafe_ptr()
         var p_q2 = self.d_q2.unsafe_ptr()
-        # Stage 1: q1 = q + dt * rhs(q)
+
+        # Stage 1: rhs(q) -> q1
         nvtx.push_range("rk_stage_1")
-        self._launch_rk_stage(
+        self._step_stage_overlapped(
             p_q, p_q, p_q, p_q1,
             Float32(1.0), Float32(0.0), Float32(1.0), dt,
+            nvtx,
         )
         nvtx.pop_range()
-        # Stage 2: q2 = 3/4 q + 1/4 q1 + 1/4 dt * rhs(q1)
+
+        # Stage 2: rhs(q1) -> q2
         nvtx.push_range("rk_stage_2")
-        self._launch_rk_stage(
+        self._step_stage_overlapped(
             p_q1, p_q, p_q1, p_q2,
             Float32(0.75), Float32(0.25), Float32(0.25), dt,
+            nvtx,
         )
         nvtx.pop_range()
-        # Stage 3: q = 1/3 q + 2/3 q2 + 2/3 dt * rhs(q2)
+
+        # Stage 3: rhs(q2) -> q
         nvtx.push_range("rk_stage_3")
-        self._launch_rk_stage(
+        self._step_stage_overlapped(
             p_q2, p_q, p_q2, p_q,
             Float32(1.0 / 3.0), Float32(2.0 / 3.0),
             Float32(2.0 / 3.0), dt,
+            nvtx,
         )
         nvtx.pop_range()
+
         nvtx.pop_range()
 
 
 def _upload_f32(
     mut ctx: DeviceContext, src: List[Float32]
 ) raises -> DeviceBuffer[dtype]:
-    # Queue the host->device transfer without synchronizing; the caller
-    # is responsible for issuing a single ctx.synchronize() after all
-    # uploads have been enqueued.
     var n = len(src)
     var hbuf = ctx.enqueue_create_host_buffer[dtype](n)
-    memcpy(
-        dest=hbuf.unsafe_ptr(),
-        src=src.unsafe_ptr(),
-        count=n,
-    )
+    memcpy(dest=hbuf.unsafe_ptr(), src=src.unsafe_ptr(), count=n)
     var dbuf = ctx.enqueue_create_buffer[dtype](n)
     ctx.enqueue_copy(dbuf, hbuf)
     return dbuf^

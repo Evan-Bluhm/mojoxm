@@ -15,7 +15,7 @@
 
 from src import mpi
 from src.partition import build_partition
-from src.patch_mesh import PatchMesh
+from src.mesh import Mesh
 from src.halo_exchange import HaloExchange
 from std.gpu.host import DeviceContext
 from std.sys import has_accelerator
@@ -64,7 +64,7 @@ def main() raises:
     var size = mpi.world_size()
 
     var ctx = DeviceContext()
-    var patch = PatchMesh(
+    var patch = Mesh(
         ctx, build_partition(rank, size, NX, NY, NZ), LX, LX, LX
     )
     var halo = HaloExchange(
@@ -72,7 +72,7 @@ def main() raises:
     )
 
     # Allocate scalar q on the local mesh (NC=1).
-    var total_dof = patch.mesh.num_elements * 10 * NC
+    var total_dof = patch.local.num_elements * 10 * NC
     var d_q = ctx.enqueue_create_buffer[DType.float32](total_dof)
     ctx.enqueue_function[init_q_kernel, init_q_kernel](
         d_q.unsafe_ptr(),

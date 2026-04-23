@@ -24,9 +24,9 @@
 
 from src import mpi
 from src.partition import build_partition
-from src.patch_mesh import PatchMesh
+from src.mesh import Mesh
 from src.halo_exchange import HaloExchange
-from src.patch_solver import PatchSolver
+from src.solver import Solver
 from src.reference import ReferenceElement, N_P, to_float32
 from src.advection import Advection
 from src.nvtx import NvtxContext
@@ -129,7 +129,7 @@ def _write_bytes(
 
 
 def dump_final_q(
-    mut solver: PatchSolver[Advection],
+    mut solver: Solver[Advection],
     rank: Int,
     nx_global: Int, ny_global: Int, nz_global: Int,
     mut nvtx: NvtxContext,
@@ -212,16 +212,16 @@ def main() raises:
     var D_ref    = to_float32(re.D_ref)
     var Lift_ref = to_float32(re.Lift_ref)
 
-    var patch = PatchMesh(
+    var mesh = Mesh(
         ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ
     )
     var halo = HaloExchange(
-        ctx, patch.part, Advection.NUM_COMPONENTS,
-        patch.d_perm.unsafe_ptr(),
+        ctx, mesh.part, Advection.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
     )
     var physics = Advection(VX, VY, VZ)
-    var solver = PatchSolver[Advection](
-        ctx^, patch^, halo^, physics^, D_ref^, Lift_ref^,
+    var solver = Solver[Advection](
+        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^,
     )
 
     var inv_two_sigma2 = Float32(1.0) / (
@@ -229,8 +229,8 @@ def main() raises:
     )
     solver.ctx.enqueue_function[gaussian_ic_kernel, gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
-        solver.patch.d_owned_elem_ids.unsafe_ptr(),
-        solver.patch.mesh.d_elem_node_xyz.unsafe_ptr(),
+        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
         Float32(GAUSS_CX), Float32(GAUSS_CY), Float32(GAUSS_CZ),
         Float32(LX), Float32(LY), Float32(LZ),

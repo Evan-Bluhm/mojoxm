@@ -23,6 +23,9 @@
 # Reference: Taylor & Green, Proc. Roy. Soc. A 158 (1937); and the
 # "Taylor-Green Vortex" as popularised by Brachet et al. (1983).  Used
 # as the AIAA high-order CFD workshop benchmark.
+#
+# MPI: `mpirun -np N ./euler_taylor_green` partitions the domain across
+# N ranks; np=1 runs single-rank with no halo exchange.
 # ======================================================================
 
 from std.sys import has_accelerator
@@ -30,8 +33,11 @@ from std.gpu import global_idx
 from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, sin, cos
 
+from src import mpi
+from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
+from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
 from src.nvtx import NvtxContext
@@ -61,8 +67,8 @@ comptime MIN_PRESSURE: Float32 = 1.0e-6
 
 # Integration window.  ~3 eddy turnover times is enough to see the
 # large counter-rotating cells stretch, merge, and begin to cascade.
-comptime T_FINAL: Float32 = 0.1
-comptime NUM_FRAMES = 30
+comptime T_FINAL: Float32 = 2.0
+comptime NUM_FRAMES = 80
 
 # SSPRK3 safety factor for P2 DG on tets.
 comptime CFL = Float32(0.2)
@@ -73,23 +79,28 @@ comptime IC_BLOCK = 256
 # ----------------------------------------------------------------------
 # Initial-condition kernel (Taylor-Green vortex)
 # ----------------------------------------------------------------------
-# One thread per solution DOF (num_elements * N_P).  Reads node
-# coordinates from the already-resident mesh buffer and writes the
-# 5-component conserved state into q.  Layout: q[(idx * 5) + c].
+# One thread per owned DOF.  Reads node coordinates for this rank's
+# owned elements from the already-resident mesh buffer and writes the
+# 5-component conserved state into q.  Layout: q[(e * N_P + nn) * 5 + c].
 # ----------------------------------------------------------------------
 
 def taylor_green_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    total: Int,
+    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
+    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    num_owned: Int,
     u0: Float32, rho0: Float32, p0: Float32, gamma: Float32,
 ):
     var idx = Int(global_idx.x)
+    var total = num_owned * N_P
     if idx >= total:
         return
-    var x = elem_node_xyz[idx * 3 + 0]
-    var y = elem_node_xyz[idx * 3 + 1]
-    var z = elem_node_xyz[idx * 3 + 2]
+    var i = idx // N_P
+    var nn = idx % N_P
+    var e = Int(owned_elem_ids[i])
+    var x = elem_node_xyz[(e * N_P + nn) * 3 + 0]
+    var y = elem_node_xyz[(e * N_P + nn) * 3 + 1]
+    var z = elem_node_xyz[(e * N_P + nn) * 3 + 2]
 
     var sx = sin(x); var cx = cos(x)
     var sy = sin(y); var cy = cos(y)
@@ -106,7 +117,7 @@ def taylor_green_ic_kernel(
     var p = p0 + (rho0 * u0 * u0 / Float32(16.0)) * (c2x + c2y) * (c2z + Float32(2.0))
     var E = p / (gamma - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
 
-    var base = idx * 5
+    var base = (e * N_P + nn) * 5
     q[base + 0] = rho
     q[base + 1] = rho * u
     q[base + 2] = rho * v
@@ -125,14 +136,21 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    print("euler_taylor_green: GPU DG Euler, P2 tet elements, HLLEC flux")
-    print("  mesh: ", NX, "x", NY, "x", NZ,
-          " cells -> ", NX * NY * NZ * 6, "tets")
-    print("  nodes per element:", N_P, " total DOF:",
-          NX * NY * NZ * 6 * N_P)
+    mpi.init()
+    var rank = mpi.world_rank()
+    var size = mpi.world_size()
+
+    if rank == 0:
+        print("euler_taylor_green: GPU DG Euler, P2 tet, HLLEC flux,",
+              size, "rank(s)")
+        print("  global mesh: ", NX, "x", NY, "x", NZ,
+              " cells -> ", NX * NY * NZ * 6, "tets")
+        print("  nodes per element:", N_P, " total DOF:",
+              NX * NY * NZ * 6 * N_P)
 
     var nvtx = NvtxContext()
-    print("  NVTX:", "enabled" if nvtx.is_enabled() else "unavailable")
+    if rank == 0:
+        print("  NVTX:", "enabled" if nvtx.is_enabled() else "unavailable")
 
     var refs = build_reference_operators(nvtx)
 
@@ -141,10 +159,26 @@ def main() raises:
     nvtx.pop_range()
 
     nvtx.push_range("build_mesh")
-    var mesh = Mesh(ctx, NX, NY, NZ, LX, LY, LZ)
+    var mesh = Mesh(
+        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ,
+    )
     nvtx.pop_range()
-    print("  num elements:", mesh.num_elements,
-          " num faces:", mesh.num_faces)
+
+    nvtx.push_range("halo_setup")
+    var halo = HaloExchange(
+        ctx, mesh.part, Euler.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+    )
+    nvtx.pop_range()
+
+    if rank == 0:
+        print("  proc-grid: ",
+              mesh.part.px, "x", mesh.part.py, "x", mesh.part.pz,
+              "  owned cubes per rank: ",
+              mesh.part.nx, "x", mesh.part.ny, "x", mesh.part.nz)
+        print("  per-rank: ", mesh.num_owned_elements,
+              "owned elements (halo=", mesh.num_halo_elements,
+              ", interior=", mesh.num_interior_elements, ")")
 
     var physics = Euler(
         GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True
@@ -152,17 +186,20 @@ def main() raises:
 
     nvtx.push_range("solver_setup")
     var solver = Solver[Euler](
-        ctx^, mesh^, physics^, refs.D_ref^, refs.Lift_ref^,
+        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^,
     )
     nvtx.pop_range()
 
     nvtx.push_range("initial_condition")
     solver.ctx.enqueue_function[taylor_green_ic_kernel, taylor_green_ic_kernel](
         solver.d_q.unsafe_ptr(),
-        solver.mesh.d_elem_node_xyz.unsafe_ptr(),
-        solver.total_dof,
+        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        solver.num_owned_elements,
         U0, RHO0, P0, GAMMA,
-        grid_dim=ceildiv(solver.total_dof, IC_BLOCK),
+        grid_dim=ceildiv(
+            solver.num_owned_elements * N_P, IC_BLOCK
+        ),
         block_dim=IC_BLOCK,
     )
     solver.ctx.synchronize()
@@ -172,19 +209,23 @@ def main() raises:
     var writer = FrameWriter[Euler](solver, nvtx, component=0)
 
     var dt = choose_dt()
-    print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
+    if rank == 0:
+        print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
     var result = run_ssprk3_loop[Euler](
         solver, writer, dt, T_FINAL, NUM_FRAMES, nvtx,
     )
-    print("  final sync:", result.final_sync_sec, "s")
 
     writer.finalize("output/solution.pvd", nvtx)
 
-    print("  total steps:", result.total_steps,
-          " wall time:", result.wall_sec, "s")
-    print("    step-loop time (enqueue only, no sync):",
-          result.step_loop_sec, "s")
-    print("    frame-write time (download + VTU):",
-          result.frame_write_sec, "s")
-    print("  wrote output/solution.pvd")
+    if rank == 0:
+        print("  final sync:", result.final_sync_sec, "s")
+        print("  total steps:", result.total_steps,
+              " wall time:", result.wall_sec, "s")
+        print("    step-loop time (enqueue only, no sync):",
+              result.step_loop_sec, "s")
+        print("    frame-write time (download + VTU):",
+              result.frame_write_sec, "s")
+        print("  wrote output/solution.pvd")
+
+    mpi.finalize()

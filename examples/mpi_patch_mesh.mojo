@@ -1,11 +1,10 @@
 # ======================================================================
-# mpi_patch_mesh -- bring-up test for per-rank PatchMesh
+# mpi_patch_mesh -- bring-up test for per-rank Mesh
 # ======================================================================
 #
-# Each rank builds its own PatchMesh for a chosen global grid and
-# prints:
+# Each rank builds its own Mesh for a chosen global grid and prints:
 #   * the partition's owned cube box,
-#   * the local mesh's (nx+2, ny+2, nz+2) dimensions,
+#   * the local mesh's (nx+2, ny+2, nz+2) dimensions (or (nx, ny, nz) at np=1),
 #   * the owned element count (should equal nx*ny*nz*6),
 #   * a sample of owned-element node coordinates to spot-check that
 #     each patch lies in the right physical region.
@@ -16,7 +15,7 @@
 
 from src import mpi
 from src.partition import build_partition
-from src.patch_mesh import PatchMesh
+from src.mesh import Mesh
 from std.gpu.host import DeviceContext
 from std.sys import has_accelerator
 
@@ -35,7 +34,7 @@ def main() raises:
     var size = mpi.world_size()
 
     var ctx = DeviceContext()
-    var patch = PatchMesh(
+    var patch = Mesh(
         ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ
     )
 

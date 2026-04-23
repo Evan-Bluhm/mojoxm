@@ -98,18 +98,23 @@ care which GPU you get.
 
 ## Driver classification (hard-coded in klone-run)
 
-| Driver                  | IS_MPI | NEEDS_GPU | Notes                                          |
-|-------------------------|--------|-----------|-------------------------------------------------|
-| `mpi_hello`             | 1      | 0         | pure MPI smoke test, login-node-safe if built  |
-| `mpi_partition`         | 1      | 0         | pure MPI smoke test                            |
-| `mpi_patch_mesh`        | 1      | 1         | GPU-resident PatchMesh build                   |
-| `mpi_halo_pingpong`     | 1      | 1         | end-to-end halo exchange                       |
-| `mpi_advection_gaussian`| 1      | 1         | full multi-rank DG solve                       |
-| everything else         | 0      | 1         | single-rank GPU drivers (NP ignored, warning)  |
+Every driver links libmpi and calls `mpi.init()` at startup — np=1 is just
+an MPI communicator of size 1, not a separate code path.  So NP works on
+every driver; the `mpi_*` name prefix is descriptive (smoke test), not
+functional.  The only remaining axis is whether the driver touches the GPU:
 
-Classification is by name prefix: `mpi_*` → IS_MPI=1. A non-MPI driver with
-NP>1 prints a warning and still runs a single process (the driver never calls
-`mpi.init()` so extra ranks would do nothing anyway).
+| Driver                  | NEEDS_GPU | Notes                                          |
+|-------------------------|-----------|-------------------------------------------------|
+| `mpi_hello`             | 0         | pure MPI smoke test, login-node-safe if built  |
+| `mpi_partition`         | 0         | pure MPI smoke test                            |
+| `mpi_patch_mesh`        | 1         | GPU-resident Mesh build                        |
+| `mpi_halo_pingpong`     | 1         | end-to-end halo exchange                       |
+| `advection_gaussian`    | 1         | full DG solve (any rank count)                 |
+| `euler_vortex`          | 1         | full DG solve (any rank count)                 |
+| `euler_taylor_green`    | 1         | full DG solve (any rank count)                 |
+
+NEEDS_GPU=0 drivers live on a hard-coded allowlist in klone-run
+(`mpi_hello|mpi_partition`); everything else gets `--gres=gpu:$NP`.
 
 ## Verifying a run
 

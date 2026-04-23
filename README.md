@@ -64,17 +64,23 @@ The project is ~3900 lines of Mojo. Core components live under
 
 | file                                | lines | role                                                                               |
 |-------------------------------------|-------|------------------------------------------------------------------------------------|
-| `src/reference.mojo`                |   433 | P2 reference element: analytic monomial integration, `D_ref`, `Lift_ref`           |
-| `src/mesh.mojo`                     |   756 | periodic Kuhn-tet mesh, **GPU-resident build**                                     |
-| `src/solver.mojo`                   |   447 | `Physics` trait, cooperative `rk_stage_kernel`, `Solver[PhysT]`, SSPRK3 stepper    |
+| `src/reference.mojo`                |   453 | P2 reference element: analytic monomial integration, `D_ref`, `Lift_ref`           |
+| `src/local_mesh.mojo`               |   766 | raw periodic Kuhn-tet mesh builder, **GPU-resident**                               |
+| `src/mesh.mojo`                     |   847 | patch-aware `Mesh`: wraps `LocalMesh` with partition / ghost ring / permutation    |
+| `src/partition.mojo`                |   192 | `(PX, PY, PZ)` factorisation of nprocs, minimising ghost-exchange surface          |
+| `src/halo_exchange.mojo`            |   451 | MPI pack / Isend / Irecv / unpack on the 6 face rings                              |
+| `src/solver.mojo`                   |   577 | `Physics` trait, cooperative `rk_stage_kernel`, `Solver[PhysT]`, SSPRK3 stepper    |
 | `src/advection.mojo`                |    81 | `Advection` physics: scalar upwind flux                                            |
 | `src/euler.mojo`                    |   678 | `Euler` physics: 5-moment, 4 Riemann solvers, Harten-Hyman entropy fix, face rotation |
 | `src/vtu.mojo`                      |   372 | zero-copy binary-appended VTU writer (writes one scalar field per frame)           |
 | `src/async_writer.mojo`             |   167 | pthread-based `writev()` scatter-gather file writer                                |
+| `src/frame_writer.mojo`             |   148 | per-rank frame output: `FrameWriter[PhysT]` with auto rank-subdir for MPI          |
+| `src/time_integrator.mojo`          |   107 | `run_ssprk3_loop[PhysT]`: drives the loop, frame cadence, timings                  |
 | `src/nvtx.mojo`                     |    84 | runtime-loaded NVTX shim for Nsight Systems timelines                              |
-| `examples/advection_gaussian.mojo`  |   284 | driver: Gaussian-pulse advection                                                   |
-| `examples/euler_vortex.mojo`        |   289 | driver: isentropic Euler vortex (Shu 1997)                                         |
-| `examples/euler_taylor_green.mojo`  |   280 | driver: compressible Taylor-Green vortex                                           |
+| `src/mpi.mojo` + `src/mpi_shim.c`   |   ~250| Mojo / C-shim bindings for OpenMPI                                                 |
+| `examples/advection_gaussian.mojo`  |   224 | driver: Gaussian-pulse advection (any rank count)                                  |
+| `examples/euler_vortex.mojo`        |   239 | driver: isentropic Euler vortex, Shu 1997 (any rank count)                         |
+| `examples/euler_taylor_green.mojo`  |   231 | driver: compressible Taylor-Green vortex (any rank count)                          |
 
 ### The `Physics` trait
 
@@ -217,44 +223,50 @@ Key build flags baked into the Makefile:
 - `-I .` — with `src/__init__.mojo` in place, lets drivers import as
   `from src.solver import Solver`.
 
-MPI drivers additionally link `build/mpi_shim.o` (built once by the
-`shim` target) against the system's `libmpi`.
+Every driver links `build/mpi_shim.o` (built once by the `shim`
+target) against the system's `libmpi`.  There is no "MPI vs non-MPI"
+driver distinction any more -- np=1 is just a one-rank MPI
+communicator with no ghost ring and no halo exchange.  Run any driver
+as:
 
 ```bash
-mpirun -np 4 ./mpi_hello
-mpirun -np 8 ./mpi_partition           # cube-grid Partition
-mpirun -np 8 ./mpi_patch_mesh          # PatchMesh + halo classification
-mpirun -np 8 ./mpi_halo_pingpong       # end-to-end halo exchange check
-mpirun -np 8 ./mpi_advection_gaussian  # full multi-rank DG solve
+./advection_gaussian                          # single rank
+mpirun -np 8 ./advection_gaussian             # eight ranks
+mpirun -np 4 ./euler_taylor_green             # four ranks
+mpirun -np 8 ./mpi_hello                      # pure MPI smoke test
+mpirun -np 8 ./mpi_patch_mesh                 # per-rank Mesh build
+mpirun -np 8 ./mpi_halo_pingpong              # end-to-end halo exchange
 ```
 
-Module stack, bottom-up:
+### Module stack, bottom-up
 
 | Module | Role |
 |---|---|
+| `src/local_mesh.mojo` | Raw periodic Kuhn-tet mesh builder over an `(nx, ny, nz)` cube grid. Knows nothing about partitions; used internally by `Mesh`. |
 | `src/partition.mojo` | Picks the `(PX, PY, PZ)` factorisation of `nprocs` that minimises per-patch surface area. 6 face-neighbours form a 3D torus under triply periodic BCs. |
-| `src/patch_mesh.mojo` | Per-rank Kuhn-tet mesh: `(nx, ny, nz)` owned cubes + 1-cube ghost ring. Classifies owned elements as **interior** (all face-neighbours local) vs **halo** (at least one ghost neighbour). |
-| `src/halo_exchange.mojo` | Pack / `MPI_Isend` + `MPI_Irecv` / unpack on the 6 face-rings. Host-staged (OpenMPI 4.1.6 on this system isn't CUDA-aware; pinned `HostBuffer` is used as the staging layer). |
-| `src/patch_solver.mojo` | `PatchSolver[PhysT]` built on `PatchMesh` + `HaloExchange`. `rk_stage_kernel_patch` is the cooperative-shared-memory kernel with one extra indirection at the top (`e = owned_elem_ids[...]`). `step_ssprk3` runs a blocking halo exchange before every RK stage. |
+| `src/mesh.mojo` | User-facing `Mesh`: wraps `LocalMesh` with patch / ghost-ring / owned-element metadata. At np=1 the ghost ring is omitted entirely (`ghost_width=0`), making single-rank runs a no-op on anything MPI-related. At np>1 each rank builds `(nx, ny, nz)` owned cubes + a 1-cube ghost ring, and owned elements are classified as **interior** or **halo** then reordered so both subsets are contiguous in element-id space. |
+| `src/halo_exchange.mojo` | Pack / `MPI_Isend` + `MPI_Irecv` / unpack on the 6 face rings. Host-staged (OpenMPI 4.1.6 on this system isn't CUDA-aware; pinned `HostBuffer` is used as the staging layer). Short-circuits at np=1 where there are no ghost elements. |
+| `src/solver.mojo` | `Solver[PhysT]` built on `Mesh` + `HaloExchange`. `rk_stage_kernel` is the cooperative-shared-memory kernel; thanks to the element reordering in `Mesh`, each RK stage dispatches over a contiguous `[elem_base, elem_base + num_elems)` range with no scatter indirection. `step_ssprk3` runs one kernel per stage at np=1, and the classical split-kernel / MPI-overlap pattern at np>1. |
 
-End-to-end correctness is verified by `mpi_advection_gaussian`: at
-`np ∈ {1, 2, 8}` the final integral of `q`, the max, and the Gibbs
-overshoot come out identical (conservation drift 3.56×10⁻⁵; max
-1.003426 across all rank counts).
+End-to-end correctness is verified by `make test`: at np=1 vs np=4 the
+final per-owned-element q values are **bit-identical** after 50
+SSPRK3 steps (`max |a - b| = 0` over 196,608 elements × 10 DOFs each).
 
-Each SSPRK3 stage runs in **split-kernel / MPI-overlap mode**:
+At np>1 each SSPRK3 stage runs in **split-kernel / MPI-overlap mode**:
 
 ```
-halo.submit_pack(q)       # pack + D→H + MPI_Isend/Irecv (non-blocking)
-rk_stage_kernel(interior) # runs on default stream while MPI progresses
-halo.complete_exchange(q) # MPI_Waitall + H→D + unpack
-rk_stage_kernel(halo)     # reads ghost q on default stream
+halo.submit_pack(q)                # pack + D→H + MPI_Isend/Irecv (non-blocking)
+rk_stage_kernel(interior=[0, NI))  # runs on default stream while MPI progresses
+halo.complete_exchange(q)          # MPI_Waitall + H→D + unpack
+rk_stage_kernel(halo=[NI, NI+NH))  # reads ghost q on default stream
 ```
 
 so interior compute on the device overlaps with MPI progress on the
-host. On a single-GPU box wall time grows with rank count because
-all ranks time-share one GPU and MPI is host-staged; on a multi-GPU
-cluster with CUDA-aware MPI that relation inverts.
+host.  At np=1 the whole sequence collapses to a single kernel launch
+over `[0, num_owned)` (no pack, no MPI, no split).  On a single-GPU
+box wall time grows with rank count because all ranks time-share one
+GPU and MPI is host-staged; on a multi-GPU cluster with CUDA-aware
+MPI that relation inverts.
 
 ### Running on a cluster: Apptainer image for Klone
 
@@ -286,10 +298,10 @@ SLURM moves you between GPU generations.
 NP=4 scripts/klone-run mpi_hello
 
 # GPU + MPI, pinned to A40:
-NP=4 GPU=a40 scripts/klone-run mpi_advection_gaussian
+NP=4 GPU=a40 scripts/klone-run advection_gaussian
 
 # GPU + MPI, any GPU matching a SLURM constraint expression:
-NP=4 CONSTRAINT='a100|a40|l40|l40s' scripts/klone-run mpi_advection_gaussian
+NP=4 CONSTRAINT='a100|a40|l40|l40s' scripts/klone-run advection_gaussian
 
 # Single-rank GPU driver (no MPI):
 scripts/klone-run euler_taylor_green

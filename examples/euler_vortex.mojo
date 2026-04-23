@@ -25,6 +25,9 @@
 #   * Kuhn-tet Cartesian mesh, triply periodic
 #   * SSPRK3 time integration
 #   * VTU output of the density field
+#
+# MPI: `mpirun -np N ./euler_vortex` partitions the domain across N
+# ranks; np=1 runs single-rank with no halo exchange.
 # ======================================================================
 
 from std.sys import has_accelerator
@@ -32,8 +35,11 @@ from std.gpu import global_idx
 from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, exp, pow
 
+from src import mpi
+from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
+from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
 from src.nvtx import NvtxContext
@@ -74,24 +80,29 @@ comptime IC_BLOCK = 256
 # ----------------------------------------------------------------------
 # Initial-condition kernel (isentropic vortex)
 # ----------------------------------------------------------------------
-# One thread per solution DOF (num_elements * N_P).  Reads node
-# coordinates from the already-resident mesh buffer and writes the
-# 5-component conserved state into q.  Layout: q[(idx * 5) + c].
+# One thread per owned DOF.  Reads node coordinates for this rank's
+# owned elements from the already-resident mesh buffer and writes the
+# 5-component conserved state into q.  Layout: q[(e * N_P + nn) * 5 + c].
 # ----------------------------------------------------------------------
 
 def vortex_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    total: Int,
+    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
+    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    num_owned: Int,
     x0: Float32, y0: Float32,
     ubg: Float32, vbg: Float32, wbg: Float32,
     gamma: Float32, eps: Float32,
 ):
     var idx = Int(global_idx.x)
+    var total = num_owned * N_P
     if idx >= total:
         return
-    var px = elem_node_xyz[idx * 3 + 0]
-    var py = elem_node_xyz[idx * 3 + 1]
+    var i = idx // N_P
+    var nn = idx % N_P
+    var e = Int(owned_elem_ids[i])
+    var px = elem_node_xyz[(e * N_P + nn) * 3 + 0]
+    var py = elem_node_xyz[(e * N_P + nn) * 3 + 1]
     var dx = px - x0
     var dy = py - y0
     var r2 = dx * dx + dy * dy
@@ -110,7 +121,7 @@ def vortex_ic_kernel(
     var rho = pow(T, Float32(1.0) / g1)
     var p   = pow(rho, gamma)
     var E   = p / g1 + Float32(0.5) * rho * (u * u + v * v + w * w)
-    var base = idx * 5
+    var base = (e * N_P + nn) * 5
     q[base + 0] = rho
     q[base + 1] = rho * u
     q[base + 2] = rho * v
@@ -131,14 +142,21 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    print("euler_vortex: GPU DG Euler, P2 tet elements, HLLEC flux")
-    print("  mesh: ", NX, "x", NY, "x", NZ,
-          " cells -> ", NX * NY * NZ * 6, "tets")
-    print("  nodes per element:", N_P, " total DOF:",
-          NX * NY * NZ * 6 * N_P)
+    mpi.init()
+    var rank = mpi.world_rank()
+    var size = mpi.world_size()
+
+    if rank == 0:
+        print("euler_vortex: GPU DG Euler, P2 tet, HLLEC flux,",
+              size, "rank(s)")
+        print("  global mesh: ", NX, "x", NY, "x", NZ,
+              " cells -> ", NX * NY * NZ * 6, "tets")
+        print("  nodes per element:", N_P, " total DOF:",
+              NX * NY * NZ * 6 * N_P)
 
     var nvtx = NvtxContext()
-    print("  NVTX:", "enabled" if nvtx.is_enabled() else "unavailable")
+    if rank == 0:
+        print("  NVTX:", "enabled" if nvtx.is_enabled() else "unavailable")
 
     var refs = build_reference_operators(nvtx)
 
@@ -147,10 +165,26 @@ def main() raises:
     nvtx.pop_range()
 
     nvtx.push_range("build_mesh")
-    var mesh = Mesh(ctx, NX, NY, NZ, LX, LY, LZ)
+    var mesh = Mesh(
+        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ,
+    )
     nvtx.pop_range()
-    print("  num elements:", mesh.num_elements,
-          " num faces:", mesh.num_faces)
+
+    nvtx.push_range("halo_setup")
+    var halo = HaloExchange(
+        ctx, mesh.part, Euler.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+    )
+    nvtx.pop_range()
+
+    if rank == 0:
+        print("  proc-grid: ",
+              mesh.part.px, "x", mesh.part.py, "x", mesh.part.pz,
+              "  owned cubes per rank: ",
+              mesh.part.nx, "x", mesh.part.ny, "x", mesh.part.nz)
+        print("  per-rank: ", mesh.num_owned_elements,
+              "owned elements (halo=", mesh.num_halo_elements,
+              ", interior=", mesh.num_interior_elements, ")")
 
     var physics = Euler(
         GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True
@@ -158,19 +192,22 @@ def main() raises:
 
     nvtx.push_range("solver_setup")
     var solver = Solver[Euler](
-        ctx^, mesh^, physics^, refs.D_ref^, refs.Lift_ref^,
+        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^,
     )
     nvtx.pop_range()
 
     nvtx.push_range("initial_condition")
     solver.ctx.enqueue_function[vortex_ic_kernel, vortex_ic_kernel](
         solver.d_q.unsafe_ptr(),
-        solver.mesh.d_elem_node_xyz.unsafe_ptr(),
-        solver.total_dof,
+        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        solver.num_owned_elements,
         VORTEX_X0, VORTEX_Y0,
         UBG, VBG, WBG,
         GAMMA, VORTEX_EPS,
-        grid_dim=ceildiv(solver.total_dof, IC_BLOCK),
+        grid_dim=ceildiv(
+            solver.num_owned_elements * N_P, IC_BLOCK
+        ),
         block_dim=IC_BLOCK,
     )
     solver.ctx.synchronize()
@@ -180,19 +217,23 @@ def main() raises:
     var writer = FrameWriter[Euler](solver, nvtx, component=0)
 
     var dt = choose_dt()
-    print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
+    if rank == 0:
+        print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
     var result = run_ssprk3_loop[Euler](
         solver, writer, dt, T_FINAL, NUM_FRAMES, nvtx,
     )
-    print("  final sync:", result.final_sync_sec, "s")
 
     writer.finalize("output/solution.pvd", nvtx)
 
-    print("  total steps:", result.total_steps,
-          " wall time:", result.wall_sec, "s")
-    print("    step-loop time (enqueue only, no sync):",
-          result.step_loop_sec, "s")
-    print("    frame-write time (download + VTU):",
-          result.frame_write_sec, "s")
-    print("  wrote output/solution.pvd")
+    if rank == 0:
+        print("  final sync:", result.final_sync_sec, "s")
+        print("  total steps:", result.total_steps,
+              " wall time:", result.wall_sec, "s")
+        print("    step-loop time (enqueue only, no sync):",
+              result.step_loop_sec, "s")
+        print("    frame-write time (download + VTU):",
+              result.frame_write_sec, "s")
+        print("  wrote output/solution.pvd")
+
+    mpi.finalize()

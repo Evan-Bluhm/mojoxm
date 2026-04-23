@@ -193,6 +193,12 @@ struct HaloExchange(Movable):
     # (saves 12 D/H copies per exchange).  Otherwise we stage through
     # pinned HostBuffers.
     var cuda_aware: Bool
+    # True if any of the 6 rings has a non-zero count.  At np=1 with a
+    # single-patch mesh (no ghost ring), every ring is empty and the
+    # whole exchange -- pack, MPI, unpack -- becomes a no-op.  We cache
+    # this flag so submit_pack / complete_exchange can short-circuit
+    # without iterating the ring list.
+    var has_halo: Bool
 
     # 6 neighbour ranks in the order [-x, +x, -y, +y, -z, +z].
     var neighbour: List[Int]
@@ -225,11 +231,6 @@ struct HaloExchange(Movable):
     ) raises:
         self.nc = nc
         self.cuda_aware = mpi.is_cuda_aware()
-        var nx = part.nx
-        var ny = part.ny
-        var nz = part.nz
-        var loc_nx = nx + 2
-        var loc_ny = ny + 2
 
         self.neighbour = List[Int]()
         self.neighbour.append(part.neighbour_minus_x)
@@ -239,9 +240,6 @@ struct HaloExchange(Movable):
         self.neighbour.append(part.neighbour_minus_z)
         self.neighbour.append(part.neighbour_plus_z)
 
-        var axes = [0, 0, 1, 1, 2, 2]
-        var signs = [-1, 1, -1, 1, -1, 1]
-
         self.ring_count = List[Int]()
         self.d_pack_idx   = List[DeviceBuffer[halo_i]]()
         self.d_unpack_idx = List[DeviceBuffer[halo_i]]()
@@ -249,6 +247,26 @@ struct HaloExchange(Movable):
         self.d_recv_buf   = List[DeviceBuffer[halo_f]]()
         self.h_send_buf   = List[HostBuffer[halo_f]]()
         self.h_recv_buf   = List[HostBuffer[halo_f]]()
+        self.req_storage = alloc[Int64](12)
+
+        # Single-patch fast path: the Mesh at np=1 has no ghost ring,
+        # so no halo exchange is ever needed.  Skip all the per-direction
+        # pack/unpack setup and record has_halo=False so submit_pack /
+        # complete_exchange short-circuit at runtime.
+        if part.px * part.py * part.pz == 1:
+            for _ in range(6):
+                self.ring_count.append(0)
+            self.has_halo = False
+            return
+
+        var nx = part.nx
+        var ny = part.ny
+        var nz = part.nz
+        var loc_nx = nx + 2
+        var loc_ny = ny + 2
+
+        var axes = [0, 0, 1, 1, 2, 2]
+        var signs = [-1, 1, -1, 1, -1, 1]
 
         for d in range(6):
             var owned_list = List[Int32]()
@@ -267,7 +285,7 @@ struct HaloExchange(Movable):
                 )
             self.ring_count.append(n_owned)
             # Upload the build-time (pre-permutation) IDs, then remap
-            # through the PatchMesh element permutation so references
+            # through the Mesh element permutation so references
             # match the reordered mesh arrays.
             var d_pack = _upload_i32(ctx, owned_list)
             var d_unpack = _upload_i32(ctx, ghost_list)
@@ -300,7 +318,11 @@ struct HaloExchange(Movable):
                 )
 
         ctx.synchronize()
-        self.req_storage = alloc[Int64](12)
+
+        var total_ring: Int = 0
+        for d in range(6):
+            total_ring += self.ring_count[d]
+        self.has_halo = total_ring > 0
 
     def submit_pack(
         mut self,
@@ -315,6 +337,12 @@ struct HaloExchange(Movable):
         Must be paired with `complete_exchange()` before any compute
         that reads ghost q values.
         """
+        if not self.has_halo:
+            # Nothing to pack / send.  At np=1 with a single-patch mesh
+            # there are no ghost elements to update, and mpi.waitall
+            # over zero requests would read uninitialised req_storage
+            # slots -- skip the whole exchange.
+            return
         # ---- Phase 1: pack on GPU --------------------------------
         # If MPI is CUDA-aware the Isend/Irecv below use device
         # pointers directly -- no D<->H copy needed.  Otherwise we
@@ -374,6 +402,8 @@ struct HaloExchange(Movable):
         after ghost q values are visible to subsequent kernel
         launches on the default stream.
         """
+        if not self.has_halo:
+            return
         # Wait for the 12 non-blocking MPI ops posted in submit_pack.
         mpi.waitall(12, self.req_storage)
 

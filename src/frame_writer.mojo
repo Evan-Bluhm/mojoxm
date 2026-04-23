@@ -1,17 +1,28 @@
 # ======================================================================
-# FrameWriter -- single-field VTU frame output for single-rank drivers
+# FrameWriter -- per-rank single-field VTU frame output
 # ======================================================================
 #
-# Pulls together the three objects every non-MPI driver used to build
-# by hand (VtuWriter + AsyncWriter + a persistent scalar snapshot
-# buffer), plus the per-frame and shutdown logic, into one type that
-# a driver instantiates once and hands to the time integrator.
+# Pulls together the three objects every driver used to build by hand
+# (VtuWriter + AsyncWriter + a persistent scalar snapshot buffer),
+# plus the per-frame and shutdown logic, into one type that a driver
+# instantiates once and hands to the time integrator.
 #
 # Usage:
 #   var writer = FrameWriter[Euler](solver, nvtx, component=0)
 #   writer.write_frame(solver, t=0.0, nvtx)
 #   ...
 #   writer.finalize("output/solution.pvd", nvtx)
+#
+# Multi-rank runs
+# ---------------
+# FrameWriter reads `solver.mesh.part.rx/ry/rz` and `px/py/pz` to detect
+# whether it's running inside an MPI allocation.  At np=1 it writes
+# into `output/` with filenames `frame_NNNNN.vtu` and `solution.pvd`
+# (unchanged from the pre-MPI-unification layout).  At np>1 each rank
+# writes into `output/rank_NNN/` so file names don't collide, and the
+# `finalize()` path is still a per-rank `solution.pvd` that references
+# only that rank's VTU files.  ParaView can open any rank's pvd to
+# inspect just that patch.
 #
 # NVTX ranges owned by this module (pushed internally; drivers don't
 # need to):
@@ -43,17 +54,36 @@ struct FrameWriter[PhysT: Physics](Movable):
         max_concurrent: Int = 8,
     ) raises:
         nvtx.push_range("init_frame_writer")
+        # Per-rank VTU: show only this rank's owned elements.  At np=1
+        # that is the entire mesh; at np>1 each rank writes its own
+        # file with no ghost geometry.
         self._vtu = VtuWriter(
-            solver.mesh.num_elements, solver.mesh.elem_node_xyz_f32_ptr
+            solver.mesh.num_owned_elements,
+            solver.mesh.owned_node_xyz_f32_ptr,
         )
         self._aw = AsyncWriter(max_concurrent=max_concurrent)
         self._snapshot = List[Float32]()
-        for _ in range(solver.total_dof):
+        for _ in range(solver.total_owned_dof):
             self._snapshot.append(Float32(0.0))
         self._paths = List[String]()
         self._times = List[Float64]()
         self._component = component
-        self._output_dir = output_dir
+
+        # At np>1 direct output to a per-rank subdirectory so the frame
+        # filenames don't collide across ranks.  The rank-zero run
+        # keeps the legacy flat `output/frame_NNNNN.vtu` layout.
+        var part = solver.mesh.part.copy()
+        var nprocs = part.px * part.py * part.pz
+        if nprocs > 1:
+            var rank = ((part.rx * part.py) + part.ry) * part.pz + part.rz
+            var sr = String(rank)
+            var r_pad = String()
+            for _ in range(3 - sr.byte_length()):
+                r_pad += "0"
+            r_pad += sr
+            self._output_dir = output_dir + "/rank_" + r_pad
+        else:
+            self._output_dir = output_dir
         nvtx.pop_range()
 
     def write_frame(
@@ -66,7 +96,9 @@ struct FrameWriter[PhysT: Physics](Movable):
         (path, time) for the eventual PVD collection file.  The frame
         index is derived from the number of frames written so far."""
         nvtx.push_range("write_frame")
-        solver.download_component(self._component, self._snapshot, nvtx)
+        solver.download_owned_component(
+            self._component, self._snapshot, nvtx,
+        )
         var frame_id = len(self._paths)
         var fname = String("frame_")
         var sid = String(frame_id)
@@ -90,13 +122,27 @@ struct FrameWriter[PhysT: Physics](Movable):
         mut nvtx: NvtxContext,
     ) raises:
         """Block until every outstanding async write has flushed, then
-        write the ParaView collection file.  Returns nothing; callers
-        that want the wait time can bracket this with perf_counter_ns
-        themselves or use TimeLoopResult from the time integrator."""
+        write the ParaView collection file.  At np>1 each rank writes
+        its own per-rank pvd under its rank_NNN subdirectory so the
+        user can open any rank's file independently in ParaView."""
         nvtx.push_range("wait_async_writes")
         self._aw.wait_all()
         nvtx.pop_range()
-        write_pvd(pvd_path, self._paths, self._times)
+
+        # The caller passes an np=1-style "output/solution.pvd" path.
+        # If we redirected frames into a per-rank subdir above, write
+        # the pvd there too (with just the basename preserved) so its
+        # relative frame_NNNNN.vtu references still resolve.
+        var base_idx = pvd_path.byte_length()
+        for i in range(pvd_path.byte_length() - 1, -1, -1):
+            if String(pvd_path[byte=i]) == "/":
+                base_idx = i + 1
+                break
+        var basename = String()
+        for i in range(base_idx, pvd_path.byte_length()):
+            basename += String(pvd_path[byte=i])
+        var dst = self._output_dir + "/" + basename
+        write_pvd(dst, self._paths, self._times)
 
     def num_frames_written(self) -> Int:
         return len(self._paths)

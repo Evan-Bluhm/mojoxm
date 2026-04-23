@@ -432,7 +432,7 @@ def to_float32(src: List[Float64]) raises -> List[Float32]:
 
 
 # One-shot helper for drivers: build the P2 reference element, extract the
-# two Float32-quantized operator arrays needed by Solver / PatchSolver, and
+# two Float32-quantized operator arrays needed by the Solver, and
 # push the `reference_element` NVTX range around it.  Drivers previously
 # called ReferenceElement() and to_float32 twice each; this collapses that
 # to a single call.
