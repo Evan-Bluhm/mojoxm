@@ -27,6 +27,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
+from src.boundary import BC_INTERIOR, BC_WALL, BC_OUTFLOW
 
 
 # ----------------------------------------------------------------------
@@ -59,6 +60,21 @@ trait Physics2D(Copyable, Movable, ImplicitlyDestructible):
         """Fills flux[c] for c in range(NC).  Returns max |wave speed|
         at the interface (Rusanov / Lax-Friedrichs dissipation needs
         this)."""
+        ...
+
+    def boundary_flux(
+        self,
+        q_int: UnsafePointer[Float64, MutAnyOrigin],
+        bc_type: Int32,
+        nx: Float64, ny: Float64,
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        """Face flux on a non-periodic boundary edge.  `q_int` is the
+        interior element's state at the face node; the (non-existent)
+        ghost side is derived from `bc_type` (BC_WALL, BC_OUTFLOW, ...
+        from src.boundary).  The outward normal (nx, ny) points from
+        interior to ghost.  Fills `flux[c]` for c in range(NC); returns
+        max |wave speed|."""
         ...
 
     def source_term(
@@ -105,6 +121,27 @@ struct Advection2D(Physics2D, ImplicitlyCopyable, Movable):
             flux[0] = vn * q_l[0]
         else:
             flux[0] = vn * q_r[0]
+        return abs_vn
+
+    def boundary_flux(
+        self,
+        q_int: UnsafePointer[Float64, MutAnyOrigin],
+        bc_type: Int32,
+        nx: Float64, ny: Float64,
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        var vn = self.vx * nx + self.vy * ny
+        var abs_vn = vn if vn >= 0.0 else -vn
+        if bc_type == BC_OUTFLOW:
+            # Zero-gradient: ghost = interior.  Upwind becomes
+            # interior-side on outflow, zero on inflow.
+            flux[0] = vn * q_int[0]
+        else:
+            # BC_WALL and anything else: zero-Dirichlet ghost.
+            if vn >= 0.0:
+                flux[0] = vn * q_int[0]
+            else:
+                flux[0] = 0.0
         return abs_vn
 
     def source_term(
@@ -190,6 +227,38 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
             flux[c] = 0.5 * (Fn_l + Fn_r) - 0.5 * alpha * (q_r[c] - q_l[c])
         return alpha
 
+    def boundary_flux(
+        self,
+        q_int: UnsafePointer[Float64, MutAnyOrigin],
+        bc_type: Int32,
+        nx: Float64, ny: Float64,
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        # Build a ghost state q_ghost based on bc_type, then call the
+        # interior numerical flux with (q_int, q_ghost).  Mirrors the
+        # 3D Euler convention.
+        var q_g_buf = InlineArray[Float64, 4](fill=0.0)
+        if bc_type == BC_WALL:
+            # Reflect normal momentum: q_ghost has (rho, m_t, -m_n, E).
+            # In (x, y) coords with normal (nx, ny):
+            #   m_n = mx * nx + my * ny
+            #   m_ghost = m - 2 m_n * (nx, ny)
+            var mx = q_int[1]
+            var my = q_int[2]
+            var m_n = mx * nx + my * ny
+            q_g_buf[0] = q_int[0]
+            q_g_buf[1] = mx - 2.0 * m_n * nx
+            q_g_buf[2] = my - 2.0 * m_n * ny
+            q_g_buf[3] = q_int[3]
+        else:
+            # BC_OUTFLOW (default): zero-gradient ghost.
+            for c in range(4):
+                q_g_buf[c] = q_int[c]
+        var q_g = rebind[UnsafePointer[Float64, MutAnyOrigin]](
+            q_g_buf.unsafe_ptr()
+        )
+        return self.numerical_flux(q_int, q_g, nx, ny, flux)
+
     def source_term(
         self,
         q: UnsafePointer[Float64, MutAnyOrigin],
@@ -264,6 +333,30 @@ struct ShallowWater2D(Physics2D, ImplicitlyCopyable, Movable):
             var Fn_r = f_r[0 * 3 + c] * nx + f_r[1 * 3 + c] * ny
             flux[c] = 0.5 * (Fn_l + Fn_r) - 0.5 * alpha * (q_r[c] - q_l[c])
         return alpha
+
+    def boundary_flux(
+        self,
+        q_int: UnsafePointer[Float64, MutAnyOrigin],
+        bc_type: Int32,
+        nx: Float64, ny: Float64,
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        var q_g_buf = InlineArray[Float64, 3](fill=0.0)
+        if bc_type == BC_WALL:
+            # Reflect normal momentum (depth unchanged).
+            var mx = q_int[1]
+            var my = q_int[2]
+            var m_n = mx * nx + my * ny
+            q_g_buf[0] = q_int[0]
+            q_g_buf[1] = mx - 2.0 * m_n * nx
+            q_g_buf[2] = my - 2.0 * m_n * ny
+        else:
+            for c in range(3):
+                q_g_buf[c] = q_int[c]
+        var q_g = rebind[UnsafePointer[Float64, MutAnyOrigin]](
+            q_g_buf.unsafe_ptr()
+        )
+        return self.numerical_flux(q_int, q_g, nx, ny, flux)
 
     def source_term(
         self,

@@ -58,3 +58,25 @@ struct BoundaryConditions(ImplicitlyCopyable, Movable):
             and self.bc_y_lo == BC_INTERIOR and self.bc_y_hi == BC_INTERIOR
             and self.bc_z_lo == BC_INTERIOR and self.bc_z_hi == BC_INTERIOR
         )
+
+
+# ----------------------------------------------------------------------
+# 2D version.  Just drops the z-axis pair.  Same BC kind catalogue.
+# ----------------------------------------------------------------------
+
+@fieldwise_init
+struct BoundaryConditions2D(ImplicitlyCopyable, Movable):
+    var bc_x_lo: Int32
+    var bc_x_hi: Int32
+    var bc_y_lo: Int32
+    var bc_y_hi: Int32
+
+    @staticmethod
+    def periodic() -> Self:
+        return Self(BC_INTERIOR, BC_INTERIOR, BC_INTERIOR, BC_INTERIOR)
+
+    def all_periodic(self) -> Bool:
+        return (
+            self.bc_x_lo == BC_INTERIOR and self.bc_x_hi == BC_INTERIOR
+            and self.bc_y_lo == BC_INTERIOR and self.bc_y_hi == BC_INTERIOR
+        )
