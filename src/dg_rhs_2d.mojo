@@ -407,18 +407,28 @@ def dg_rhs_2d[P: Int, PhysT: Physics2D](
         var e_r = Int(mesh.face_elem[fid * 2 + 1])
         var nx = mesh.face_normal[fid * 2 + 0]
         var ny = mesh.face_normal[fid * 2 + 1]
+        var bc_type = mesh.face_bc_type[fid]
         for m in range(NFP):
             var n_l = Int(mesh.face_elem_node[(fid * 2 + 0) * NFP + m])
-            var n_r = Int(mesh.face_elem_node[(fid * 2 + 1) * NFP + m])
             var q_l_off = (e_l * NP + n_l) * NC
-            var q_r_off = (e_r * NP + n_r) * NC
             var flux_off = (fid * NFP + m) * NC
-            _ = physics.numerical_flux(
-                q_ptr + q_l_off,
-                q_ptr + q_r_off,
-                nx, ny,
-                fstar_ptr + flux_off,
-            )
+            if bc_type != Int32(0):
+                _ = physics.boundary_flux(
+                    q_ptr + q_l_off,
+                    bc_type, nx, ny,
+                    fstar_ptr + flux_off,
+                )
+            else:
+                var n_r = Int(
+                    mesh.face_elem_node[(fid * 2 + 1) * NFP + m]
+                )
+                var q_r_off = (e_r * NP + n_r) * NC
+                _ = physics.numerical_flux(
+                    q_ptr + q_l_off,
+                    q_ptr + q_r_off,
+                    nx, ny,
+                    fstar_ptr + flux_off,
+                )
 
     # 2) Per-element volume + face summations.
     for elem in range(mesh.num_elements):

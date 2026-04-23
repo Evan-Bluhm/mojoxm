@@ -38,6 +38,9 @@
 from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
+from src.boundary import (
+    BoundaryConditions2D, BC_INTERIOR, BC_WALL, BC_OUTFLOW,
+)
 from std.math import sqrt
 
 
@@ -96,11 +99,15 @@ struct LocalMesh2D[P: Int = 2](Movable):
     var face_elem_node: List[Int32]
     var face_normal: List[Float64]
     var face_length: List[Float64]
+    # BC kind per face (BC_INTERIOR = 0 for all interior / periodic-wrap
+    # faces; non-zero for boundary faces dispatched to physics.boundary_flux).
+    var face_bc_type: List[Int32]
 
     def __init__(
         out self,
         Nx: Int, Ny: Int,
         Lx: Float64, Ly: Float64,
+        bcs: BoundaryConditions2D = BoundaryConditions2D.periodic(),
     ) raises:
         self.Nx = Nx
         self.Ny = Ny
@@ -109,7 +116,13 @@ struct LocalMesh2D[P: Int = 2](Movable):
         self.dx = Lx / Float64(Nx)
         self.dy = Ly / Float64(Ny)
         self.num_elements = Nx * Ny * TRIS_PER_CELL
-        self.num_faces = Nx * Ny * FACES_PER_CELL
+        var nf_periodic = Nx * Ny * FACES_PER_CELL
+        # Each non-periodic "-" axis needs an extra face per boundary
+        # cell (the +axis face is already allocated in the periodic
+        # ring; we just override its bc_type).
+        var extra_mx = Ny if bcs.bc_x_lo != BC_INTERIOR else 0
+        var extra_my = Nx if bcs.bc_y_lo != BC_INTERIOR else 0
+        self.num_faces = nf_periodic + extra_mx + extra_my
 
         var NP_p = Self.NP
         var NFP_e = Self.NFP_edge
@@ -190,6 +203,7 @@ struct LocalMesh2D[P: Int = 2](Movable):
         self.face_elem_node = _zeros_i32(self.num_faces * 2 * NFP_e)
         self.face_normal = _zeros_f64(self.num_faces * 2)
         self.face_length = _zeros_f64(self.num_faces)
+        self.face_bc_type = _zeros_i32(self.num_faces)
         self.elem_faces = _zeros_i32(self.num_elements * 3)
         self.elem_face_side = _zeros_i32(self.num_elements * 3)
         self.elem_canon_to_ref = _zeros_i32(self.num_elements * 3 * NFP_e)
@@ -297,3 +311,90 @@ struct LocalMesh2D[P: Int = 2](Movable):
                         self.elem_canon_to_ref[
                             (e1_owner * 3 + e1_lf) * NFP_e + m
                         ] = Int32(NFP_e - 1 - m)
+
+        # --- BC overlay ------------------------------------------------
+        # For non-periodic axes we stamp a bc_type onto the existing
+        # outer-ring faces (+x, +y) and allocate fresh faces for the
+        # -x / -y boundaries (whose interior triangles would otherwise
+        # point at the wrap-around neighbour in the periodic mesh).
+        # The "+" overlay is easy: the existing face's side 0 already
+        # points at the outgoing boundary triangle (cell Nx-1 for +x,
+        # cell Ny-1 for +y); we just set bc_type so the solver
+        # dispatches to physics.boundary_flux instead of numerical_flux.
+        if bcs.bc_x_hi != BC_INTERIOR:
+            for j in range(Ny):
+                var cell = j * Nx + (Nx - 1)
+                var fid = cell * FACES_PER_CELL + 1   # ft 1 = +x
+                # Safe no-op dereference of side 1 (points at cell 0 T1;
+                # the solver's boundary_flux ignores q_r).
+                self.face_elem[fid * 2 + 1] = self.face_elem[fid * 2 + 0]
+                self.face_bc_type[fid] = bcs.bc_x_hi
+        if bcs.bc_y_hi != BC_INTERIOR:
+            for i in range(Nx):
+                var cell = (Ny - 1) * Nx + i
+                var fid = cell * FACES_PER_CELL + 2   # ft 2 = +y
+                self.face_elem[fid * 2 + 1] = self.face_elem[fid * 2 + 0]
+                self.face_bc_type[fid] = bcs.bc_y_hi
+
+        # For the "-" overlay we allocate fresh face IDs after the
+        # periodic ring.  For each boundary cell's T1 (-x side) or T0
+        # (-y side) we create a new face whose side 0 is that triangle,
+        # normal negated to point outward from the interior, and
+        # re-target the triangle's edge-2 / edge-0 slot at the new
+        # face.  This mirrors the 3D apply_minus_{x,y,z}_bc_kernel
+        # overlay in src/local_mesh.mojo.
+        if bcs.bc_x_lo != BC_INTERIOR:
+            var mx_base = nf_periodic
+            for j in range(Ny):
+                var cell = j * Nx + 0
+                var elem = cell * TRIS_PER_CELL + 1   # T1 owns -x edge
+                var new_fid = mx_base + j
+                var lf = 2                            # T1's edge 2 = -x
+                self.face_elem[new_fid * 2 + 0] = Int32(elem)
+                self.face_elem[new_fid * 2 + 1] = Int32(elem)
+                # Normal points outward from the interior: (-1, 0) for
+                # -x.  face_length same as +x.
+                self.face_normal[new_fid * 2 + 0] = -1.0
+                self.face_normal[new_fid * 2 + 1] = 0.0
+                self.face_length[new_fid] = self.dy
+                self.face_bc_type[new_fid] = bcs.bc_x_lo
+                # Retarget T1's edge-2 slot at the new face, side 0.
+                self.elem_faces[elem * 3 + lf] = Int32(new_fid)
+                self.elem_face_side[elem * 3 + lf] = Int32(0)
+                for m in range(NFP_e):
+                    var nn = Int(re.edge_to_elem[lf * NFP_e + m])
+                    self.face_elem_node[
+                        (new_fid * 2 + 0) * NFP_e + m
+                    ] = Int32(nn)
+                    self.face_elem_node[
+                        (new_fid * 2 + 1) * NFP_e + m
+                    ] = Int32(nn)
+                    self.elem_canon_to_ref[
+                        (elem * 3 + lf) * NFP_e + m
+                    ] = Int32(m)
+        if bcs.bc_y_lo != BC_INTERIOR:
+            var my_base = nf_periodic + extra_mx
+            for i in range(Nx):
+                var cell = 0 * Nx + i
+                var elem = cell * TRIS_PER_CELL + 0   # T0 owns -y edge
+                var new_fid = my_base + i
+                var lf = 0                            # T0's edge 0 = -y
+                self.face_elem[new_fid * 2 + 0] = Int32(elem)
+                self.face_elem[new_fid * 2 + 1] = Int32(elem)
+                self.face_normal[new_fid * 2 + 0] = 0.0
+                self.face_normal[new_fid * 2 + 1] = -1.0
+                self.face_length[new_fid] = self.dx
+                self.face_bc_type[new_fid] = bcs.bc_y_lo
+                self.elem_faces[elem * 3 + lf] = Int32(new_fid)
+                self.elem_face_side[elem * 3 + lf] = Int32(0)
+                for m in range(NFP_e):
+                    var nn = Int(re.edge_to_elem[lf * NFP_e + m])
+                    self.face_elem_node[
+                        (new_fid * 2 + 0) * NFP_e + m
+                    ] = Int32(nn)
+                    self.face_elem_node[
+                        (new_fid * 2 + 1) * NFP_e + m
+                    ] = Int32(nn)
+                    self.elem_canon_to_ref[
+                        (elem * 3 + lf) * NFP_e + m
+                    ] = Int32(m)

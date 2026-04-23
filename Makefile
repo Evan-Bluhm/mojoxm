@@ -87,7 +87,7 @@ ALL_DRIVERS  = $(CPU_DRIVERS) $(GPU_DRIVERS)
 # that the test harness diffs across rank counts.
 TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-diagnostics test-p3 test-all test-klone
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-mesh-2d-bc test-diagnostics test-p3 test-all test-klone
 
 help:
 	@echo 'mojoxm build targets'
@@ -183,6 +183,13 @@ test-euler2d:
 test-shallow-water-2d:
 	.venv/bin/mojo run -I . test/shallow_water_2d_test.mojo
 
+# Non-periodic 2D BC overlay sanity: wall BCs on all four sides produce
+# the expected face count (3 Nx Ny + Nx + Ny) and at-rest states for
+# ShallowWater2D / Euler2D give rhs = 0 to roundoff (wall reflection
+# cancels symmetrically).
+test-mesh-2d-bc:
+	.venv/bin/mojo run -I . test/mesh_2d_bc_test.mojo
+
 # GPU diagnostics writer test: uniform-field integrals recover
 # analytic values; max_abs reports the peak on a checkerboard field;
 # empty configuration doesn't crash.  Runs at np=1.
@@ -199,7 +206,7 @@ test-p3: p3_smoke_test
 
 # Convenience target: run every test in the suite.  Stops on the first
 # failure.  Doesn't include test-klone (that's for cluster submission).
-test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-diagnostics test-p3 test test-bc
+test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-mesh-2d-bc test-diagnostics test-p3 test test-bc
 	@echo '=== ALL TESTS PASSED ==='
 
 test-klone:
