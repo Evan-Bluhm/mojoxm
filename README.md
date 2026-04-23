@@ -3,7 +3,7 @@
 A minimum viable GPU-accelerated [discontinuous
 Galerkin](https://en.wikipedia.org/wiki/Discontinuous_Galerkin_method)
 finite-element solver in [Mojo](https://docs.modular.com/mojo/manual),
-inspired by [WARPXM](https://github.com/orgs/iws-hyperion/repositories).
+inspired by [WARPXM](https://doi.org/10.1016/j.cpc.2010.12.048).
 
 The solver is parameterized by a `Physics` trait; each simulation is
 its own single-file Mojo driver that composes a mesh, a physics type,
