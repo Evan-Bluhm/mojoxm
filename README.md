@@ -68,9 +68,21 @@ Nine reference drivers under `examples/`:
   Lagrange basis, mass, stiffness, and lift operators at arbitrary
   order via Vandermonde inverse + analytic integration. Node ordering
   matches VTK_LAGRANGE_TETRAHEDRON and is back-compatible with
-  VTK_QUADRATIC_TETRA at P=2. Full propagation of `P` through the
-  mesh / solver / VTU layers is pending; today every driver runs at
-  P=2.
+  VTK_QUADRATIC_TETRA at P=2. `P` is now a comptime parameter on
+  every 3D struct (`Mesh[P]`, `LocalMesh[P]`, `Solver[PhysT, P]`,
+  `FrameWriter[PhysT, P]`, `DiagnosticsWriter[PhysT, P]`); `make test-p3`
+  round-trips a scalar field through the full Mesh[3] + Solver pipeline.
+- **Shock limiter (3D)**: `Solver.enable_cell_limiter(eps)` turns on a
+  Venkatakrishnan-smoothed Barth-Jespersen slope limiter that runs
+  after every RK stage.  Brings classical Sod to T=0.20 with left
+  rho = 0.998, right rho = 0.119 (within ~0.2%/5% of exact).
+- **2D triangular elements (CPU)**: parallel stack at `src/reference_2d.mojo`
+  / `local_mesh_2d.mojo` / `dg_rhs_2d.mojo` / `vtu_2d.mojo`.
+  `Physics2D` trait + Advection2D / Euler2D / ShallowWater2D; periodic
+  and wall / outflow BCs; SSPRK2, SSPRK3, RK4 time integrators.
+  Drivers emit ParaView-visualisable VTU frames; `scripts/animate_2d.py`
+  turns them into MP4 via matplotlib + ffmpeg.  GPU port of the 2D
+  stack is future work.
 
 ## Numerical scheme
 
