@@ -23,7 +23,7 @@ from std.math import sqrt, exp, pi
 from std.pathlib import Path
 from src.local_mesh_2d import LocalMesh2D
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d
-from src.dg_rhs_2d import advection_rhs_2d, ssprk3_step_2d
+from src.dg_rhs_2d import Advection2D, ssprk3_step_2d
 from src.vtu_2d import dump_vtu_2d_frame
 
 
@@ -109,10 +109,11 @@ def main() raises:
     paths.append(String("frame_2d_00000.vtu"))
     times.append(0.0)
 
+    var physics = Advection2D(VX, VY)
     for fi in range(1, NUM_FRAMES + 1):
         for _ in range(steps_per_frame):
-            ssprk3_step_2d[P](
-                mesh, re, VX, VY, dt_used,
+            ssprk3_step_2d[P, Advection2D](
+                mesh, re, physics, dt_used,
                 q, s_q1, s_q2, s_rhs,
             )
         var t = Float64(fi) * Float64(steps_per_frame) * dt_used

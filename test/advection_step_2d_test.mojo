@@ -22,7 +22,7 @@
 from std.math import sqrt, exp, pi
 from src.local_mesh_2d import LocalMesh2D
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d
-from src.dg_rhs_2d import advection_rhs_2d, ssprk3_step_2d
+from src.dg_rhs_2d import Advection2D, ssprk3_step_2d
 
 
 comptime LX = 1.0
@@ -82,9 +82,10 @@ def run[P: Int](Nx: Int, Ny: Int, cfl: Float64) raises:
     var used_dt = T_FINAL / Float64(num_steps)
     print("    dt=", used_dt, " num_steps=", num_steps)
 
+    var physics = Advection2D(VX, VY)
     for _ in range(num_steps):
-        ssprk3_step_2d[P](
-            mesh, re, VX, VY, used_dt,
+        ssprk3_step_2d[P, Advection2D](
+            mesh, re, physics, used_dt,
             q, s_q1, s_q2, s_rhs,
         )
 
