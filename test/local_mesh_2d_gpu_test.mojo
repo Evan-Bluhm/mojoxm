@@ -27,10 +27,11 @@ from src.local_mesh_2d_gpu import (
     launch_advection_lift_combine_2d, launch_rk_update_2d,
     advection_rk_stage_2d, euler_rk_stage_2d, euler_rk_stage_hllc_2d,
     sw_rk_stage_2d, mhd_rk_stage_2d,
+    bj_limit_full_2d,
 )
 from src.dg_rhs_2d import (
     Advection2D, Euler2D, ShallowWater2D, IdealMHD2D,
-    dg_rhs_2d, ssprk3_step_2d,
+    dg_rhs_2d, ssprk3_step_2d, bj_limit_2d,
 )
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
@@ -882,6 +883,62 @@ def check[P: Int]() raises:
         raise Error(
             "GPU MHD SSPRK3 step vs CPU: max err "
             + String(max_mhd_err)
+        )
+
+    # ---- BJ slope limiter (GPU vs CPU) -----------------------------
+    # 4-component IC with a bump on rho and proportional momentum / E so
+    # the limiter has something to chew on.  Uses a tanh-smoothed jump
+    # to mimic a near-discontinuity without triggering floor logic.
+    var q_bj_f32 = List[Float32]()
+    var q_bj_f64 = List[Float64]()
+    for elem in range(gpu.num_elements):
+        for nn in range(NP_p):
+            var x = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
+            var rho = 1.0 + 0.5 * (0.5 + 0.5 * (x - 0.5) * 8.0)
+            # Clip to [0.8, 1.2] via saturating tanh-like behaviour.
+            if rho > 1.5: rho = 1.5
+            if rho < 0.5: rho = 0.5
+            var u = 0.2
+            var v = 0.1
+            var p = 1.0
+            var E = p / 0.4 + 0.5 * rho * (u * u + v * v)
+            q_bj_f64.append(rho);      q_bj_f32.append(Float32(rho))
+            q_bj_f64.append(rho * u);  q_bj_f32.append(Float32(rho * u))
+            q_bj_f64.append(rho * v);  q_bj_f32.append(Float32(rho * v))
+            q_bj_f64.append(E);        q_bj_f32.append(Float32(E))
+
+    # Upload, limit on GPU, download.
+    var n_bj = gpu.num_elements * NP_p * 4
+    var d_qbj = ctx.enqueue_create_buffer[DType.float32](n_bj)
+    var d_ca  = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_elements * 4
+    )
+    var hbuf_qbj = ctx.enqueue_create_host_buffer[DType.float32](n_bj)
+    var hptr_qbj = hbuf_qbj.unsafe_ptr()
+    for k in range(n_bj):
+        hptr_qbj[k] = q_bj_f32[k]
+    ctx.enqueue_copy(d_qbj, hbuf_qbj)
+    bj_limit_full_2d[P, 4](
+        ctx, gpu, d_qbj.unsafe_ptr(), d_ca.unsafe_ptr(),
+        Float32(0.1),
+    )
+    ctx.enqueue_copy(hbuf_qbj, d_qbj)
+    ctx.synchronize()
+
+    # CPU reference (Float64).
+    var phys_bj = Euler2D(1.4, 1.0e-8, 1.0e-8)
+    bj_limit_2d[P, Euler2D](host2, q_bj_f64, 0.1)
+
+    var max_bj_err: Float32 = 0.0
+    for k in range(n_bj):
+        var diff = Float32(q_bj_f64[k]) - hptr_qbj[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_bj_err:
+            max_bj_err = adiff
+    print("    BJ limiter (CPU f64 vs GPU f32) max err =", max_bj_err)
+    if max_bj_err > Float32(1.0e-4):
+        raise Error(
+            "GPU BJ limiter vs CPU: max err " + String(max_bj_err)
         )
 
 
