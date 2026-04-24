@@ -455,18 +455,12 @@ def _face_to_element_node(
         out.append(Int32(-1))
 
     for f in range(4):
-        # Other three vertices in ascending order.
-        var vA = 0
-        var vB = 0
-        var vC = 0
-        if f == 0:
-            vA = 1; vB = 2; vC = 3
-        elif f == 1:
-            vA = 0; vB = 2; vC = 3
-        elif f == 2:
-            vA = 0; vB = 1; vC = 3
-        else:
-            vA = 0; vB = 1; vC = 2
+        # Other three vertices in ascending order: whichever values in
+        # {0, 1, 2, 3} are not equal to f.  Each index shifts down by
+        # one past f so the result is strictly increasing.
+        var vA = 1 if f == 0 else 0
+        var vB = 2 if f <= 1 else 1
+        var vC = 3 if f <= 2 else 2
 
         # Face-local node 0, 1, 2: the three vertices.
         for (l_idx, v_idx) in [(0, vA), (1, vB), (2, vC)]:
@@ -538,7 +532,7 @@ struct ReferenceElement[P: Int = 2](Copyable, Movable):
     var face_to_elem: List[Int32]
 
     def __init__(out self) raises:
-        alias Pval = Self.P
+        comptime Pval = Self.P
         var N_P_P = num_tet_nodes(Pval)
         var N_FP_P = num_tri_nodes(Pval)
 

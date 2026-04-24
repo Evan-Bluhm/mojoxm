@@ -325,7 +325,6 @@ def _canon_face_barycentric(m: Int, P: Int) raises -> List[Int]:
     weights (b0, b1, b2) relative to the 3 canon face-vertices
     (summing to P).  Ordering matches `src.reference._face_to_element_node`:
     vertex 0, vertex 1, vertex 2, edge 01, edge 12, edge 20, face-interior."""
-    var N_FP_p = num_tri_nodes(P)
     var out = List[Int]()
     if m == 0:
         out.append(P); out.append(0); out.append(0); return out^
