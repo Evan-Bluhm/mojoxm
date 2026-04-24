@@ -48,6 +48,7 @@ euler_vortex_2d_gpu
 shallow_water_drop_2d_gpu
 mhd_alfven_2d_gpu
 euler_channel_2d_gpu
+shallow_water_dam_break_2d_gpu
 mojo.sif
 
 # build products
