@@ -89,17 +89,19 @@ Nine reference drivers under `examples/`:
   shallow water (drop / dam break).  `dump_vtu_2d_frame` writes
   ParaView-visualisable VTU; `scripts/animate_2d.py` renders them
   to MP4 via matplotlib + ffmpeg.
-  **GPU port (task #19):** all four 2D physics
+  **GPU port (task #19, complete):** all four 2D physics
   (Advection / Euler / ShallowWater / IdealMHD) run on device via
   Float32 kernels orchestrated as volume-rhs + Rusanov face-flux +
   multi-component lift-combine + rk-update.  Each physics's SSPRK3
-  step matches the CPU Float64 reference to ~1e-7 at P=1..3.
-  Periodic-mesh drivers under `examples/*_2d_gpu.mojo`:
-  `advection_gaussian_2d_gpu` (~9500 steps/sec, 0.07 % rel L2 on a
-  one-period translation), `euler_vortex_2d_gpu`
-  (~8300 steps/sec, 6.8 % rel L2 after one isentropic-vortex period
-  at P=2, 32x32), `shallow_water_drop_2d_gpu`
-  (~7000 steps/sec, mean-h conservation to ~4e-5).
+  step matches the CPU Float64 reference to ~1e-7 at P=1..3.  Four
+  end-to-end periodic drivers under `examples/*_2d_gpu.mojo` emit
+  21-frame VTU sequences (+ .pvd) matching the CPU format so
+  `scripts/animate_2d.py` works on either family:
+  `advection_gaussian_2d_gpu` (~7700 compute steps/sec, 0.07 % rel
+  L2 over one period), `euler_vortex_2d_gpu` (~7600, isentropic
+  vortex, 6.8 % rel L2 at P=2 / 32x32), `shallow_water_drop_2d_gpu`
+  (~6300, mean-h conservation ~4e-5), `mhd_alfven_2d_gpu` (~9100,
+  0.36 % rel L2 on a one-period linear Alfven wave at P=2 / 64x4).
 
 ## Numerical scheme
 
