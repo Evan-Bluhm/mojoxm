@@ -79,6 +79,7 @@ CPU_DRIVERS  = mpi_hello mpi_partition
 GPU_DRIVERS  = advection_gaussian euler_vortex euler_taylor_green euler_sod \
                euler_rising_bubble maxwell_cavity shallow_water_drop \
                mhd_alfven two_fluid_langmuir \
+               advection_gaussian_2d_gpu \
                mpi_patch_mesh mpi_halo_pingpong
 ALL_DRIVERS  = $(CPU_DRIVERS) $(GPU_DRIVERS)
 
