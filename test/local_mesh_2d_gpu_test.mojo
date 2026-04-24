@@ -25,8 +25,8 @@ from src.local_mesh_2d_gpu import (
     LocalMesh2DGpu, launch_cell_avg_2d,
     launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
     launch_advection_lift_combine_2d, launch_rk_update_2d,
-    advection_rk_stage_2d, euler_rk_stage_2d, sw_rk_stage_2d,
-    mhd_rk_stage_2d,
+    advection_rk_stage_2d, euler_rk_stage_2d, euler_rk_stage_hllc_2d,
+    sw_rk_stage_2d, mhd_rk_stage_2d,
 )
 from src.dg_rhs_2d import (
     Advection2D, Euler2D, ShallowWater2D, IdealMHD2D,
@@ -586,6 +586,88 @@ def check[P: Int]() raises:
         raise Error(
             "GPU Euler SSPRK3 step vs CPU: max err "
             + String(max_eul_err)
+        )
+
+    # ---- Euler SSPRK3 step with HLLC flux ------------------------
+    # Reupload the same IC and run one SSPRK3 step with HLLC, then
+    # compare against the CPU-HLLC reference.  Same tolerance as
+    # the Rusanov check since HLLC is a Riemann-solver swap at the
+    # face layer, not a scheme-order change.
+    var d_qH  = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_qH1 = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_qH2 = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_volH   = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_rhsH   = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_fstarH = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_faces * NFP_e * NC_E
+    )
+    for k in range(n_euler):
+        hptr_qE[k] = q_e_f32[k]
+    ctx.enqueue_copy(d_qH, hbuf_qE)
+    euler_rk_stage_hllc_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_qH.unsafe_ptr(),
+        d_qH.unsafe_ptr(), d_qH.unsafe_ptr(),
+        d_qH1.unsafe_ptr(),
+        d_volH.unsafe_ptr(), d_fstarH.unsafe_ptr(), d_rhsH.unsafe_ptr(),
+        gamma, min_rho, min_p,
+        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+        Float32(1.0), Float32(0.0), Float32(1.0), dt_e,
+    )
+    euler_rk_stage_hllc_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_qH1.unsafe_ptr(),
+        d_qH.unsafe_ptr(), d_qH1.unsafe_ptr(),
+        d_qH2.unsafe_ptr(),
+        d_volH.unsafe_ptr(), d_fstarH.unsafe_ptr(), d_rhsH.unsafe_ptr(),
+        gamma, min_rho, min_p,
+        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+        Float32(0.75), Float32(0.25), Float32(0.25), dt_e,
+    )
+    euler_rk_stage_hllc_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_qH2.unsafe_ptr(),
+        d_qH.unsafe_ptr(), d_qH2.unsafe_ptr(),
+        d_qH.unsafe_ptr(),
+        d_volH.unsafe_ptr(), d_fstarH.unsafe_ptr(), d_rhsH.unsafe_ptr(),
+        gamma, min_rho, min_p,
+        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0), dt_e,
+    )
+    ctx.enqueue_copy(hbuf_qE, d_qH)
+    ctx.synchronize()
+
+    var q_cpu_h = q_e_f64.copy()
+    var s1h = List[Float64]()
+    var s2h = List[Float64]()
+    var s3h = List[Float64]()
+    for _ in range(n_euler):
+        s1h.append(0.0); s2h.append(0.0); s3h.append(0.0)
+    var phys_h = Euler2D(
+        1.4, 1.0e-8, 1.0e-8,
+        0.0, 0.0, 0.0, 0.0,
+        True,        # use_hllc
+    )
+    ssprk3_step_2d[P, Euler2D](
+        host2, re_host, phys_h, Float64(dt_e),
+        q_cpu_h, s1h, s2h, s3h,
+    )
+    var max_hllc_err: Float32 = 0.0
+    for k in range(n_euler):
+        var diff = Float32(q_cpu_h[k]) - hptr_qE[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_hllc_err:
+            max_hllc_err = adiff
+    print("    Euler HLLC SSPRK3 step (CPU f64 vs GPU f32) max err =",
+          max_hllc_err)
+    if max_hllc_err > Float32(1.0e-3):
+        raise Error(
+            "GPU Euler HLLC SSPRK3 step vs CPU: max err "
+            + String(max_hllc_err)
         )
 
     # ---- Full ShallowWater2D SSPRK3 step (GPU vs CPU) --------------

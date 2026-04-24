@@ -189,6 +189,12 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
     var inflow_rhou: Float64
     var inflow_rhov: Float64
     var inflow_E: Float64
+    # Numerical flux selector.  False = Rusanov / Lax-Friedrichs
+    # (default, matches the original behaviour so existing runs are
+    # unchanged); True = HLLC (Toro 1994), which resolves contact
+    # discontinuities exactly and is noticeably less dissipative than
+    # Rusanov on smooth problems.
+    var use_hllc: Bool
 
     def __init__(
         out self,
@@ -199,6 +205,7 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
         inflow_rhou: Float64 = 0.0,
         inflow_rhov: Float64 = 0.0,
         inflow_E: Float64 = 0.0,
+        use_hllc: Bool = False,
     ):
         self.gamma = gamma
         self.min_density = min_density
@@ -207,6 +214,7 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
         self.inflow_rhou = inflow_rhou
         self.inflow_rhov = inflow_rhov
         self.inflow_E = inflow_E
+        self.use_hllc = use_hllc
 
     def internal_flux(
         self,
@@ -246,8 +254,8 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
         nx: Float64, ny: Float64,
         flux: UnsafePointer[Float64, MutAnyOrigin],
     ) -> Float64:
-        # Rusanov / Lax-Friedrichs:  F* = 0.5 (F_L.n + F_R.n) - 0.5 alpha (q_R - q_L)
-        # alpha = max(|v.n| + c) over the two sides.
+        # Pre-compute the x/y flux on each side -- both Rusanov and HLLC
+        # need F_L.n and the max wave speed.
         var f_l_buf = InlineArray[Float64, 8](fill=0.0)
         var f_r_buf = InlineArray[Float64, 8](fill=0.0)
         var f_l = rebind[UnsafePointer[Float64, MutAnyOrigin]](
@@ -260,10 +268,100 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
         var speed_r = self.internal_flux(q_r, f_r)
         var alpha = speed_l if speed_l > speed_r else speed_r
 
+        if not self.use_hllc:
+            # Rusanov / Lax-Friedrichs:
+            #   F* = 0.5 (F_L.n + F_R.n) - 0.5 alpha (q_R - q_L)
+            for c in range(4):
+                var Fn_l = f_l[0 * 4 + c] * nx + f_l[1 * 4 + c] * ny
+                var Fn_r = f_r[0 * 4 + c] * nx + f_r[1 * 4 + c] * ny
+                flux[c] = 0.5 * (Fn_l + Fn_r) - 0.5 * alpha * (q_r[c] - q_l[c])
+            return alpha
+
+        # HLLC (Toro 1994) for 2D Euler.  Three-wave Riemann structure
+        # with the central contact wave resolving the shear/contact
+        # exactly (unlike Rusanov which is maximally dissipative).
+        var rho_L = q_l[0]
+        if rho_L < self.min_density: rho_L = self.min_density
+        var rho_R = q_r[0]
+        if rho_R < self.min_density: rho_R = self.min_density
+        var uL = q_l[1] / rho_L
+        var vL = q_l[2] / rho_L
+        var uR = q_r[1] / rho_R
+        var vR = q_r[2] / rho_R
+        var EL = q_l[3]
+        var ER = q_r[3]
+        var keL = 0.5 * rho_L * (uL * uL + vL * vL)
+        var keR = 0.5 * rho_R * (uR * uR + vR * vR)
+        var pL = (self.gamma - 1.0) * (EL - keL)
+        if pL < self.min_pressure: pL = self.min_pressure
+        var pR = (self.gamma - 1.0) * (ER - keR)
+        if pR < self.min_pressure: pR = self.min_pressure
+        var aL = sqrt(self.gamma * pL / rho_L)
+        var aR = sqrt(self.gamma * pR / rho_R)
+
+        var unL = uL * nx + vL * ny
+        var unR = uR * nx + vR * ny
+
+        # Davis wave-speed estimates (simple, robust for DG).
+        var S_L = unL - aL
+        var tmp = unR - aR
+        if tmp < S_L: S_L = tmp
+        var S_R = unL + aL
+        tmp = unR + aR
+        if tmp > S_R: S_R = tmp
+
+        # Contact speed from pressure continuity across the contact
+        # wave (Toro eq. 10.37).
+        var num = pR - pL + rho_L * unL * (S_L - unL) - rho_R * unR * (S_R - unR)
+        var den = rho_L * (S_L - unL) - rho_R * (S_R - unR)
+        var S_star = num / den
+
+        var Fn_l = InlineArray[Float64, 4](fill=0.0)
+        var Fn_r = InlineArray[Float64, 4](fill=0.0)
         for c in range(4):
-            var Fn_l = f_l[0 * 4 + c] * nx + f_l[1 * 4 + c] * ny
-            var Fn_r = f_r[0 * 4 + c] * nx + f_r[1 * 4 + c] * ny
-            flux[c] = 0.5 * (Fn_l + Fn_r) - 0.5 * alpha * (q_r[c] - q_l[c])
+            Fn_l[c] = f_l[0 * 4 + c] * nx + f_l[1 * 4 + c] * ny
+            Fn_r[c] = f_r[0 * 4 + c] * nx + f_r[1 * 4 + c] * ny
+
+        if S_L >= 0.0:
+            for c in range(4): flux[c] = Fn_l[c]
+        elif S_R <= 0.0:
+            for c in range(4): flux[c] = Fn_r[c]
+        else:
+            # Build q*_K per Toro 10.39; F*_K = F_K + S_K (q*_K - q_K).
+            if S_star >= 0.0:
+                var coef = (S_L - unL) / (S_L - S_star)
+                var rho_star = rho_L * coef
+                var u_star = uL + (S_star - unL) * nx
+                var v_star = vL + (S_star - unL) * ny
+                var E_over_rho_star = (
+                    EL / rho_L
+                    + (S_star - unL) * (S_star + pL / (rho_L * (S_L - unL)))
+                )
+                var qs0 = rho_star
+                var qs1 = rho_star * u_star
+                var qs2 = rho_star * v_star
+                var qs3 = rho_star * E_over_rho_star
+                flux[0] = Fn_l[0] + S_L * (qs0 - q_l[0])
+                flux[1] = Fn_l[1] + S_L * (qs1 - q_l[1])
+                flux[2] = Fn_l[2] + S_L * (qs2 - q_l[2])
+                flux[3] = Fn_l[3] + S_L * (qs3 - q_l[3])
+            else:
+                var coef = (S_R - unR) / (S_R - S_star)
+                var rho_star = rho_R * coef
+                var u_star = uR + (S_star - unR) * nx
+                var v_star = vR + (S_star - unR) * ny
+                var E_over_rho_star = (
+                    ER / rho_R
+                    + (S_star - unR) * (S_star + pR / (rho_R * (S_R - unR)))
+                )
+                var qs0 = rho_star
+                var qs1 = rho_star * u_star
+                var qs2 = rho_star * v_star
+                var qs3 = rho_star * E_over_rho_star
+                flux[0] = Fn_r[0] + S_R * (qs0 - q_r[0])
+                flux[1] = Fn_r[1] + S_R * (qs1 - q_r[1])
+                flux[2] = Fn_r[2] + S_R * (qs2 - q_r[2])
+                flux[3] = Fn_r[3] + S_R * (qs3 - q_r[3])
         return alpha
 
     def boundary_flux(

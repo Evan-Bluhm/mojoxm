@@ -831,6 +831,200 @@ def launch_euler_face_flux_2d[NP: Int, NFP: Int](
 
 
 # ----------------------------------------------------------------------
+# Euler2D HLLC face flux (Toro 1994, 4 components).
+# ----------------------------------------------------------------------
+# Same signature as the Rusanov kernel; resolves contact discontinuities
+# exactly via the three-wave Riemann structure with the middle contact
+# speed S_star derived from pressure continuity.  Ghost-state plumbing
+# (BC_WALL / BC_INFLOW / BC_OUTFLOW) is identical to the Rusanov kernel
+# -- only the interior flux differs.
+# ----------------------------------------------------------------------
+
+def euler_face_flux_hllc_kernel_2d[NP: Int, NFP: Int](
+    q:              UnsafePointer[Float32, MutAnyOrigin],
+    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
+    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
+    num_faces:      Int,
+    gamma:          Float32,
+    min_density:    Float32,
+    min_pressure:   Float32,
+    inflow_rho:     Float32,
+    inflow_rhou:    Float32,
+    inflow_rhov:    Float32,
+    inflow_E:       Float32,
+    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_faces * NFP
+    if tid >= total:
+        return
+    var fid = tid // NFP
+    var m   = tid %  NFP
+
+    var nx = face_normal[fid * 2 + 0]
+    var ny = face_normal[fid * 2 + 1]
+    var bc_type = face_bc_type[fid]
+
+    var e_l = Int(face_elem[fid * 2 + 0])
+    var n_l = Int(face_elem_node[(fid * 2 + 0) * NFP + m])
+    var l_off = (e_l * NP + n_l) * 4
+    var qL0 = q[l_off + 0]
+    var qL1 = q[l_off + 1]
+    var qL2 = q[l_off + 2]
+    var qL3 = q[l_off + 3]
+
+    var qR0: Float32
+    var qR1: Float32
+    var qR2: Float32
+    var qR3: Float32
+    if bc_type == BC_INTERIOR:
+        var e_r = Int(face_elem[fid * 2 + 1])
+        var n_r = Int(face_elem_node[(fid * 2 + 1) * NFP + m])
+        var r_off = (e_r * NP + n_r) * 4
+        qR0 = q[r_off + 0]
+        qR1 = q[r_off + 1]
+        qR2 = q[r_off + 2]
+        qR3 = q[r_off + 3]
+    elif bc_type == BC_WALL:
+        var m_n = qL1 * nx + qL2 * ny
+        qR0 = qL0
+        qR1 = qL1 - Float32(2.0) * m_n * nx
+        qR2 = qL2 - Float32(2.0) * m_n * ny
+        qR3 = qL3
+    elif bc_type == BC_INFLOW:
+        qR0 = inflow_rho
+        qR1 = inflow_rhou
+        qR2 = inflow_rhov
+        qR3 = inflow_E
+    else:
+        qR0 = qL0
+        qR1 = qL1
+        qR2 = qL2
+        qR3 = qL3
+
+    # Primitives on each side (with floors).
+    var rho_L = qL0
+    if rho_L < min_density: rho_L = min_density
+    var rho_R = qR0
+    if rho_R < min_density: rho_R = min_density
+    var uL = qL1 / rho_L
+    var vL = qL2 / rho_L
+    var uR = qR1 / rho_R
+    var vR = qR2 / rho_R
+    var keL = Float32(0.5) * rho_L * (uL * uL + vL * vL)
+    var keR = Float32(0.5) * rho_R * (uR * uR + vR * vR)
+    var pL = (gamma - Float32(1.0)) * (qL3 - keL)
+    if pL < min_pressure: pL = min_pressure
+    var pR = (gamma - Float32(1.0)) * (qR3 - keR)
+    if pR < min_pressure: pR = min_pressure
+    var aL = sqrt(gamma * pL / rho_L)
+    var aR = sqrt(gamma * pR / rho_R)
+    var unL = uL * nx + vL * ny
+    var unR = uR * nx + vR * ny
+
+    # Normal-direction fluxes F_K.n for each side (4 components).
+    var FnL0 = qL1 * nx + qL2 * ny
+    var FnL1 = (qL1 * uL + pL) * nx + (qL1 * vL) * ny
+    var FnL2 = (qL1 * vL) * nx + (qL2 * vL + pL) * ny
+    var FnL3 = (uL * (qL3 + pL)) * nx + (vL * (qL3 + pL)) * ny
+    var FnR0 = qR1 * nx + qR2 * ny
+    var FnR1 = (qR1 * uR + pR) * nx + (qR1 * vR) * ny
+    var FnR2 = (qR1 * vR) * nx + (qR2 * vR + pR) * ny
+    var FnR3 = (uR * (qR3 + pR)) * nx + (vR * (qR3 + pR)) * ny
+
+    # Davis wave-speed estimates.
+    var S_L = unL - aL
+    var tmp = unR - aR
+    if tmp < S_L: S_L = tmp
+    var S_R = unL + aL
+    tmp = unR + aR
+    if tmp > S_R: S_R = tmp
+
+    # Contact wave speed.
+    var num = pR - pL + rho_L * unL * (S_L - unL) - rho_R * unR * (S_R - unR)
+    var den = rho_L * (S_L - unL) - rho_R * (S_R - unR)
+    var S_star = num / den
+
+    var out = (fid * NFP + m) * 4
+    if S_L >= Float32(0.0):
+        fstar_out[out + 0] = FnL0
+        fstar_out[out + 1] = FnL1
+        fstar_out[out + 2] = FnL2
+        fstar_out[out + 3] = FnL3
+    elif S_R <= Float32(0.0):
+        fstar_out[out + 0] = FnR0
+        fstar_out[out + 1] = FnR1
+        fstar_out[out + 2] = FnR2
+        fstar_out[out + 3] = FnR3
+    elif S_star >= Float32(0.0):
+        var coef = (S_L - unL) / (S_L - S_star)
+        var rho_s = rho_L * coef
+        var u_s = uL + (S_star - unL) * nx
+        var v_s = vL + (S_star - unL) * ny
+        var E_over_rho_s = (
+            qL3 / rho_L
+            + (S_star - unL) * (S_star + pL / (rho_L * (S_L - unL)))
+        )
+        var qs0 = rho_s
+        var qs1 = rho_s * u_s
+        var qs2 = rho_s * v_s
+        var qs3 = rho_s * E_over_rho_s
+        fstar_out[out + 0] = FnL0 + S_L * (qs0 - qL0)
+        fstar_out[out + 1] = FnL1 + S_L * (qs1 - qL1)
+        fstar_out[out + 2] = FnL2 + S_L * (qs2 - qL2)
+        fstar_out[out + 3] = FnL3 + S_L * (qs3 - qL3)
+    else:
+        var coef = (S_R - unR) / (S_R - S_star)
+        var rho_s = rho_R * coef
+        var u_s = uR + (S_star - unR) * nx
+        var v_s = vR + (S_star - unR) * ny
+        var E_over_rho_s = (
+            qR3 / rho_R
+            + (S_star - unR) * (S_star + pR / (rho_R * (S_R - unR)))
+        )
+        var qs0 = rho_s
+        var qs1 = rho_s * u_s
+        var qs2 = rho_s * v_s
+        var qs3 = rho_s * E_over_rho_s
+        fstar_out[out + 0] = FnR0 + S_R * (qs0 - qR0)
+        fstar_out[out + 1] = FnR1 + S_R * (qs1 - qR1)
+        fstar_out[out + 2] = FnR2 + S_R * (qs2 - qR2)
+        fstar_out[out + 3] = FnR3 + S_R * (qs3 - qR3)
+
+
+def launch_euler_face_flux_hllc_2d[NP: Int, NFP: Int](
+    mut ctx: DeviceContext,
+    q:              UnsafePointer[Float32, MutAnyOrigin],
+    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
+    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
+    num_faces:      Int,
+    gamma:          Float32,
+    min_density:    Float32,
+    min_pressure:   Float32,
+    inflow_rho:     Float32,
+    inflow_rhou:    Float32,
+    inflow_rhov:    Float32,
+    inflow_E:       Float32,
+    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_faces * NFP
+    comptime _kernel = euler_face_flux_hllc_kernel_2d[NP, NFP]
+    ctx.enqueue_function[_kernel, _kernel](
+        q, face_elem, face_elem_node, face_normal, face_bc_type,
+        num_faces,
+        gamma, min_density, min_pressure,
+        inflow_rho, inflow_rhou, inflow_rhov, inflow_E,
+        fstar_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
+
+
+# ----------------------------------------------------------------------
 # Full Euler RK-stage orchestration.
 # ----------------------------------------------------------------------
 # Mirrors `advection_rk_stage_2d` but with 4 components per node and
@@ -863,6 +1057,62 @@ def euler_rk_stage_2d[P: Int](
         mesh.num_elements, gamma, min_density, min_pressure, vol_scratch,
     )
     launch_euler_face_flux_2d[NP, NFP](
+        ctx, q_in,
+        mesh.d_face_elem.unsafe_ptr(),
+        mesh.d_face_elem_node.unsafe_ptr(),
+        mesh.d_face_normal.unsafe_ptr(),
+        mesh.d_face_bc_type.unsafe_ptr(),
+        mesh.num_faces,
+        gamma, min_density, min_pressure,
+        inflow_rho, inflow_rhou, inflow_rhov, inflow_E,
+        fstar_scratch,
+    )
+    launch_lift_combine_2d[NP, NFP, 4](
+        ctx, vol_scratch, fstar_scratch,
+        mesh.d_elem_inv_2A.unsafe_ptr(),
+        mesh.d_elem_faces.unsafe_ptr(),
+        mesh.d_elem_face_side.unsafe_ptr(),
+        mesh.d_elem_canon_to_ref.unsafe_ptr(),
+        mesh.d_face_length.unsafe_ptr(),
+        Lift_ref,
+        mesh.num_elements, rhs_scratch,
+    )
+    launch_rk_update_2d[NP, 4](
+        ctx, q_a, q_b, rhs_scratch,
+        mesh.num_elements, a, b, cc, dt, q_out,
+    )
+
+
+# ----------------------------------------------------------------------
+# Same as `euler_rk_stage_2d` but uses HLLC instead of Rusanov for the
+# interior numerical flux.  Volume RHS and lift-combine kernels are
+# unchanged -- HLLC affects only `fstar`.
+# ----------------------------------------------------------------------
+
+def euler_rk_stage_hllc_2d[P: Int](
+    mut ctx: DeviceContext,
+    mesh: LocalMesh2DGpu[P],
+    Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:    UnsafePointer[Float32, MutAnyOrigin],
+    q_in:     UnsafePointer[Float32, MutAnyOrigin],
+    q_a:      UnsafePointer[Float32, MutAnyOrigin],
+    q_b:      UnsafePointer[Float32, MutAnyOrigin],
+    q_out:    UnsafePointer[Float32, MutAnyOrigin],
+    vol_scratch:   UnsafePointer[Float32, MutAnyOrigin],
+    fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
+    rhs_scratch:   UnsafePointer[Float32, MutAnyOrigin],
+    gamma: Float32, min_density: Float32, min_pressure: Float32,
+    inflow_rho: Float32, inflow_rhou: Float32,
+    inflow_rhov: Float32, inflow_E: Float32,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+) raises:
+    comptime NP = num_tri_nodes_2d(P)
+    comptime NFP = num_edge_nodes(P)
+    launch_euler_volume_rhs_2d[NP](
+        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        mesh.num_elements, gamma, min_density, min_pressure, vol_scratch,
+    )
+    launch_euler_face_flux_hllc_2d[NP, NFP](
         ctx, q_in,
         mesh.d_face_elem.unsafe_ptr(),
         mesh.d_face_elem_node.unsafe_ptr(),

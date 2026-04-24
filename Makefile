@@ -90,7 +90,7 @@ ALL_DRIVERS  = $(CPU_DRIVERS) $(GPU_DRIVERS)
 # that the test harness diffs across rank counts.
 TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test local_mesh_2d_gpu_test
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-local-mesh-2d-gpu test-diagnostics test-p3 test-all test-klone
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-hllc test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-local-mesh-2d-gpu test-diagnostics test-p3 test-all test-klone
 
 help:
 	@echo 'mojoxm build targets'
@@ -180,6 +180,13 @@ test-advection-step-2d:
 test-euler2d:
 	.venv/bin/mojo run -I . test/euler2d_test.mojo
 
+# HLLC numerical flux vs Rusanov on the one-period Shu-Erlebacher
+# isentropic vortex.  Both schemes must converge to the IC after one
+# full advection period on a periodic mesh; HLLC's reduced dissipation
+# should show up as a notably smaller L2 error.
+test-hllc:
+	.venv/bin/mojo run -I . test/hllc_vs_rusanov_test.mojo
+
 # 2D shallow-water physics sanity: constant-state preservation on
 # lake-at-rest + uniform-flow IC.  Verifies the flux for p = g h^2 / 2
 # and the 3-component state vector are plumbed correctly.
@@ -251,7 +258,7 @@ test-local-mesh-2d-gpu: local_mesh_2d_gpu_test
 
 # Convenience target: run every test in the suite.  Stops on the first
 # failure.  Doesn't include test-klone (that's for cluster submission).
-test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-local-mesh-2d-gpu test-diagnostics test-p3 test test-bc
+test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-hllc test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-local-mesh-2d-gpu test-diagnostics test-p3 test test-bc
 	@echo '=== ALL TESTS PASSED ==='
 
 test-klone:
