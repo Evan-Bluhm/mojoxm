@@ -102,6 +102,54 @@ def check[P: Int]() raises:
             )
     print("  edge-to-element map OK (", 3 * NFP_edge, "entries)")
 
+    # 5. Cell-mean node weights must sum to 1 (partition of unity)
+    # and for P=2 match the standard equispaced-Lagrange rule
+    # exactly (vertex weights 0, edge-midpoint weights 1/3).  At
+    # P=4+ equispaced Lagrange bases have some negative weights --
+    # a known property, not a bug -- so we only require partition
+    # of unity universally and leave positivity as a P<=3 property.
+    if len(re.node_weights) != NP_P:
+        raise Error("node_weights length mismatch")
+    var wsum: Float64 = 0.0
+    for i in range(NP_P):
+        wsum += re.node_weights[i]
+    var wsum_err = wsum - 1.0
+    var a_wsum_err = wsum_err if wsum_err >= 0.0 else -wsum_err
+    if a_wsum_err > 1.0e-12:
+        raise Error(
+            "node_weights sum " + String(wsum)
+            + " != 1 (partition of unity)"
+        )
+    if P <= 3:
+        for i in range(NP_P):
+            var w = re.node_weights[i]
+            if w < -1.0e-12:
+                raise Error(
+                    "P<=3 node_weights[" + String(i) + "] = "
+                    + String(w) + " is negative"
+                )
+    # P=2-specific spot check -- exact Lagrange-P=2 quadrature.
+    if P == 2:
+        for i in range(3):
+            var w = re.node_weights[i]
+            var aw = w if w >= 0.0 else -w
+            if aw > 1.0e-12:
+                raise Error(
+                    "P=2 vertex " + String(i) + " weight "
+                    + String(w) + " expected 0"
+                )
+        var third = 1.0 / 3.0
+        for i in range(3, 6):
+            var w = re.node_weights[i]
+            var err = w - third
+            var a_err = err if err >= 0.0 else -err
+            if a_err > 1.0e-12:
+                raise Error(
+                    "P=2 midpoint " + String(i) + " weight "
+                    + String(w) + " expected 1/3"
+                )
+    print("  node_weights OK (sum=", wsum, ")")
+
 
 def main() raises:
     print("sizes: num_tri_nodes_2d, num_edge_nodes")

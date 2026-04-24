@@ -176,8 +176,9 @@ def main() raises:
                 Float32(1.0), Float32(0.0), Float32(1.0), dt,
             )
             bj_limit_full_2d[P, NC](
-                ctx, gpu_mesh, d_q1.unsafe_ptr(), d_cell_avg.unsafe_ptr(),
-                venkat_eps,
+                ctx, gpu_mesh, d_q1.unsafe_ptr(),
+                gpu_re.d_node_weights.unsafe_ptr(),
+                d_cell_avg.unsafe_ptr(), venkat_eps,
             )
             # Stage 2 + limit
             euler_rk_stage_hllc_2d[P](
@@ -192,8 +193,9 @@ def main() raises:
                 Float32(0.75), Float32(0.25), Float32(0.25), dt,
             )
             bj_limit_full_2d[P, NC](
-                ctx, gpu_mesh, d_q2.unsafe_ptr(), d_cell_avg.unsafe_ptr(),
-                venkat_eps,
+                ctx, gpu_mesh, d_q2.unsafe_ptr(),
+                gpu_re.d_node_weights.unsafe_ptr(),
+                d_cell_avg.unsafe_ptr(), venkat_eps,
             )
             # Stage 3 + limit
             euler_rk_stage_hllc_2d[P](
@@ -209,8 +211,9 @@ def main() raises:
                 Float32(2.0 / 3.0), dt,
             )
             bj_limit_full_2d[P, NC](
-                ctx, gpu_mesh, d_q.unsafe_ptr(), d_cell_avg.unsafe_ptr(),
-                venkat_eps,
+                ctx, gpu_mesh, d_q.unsafe_ptr(),
+                gpu_re.d_node_weights.unsafe_ptr(),
+                d_cell_avg.unsafe_ptr(), venkat_eps,
             )
         ctx.synchronize()
         var c_end = perf_counter_ns()

@@ -160,6 +160,59 @@ def launch_cell_avg_2d[NP: Int, NC: Int](
 
 
 # ----------------------------------------------------------------------
+# Cell mean kernel (mass-matrix-weighted average).
+# ----------------------------------------------------------------------
+# Unlike `cell_avg_kernel_2d` (unweighted nodal arithmetic mean),
+# this computes the true DG cell mean
+#
+#   cell_mean[elem, c] = sum_i q[elem, i, c] * w_i
+#
+# where w_i = int phi_i dr ds / A_ref = 2 int phi_i dr ds are the
+# mass-matrix quadrature weights (uploaded as `d_node_weights` in
+# ReferenceElement2DGpu).  For P=1 Lagrange all w_i = 1/3 and the two
+# kernels coincide.  For P>=2 they differ: at P=2 the 3 vertex
+# weights are zero and the 3 edge-midpoint weights are 1/3 each, so
+# an unweighted "average" over all 6 nodes is not the cell mean.
+#
+# The BJ slope limiter needs this properly-weighted mean; using the
+# unweighted kernel at P>=2 produced a systematic shock-speed drift
+# (e.g. ~10 cells on the Sod shock tube at NX=256 / P=2).
+# ----------------------------------------------------------------------
+
+def cell_mean_kernel_2d[NP: Int, NC: Int](
+    q:            UnsafePointer[Float32, MutAnyOrigin],
+    node_weights: UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
+):
+    var elem = Int(global_idx.x)
+    if elem >= num_elements:
+        return
+    var base_q = elem * NP * NC
+    var base_mean = elem * NC
+    for c in range(NC):
+        var s: Float32 = 0.0
+        for nn in range(NP):
+            s += q[base_q + nn * NC + c] * node_weights[nn]
+        cell_mean[base_mean + c] = s
+
+
+def launch_cell_mean_2d[NP: Int, NC: Int](
+    mut ctx: DeviceContext,
+    q:            UnsafePointer[Float32, MutAnyOrigin],
+    node_weights: UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    comptime _kernel = cell_mean_kernel_2d[NP, NC]
+    ctx.enqueue_function[_kernel, _kernel](
+        q, node_weights, num_elements, cell_mean,
+        grid_dim=ceildiv(num_elements, 256),
+        block_dim=256,
+    )
+
+
+# ----------------------------------------------------------------------
 # Advection volume-rhs kernel (2D, scalar).
 # ----------------------------------------------------------------------
 # Computes, for each owned node (elem, i),
@@ -2053,23 +2106,29 @@ def launch_bj_limit_2d[NP: Int, NC: Int](
     )
 
 
-# Convenience two-pass orchestrator: run cell_avg then the limiter on
-# top of a caller-supplied cell_avg scratch buffer.  Drivers call this
-# between RK stages to enforce monotonicity on shocked problems.
+# Convenience two-pass orchestrator: run the mass-weighted cell mean
+# then the BJ limiter on top of a caller-supplied scratch buffer.
+# Drivers call this between RK stages to enforce monotonicity on
+# shocked problems.  `node_weights` is `ReferenceElement2DGpu.d_node_weights`;
+# using the unweighted `cell_avg_kernel_2d` here would systematically
+# drift shock speeds at P>=2 because Lagrange-P>=2 node weights aren't
+# uniform (at P=2 the 3 vertex weights are 0, the 3 midpoint weights
+# are 1/3).
 
 def bj_limit_full_2d[P: Int, NC: Int](
     mut ctx: DeviceContext,
     mesh: LocalMesh2DGpu[P],
-    q:            UnsafePointer[Float32, MutAnyOrigin],
-    cell_avg_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    venkat_eps:   Float32 = Float32(0.1),
+    q:             UnsafePointer[Float32, MutAnyOrigin],
+    node_weights:  UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean_scratch: UnsafePointer[Float32, MutAnyOrigin],
+    venkat_eps:    Float32 = Float32(0.1),
 ) raises:
     comptime NP = num_tri_nodes_2d(P)
-    launch_cell_avg_2d[NP, NC](
-        ctx, q, mesh.num_elements, cell_avg_scratch,
+    launch_cell_mean_2d[NP, NC](
+        ctx, q, node_weights, mesh.num_elements, cell_mean_scratch,
     )
     launch_bj_limit_2d[NP, NC](
-        ctx, q, cell_avg_scratch,
+        ctx, q, cell_mean_scratch,
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_face_elem.unsafe_ptr(),
         mesh.num_elements,

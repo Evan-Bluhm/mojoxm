@@ -25,6 +25,7 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu, bj_limit_full_2d
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d
+from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
 def _abs32(x: Float32) -> Float32:
@@ -50,6 +51,8 @@ def main() raises:
     var host = LocalMesh2D[P](Nx, Ny, 1.0, 1.0)
     var ctx = DeviceContext()
     var gpu = LocalMesh2DGpu[P](ctx, host^)
+    var re_host = ReferenceElement2D[P]()
+    var re_gpu = ReferenceElement2DGpu[P](ctx, re_host)
 
     var n_q = gpu.num_elements * NP_p * NC
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
@@ -72,7 +75,8 @@ def main() raises:
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
     bj_limit_full_2d[P, NC](
-        ctx, gpu, d_q.unsafe_ptr(), d_ca.unsafe_ptr(),
+        ctx, gpu, d_q.unsafe_ptr(),
+        re_gpu.d_node_weights.unsafe_ptr(), d_ca.unsafe_ptr(),
         Float32(0.1),
     )
     ctx.enqueue_copy(hbuf, d_q)
@@ -120,7 +124,8 @@ def main() raises:
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
     bj_limit_full_2d[P, NC](
-        ctx, gpu, d_q.unsafe_ptr(), d_ca.unsafe_ptr(),
+        ctx, gpu, d_q.unsafe_ptr(),
+        re_gpu.d_node_weights.unsafe_ptr(), d_ca.unsafe_ptr(),
         Float32(0.1),
     )
     ctx.enqueue_copy(hbuf, d_q)

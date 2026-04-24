@@ -38,17 +38,20 @@ def _upload_f64_as_f32(
 
 
 struct ReferenceElement2DGpu[P: Int = 2](Movable):
-    """Device mirror of `ReferenceElement2D[P].D_ref` + `.Lift_ref`.
+    """Device mirror of `ReferenceElement2D[P]` static tables.
 
     Shapes (for the GPU kernel's indexing convenience):
-      d_D_ref:    [2 * NP * NP]          (2 directions, row-major)
-      d_Lift_ref: [3 * NP * (P + 1)]     (3 edges, row-major)
+      d_D_ref:        [2 * NP * NP]          (2 directions, row-major)
+      d_Lift_ref:     [3 * NP * (P + 1)]     (3 edges, row-major)
+      d_node_weights: [NP]                   (cell-mean quadrature
+                                              weights, sum = 1)
     """
     comptime NP = num_tri_nodes_2d(Self.P)
     comptime NFP_edge = num_edge_nodes(Self.P)
 
     var d_D_ref: DeviceBuffer[ref2d_f]
     var d_Lift_ref: DeviceBuffer[ref2d_f]
+    var d_node_weights: DeviceBuffer[ref2d_f]
 
     def __init__(
         out self,
@@ -57,4 +60,5 @@ struct ReferenceElement2DGpu[P: Int = 2](Movable):
     ) raises:
         self.d_D_ref = _upload_f64_as_f32(ctx, host.D_ref)
         self.d_Lift_ref = _upload_f64_as_f32(ctx, host.Lift_ref)
+        self.d_node_weights = _upload_f64_as_f32(ctx, host.node_weights)
         ctx.synchronize()

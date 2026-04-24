@@ -127,6 +127,16 @@ struct ReferenceElement2D[P: Int = 2](Copyable, Movable):
     var Lift_ref: List[Float64]
     # Inverse 2D mass matrix (diagnostic).
     var M_ref_inv: List[Float64]
+    # Per-node weights for the mass-matrix-weighted cell mean.
+    # node_weights[i] = 2 * int phi_i(r, s) dr ds on the reference
+    # triangle (A_ref = 1/2, so the factor of 2 normalises so
+    # sum(node_weights) = 1 and cell_mean = sum_i q_i * node_weights[i]).
+    # For P=1 (3 vertices) every weight is 1/3.  For P=2 the 3 vertex
+    # weights are 0 and the 3 edge-midpoint weights are 1/3.  Using
+    # the unweighted nodal average instead would be a correct cell
+    # mean only at P=1; at P>=2 it breaks scheme conservation in
+    # anything that needs a true cell mean (e.g. the BJ limiter).
+    var node_weights: List[Float64]
     # Element-local node index for each edge-local node.  [3 * (P+1)].
     var edge_to_elem: List[Int32]
 
@@ -163,6 +173,15 @@ struct ReferenceElement2D[P: Int = 2](Copyable, Movable):
                 mat_set(M, NP_P, i, j, integrate_ref_tri(prod))
         var M_inv = mat_inv(M, NP_P)
         self.M_ref_inv = M_inv.copy()
+
+        # 4b. Per-node cell-mean weights.  cell_mean = sum_i q_i * w_i
+        # where w_i = int phi_i dA_phys / A_phys = 2 * int phi_i dr ds
+        # (reference integral; A_ref = 1/2).  Since partition-of-unity
+        # gives sum_i phi_i = 1, sum_i w_i = 1.
+        self.node_weights = List[Float64]()
+        for i in range(NP_P):
+            var w = 2.0 * integrate_ref_tri(tri_phi[i])
+            self.node_weights.append(w)
 
         # 5. Stiffness matrices S[k, i, j] = integral (dphi_i/dr_k) * phi_j
         # on the reference triangle; k in {0: d/dr, 1: d/ds}.
