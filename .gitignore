@@ -58,6 +58,7 @@ bench_euler_sod_limited_2d
 bench_euler_channel_steady_2d
 bench_advection_3d
 bench_mhd_alfven_3d
+bench_maxwell_cavity_3d
 advection_gaussian_2d_gpu
 euler_vortex_2d_gpu
 shallow_water_drop_2d_gpu
