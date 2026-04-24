@@ -89,12 +89,17 @@ Nine reference drivers under `examples/`:
   shallow water (drop / dam break).  `dump_vtu_2d_frame` writes
   ParaView-visualisable VTU; `scripts/animate_2d.py` renders them
   to MP4 via matplotlib + ffmpeg.
-  **GPU port in progress (task #19):** the 2D GPU advection pipeline
-  (volume + face-flux + lift-combine + rk-update kernels) is validated
-  end-to-end; `examples/advection_gaussian_2d_gpu.mojo` runs a full
-  SSPRK3 loop at ~9500 steps/sec on an RTX 3090 with 0.07% relative
-  L2 error on a one-period periodic Gaussian translation.  Per-physics
-  extension (Euler / SW / MHD on GPU) is the remaining work.
+  **GPU port (task #19):** all four 2D physics
+  (Advection / Euler / ShallowWater / IdealMHD) run on device via
+  Float32 kernels orchestrated as volume-rhs + Rusanov face-flux +
+  multi-component lift-combine + rk-update.  Each physics's SSPRK3
+  step matches the CPU Float64 reference to ~1e-7 at P=1..3.
+  Periodic-mesh drivers under `examples/*_2d_gpu.mojo`:
+  `advection_gaussian_2d_gpu` (~9500 steps/sec, 0.07 % rel L2 on a
+  one-period translation), `euler_vortex_2d_gpu`
+  (~8300 steps/sec, 6.8 % rel L2 after one isentropic-vortex period
+  at P=2, 32x32), `shallow_water_drop_2d_gpu`
+  (~7000 steps/sec, mean-h conservation to ~4e-5).
 
 ## Numerical scheme
 

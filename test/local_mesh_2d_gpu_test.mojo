@@ -26,9 +26,11 @@ from src.local_mesh_2d_gpu import (
     launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
     launch_advection_lift_combine_2d, launch_rk_update_2d,
     advection_rk_stage_2d, euler_rk_stage_2d, sw_rk_stage_2d,
+    mhd_rk_stage_2d,
 )
 from src.dg_rhs_2d import (
-    Advection2D, Euler2D, ShallowWater2D, dg_rhs_2d, ssprk3_step_2d,
+    Advection2D, Euler2D, ShallowWater2D, IdealMHD2D,
+    dg_rhs_2d, ssprk3_step_2d,
 )
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
@@ -687,6 +689,117 @@ def check[P: Int]() raises:
         raise Error(
             "GPU SW SSPRK3 step vs CPU: max err "
             + String(max_sw_err)
+        )
+
+    # ---- Full IdealMHD2D SSPRK3 step (GPU vs CPU) ------------------
+    # IC: smooth magnetised flow with a Gaussian density bump, uniform
+    # background B field, and a velocity swirl.  Six components per
+    # node: [rho, mx, my, Bx, By, E].
+    comptime NC_M = 6
+    var gamma_m = Float32(5.0 / 3.0)
+    var min_rho_m = Float32(1.0e-8)
+    var min_p_m   = Float32(1.0e-8)
+    var n_mhd = gpu.num_elements * NP_p * NC_M
+    var q_m_f32 = List[Float32]()
+    var q_m_f64 = List[Float64]()
+    for elem in range(gpu.num_elements):
+        for nn in range(NP_p):
+            var x = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
+            var y = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
+            var dx = x - 0.5
+            var dy = y - 0.5
+            var rho = 1.0 + 0.05 * exp(-(dx * dx + dy * dy) / 0.03)
+            var u = 0.2 * sin(6.283185307 * y)
+            var v = 0.2 * sin(6.283185307 * x)
+            var Bx = 0.3
+            var By = 0.1
+            var p = 0.5
+            var ke = 0.5 * rho * (u * u + v * v)
+            var mp = 0.5 * (Bx * Bx + By * By)
+            var E = p / (5.0 / 3.0 - 1.0) + ke + mp
+            var mx = rho * u
+            var my = rho * v
+            q_m_f64.append(rho); q_m_f64.append(mx); q_m_f64.append(my)
+            q_m_f64.append(Bx);  q_m_f64.append(By); q_m_f64.append(E)
+            q_m_f32.append(Float32(rho)); q_m_f32.append(Float32(mx))
+            q_m_f32.append(Float32(my));  q_m_f32.append(Float32(Bx))
+            q_m_f32.append(Float32(By));  q_m_f32.append(Float32(E))
+
+    var d_qM  = ctx.enqueue_create_buffer[DType.float32](n_mhd)
+    var d_qM1 = ctx.enqueue_create_buffer[DType.float32](n_mhd)
+    var d_qM2 = ctx.enqueue_create_buffer[DType.float32](n_mhd)
+    var d_volM   = ctx.enqueue_create_buffer[DType.float32](n_mhd)
+    var d_rhsM   = ctx.enqueue_create_buffer[DType.float32](n_mhd)
+    var d_fstarM = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_faces * NFP_e * NC_M
+    )
+    var hbuf_qM = ctx.enqueue_create_host_buffer[DType.float32](n_mhd)
+    var hptr_qM = hbuf_qM.unsafe_ptr()
+    for k in range(n_mhd):
+        hptr_qM[k] = q_m_f32[k]
+    ctx.enqueue_copy(d_qM, hbuf_qM)
+
+    var dt_m = Float32(2.0e-4)
+    # Stage 1
+    mhd_rk_stage_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_qM.unsafe_ptr(),
+        d_qM.unsafe_ptr(), d_qM.unsafe_ptr(),
+        d_qM1.unsafe_ptr(),
+        d_volM.unsafe_ptr(), d_fstarM.unsafe_ptr(), d_rhsM.unsafe_ptr(),
+        gamma_m, min_rho_m, min_p_m,
+        Float32(1.0), Float32(0.0), Float32(1.0), dt_m,
+    )
+    # Stage 2
+    mhd_rk_stage_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_qM1.unsafe_ptr(),
+        d_qM.unsafe_ptr(), d_qM1.unsafe_ptr(),
+        d_qM2.unsafe_ptr(),
+        d_volM.unsafe_ptr(), d_fstarM.unsafe_ptr(), d_rhsM.unsafe_ptr(),
+        gamma_m, min_rho_m, min_p_m,
+        Float32(0.75), Float32(0.25), Float32(0.25), dt_m,
+    )
+    # Stage 3
+    mhd_rk_stage_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_qM2.unsafe_ptr(),
+        d_qM.unsafe_ptr(), d_qM2.unsafe_ptr(),
+        d_qM.unsafe_ptr(),
+        d_volM.unsafe_ptr(), d_fstarM.unsafe_ptr(), d_rhsM.unsafe_ptr(),
+        gamma_m, min_rho_m, min_p_m,
+        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0), dt_m,
+    )
+    ctx.enqueue_copy(hbuf_qM, d_qM)
+    ctx.synchronize()
+
+    var q_cpu_m = q_m_f64.copy()
+    var s1m = List[Float64]()
+    var s2m = List[Float64]()
+    var s3m = List[Float64]()
+    for _ in range(n_mhd):
+        s1m.append(0.0); s2m.append(0.0); s3m.append(0.0)
+    var phys_m = IdealMHD2D(5.0 / 3.0, 1.0e-8, 1.0e-8)
+    ssprk3_step_2d[P, IdealMHD2D](
+        host2, re_host, phys_m, Float64(dt_m),
+        q_cpu_m, s1m, s2m, s3m,
+    )
+    var max_mhd_err: Float32 = 0.0
+    for k in range(n_mhd):
+        var diff = Float32(q_cpu_m[k]) - hptr_qM[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_mhd_err:
+            max_mhd_err = adiff
+    print("    MHD SSPRK3 step (CPU f64 vs GPU f32) max err =",
+          max_mhd_err)
+    if max_mhd_err > Float32(1.0e-3):
+        raise Error(
+            "GPU MHD SSPRK3 step vs CPU: max err "
+            + String(max_mhd_err)
         )
 
 
