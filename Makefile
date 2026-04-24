@@ -95,7 +95,14 @@ TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test \
                local_mesh_2d_gpu_test euler_2d_gpu_test sw_2d_gpu_test \
                mhd_2d_gpu_test limiter_2d_gpu_test
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-limiter-2d-gpu test-diagnostics test-p3 test-all test-klone
+# Benchmark drivers live under benchmarks/.  Each runs a single
+# known-solution problem and asserts a measured metric against a
+# threshold; failure = regression.  Complement the tests (which cover
+# self-consistency invariants) with end-to-end analytic correctness.
+BENCH_DRIVERS = bench_advection_translation_2d bench_euler_vortex_2d \
+                bench_mhd_alfven_2d bench_euler_sod_2d
+
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-limiter-2d-gpu test-diagnostics test-p3 test-all test-klone bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -129,6 +136,10 @@ $(ALL_DRIVERS): %: examples/%.mojo $(BUILD_DIR)/mpi_shim.o $(SRC_MOJO)
 
 # Test drivers use the same link line but source from test/.
 $(TEST_DRIVERS): %: test/%.mojo $(BUILD_DIR)/mpi_shim.o $(SRC_MOJO)
+	$(MOJO) build $(MOJO_FLAGS) $< -o $@ $(LINK_BASE)
+
+# Benchmark drivers -- same link line, sourced from benchmarks/.
+$(BENCH_DRIVERS): %: benchmarks/%.mojo $(BUILD_DIR)/mpi_shim.o $(SRC_MOJO)
 	$(MOJO) build $(MOJO_FLAGS) $< -o $@ $(LINK_BASE)
 
 # `make test` builds the test driver locally and runs the np=1 vs np=4
@@ -205,6 +216,21 @@ test-limiter-2d-gpu: limiter_2d_gpu_test
 # failure.  Doesn't include test-klone (that's for cluster submission).
 test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-limiter-2d-gpu test-diagnostics test-p3 test test-bc
 	@echo '=== ALL TESTS PASSED ==='
+
+# Benchmarks: each runs a single known-solution problem and asserts
+# the measured metric (L2 error vs analytic, plateau deviation,
+# convergence rate) against a published threshold.
+bench-advection-translation-2d: bench_advection_translation_2d
+	./bench_advection_translation_2d
+bench-euler-vortex-2d: bench_euler_vortex_2d
+	./bench_euler_vortex_2d
+bench-mhd-alfven-2d: bench_mhd_alfven_2d
+	./bench_mhd_alfven_2d
+bench-euler-sod-2d: bench_euler_sod_2d
+	./bench_euler_sod_2d
+
+bench-all: bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+	@echo '=== ALL BENCHMARKS PASSED ==='
 
 test-klone:
 	test/test_mpi_correctness.sh --klone
