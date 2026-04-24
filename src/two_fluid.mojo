@@ -39,7 +39,7 @@
 # ======================================================================
 
 from src.solver import Physics
-from src.boundary import BC_WALL, BC_OUTFLOW
+from src.boundary import BC_WALL, BC_OUTFLOW, BC_INFLOW
 from std.math import sqrt
 
 
@@ -133,7 +133,6 @@ def _species_normal_flux(
 # FiveMomentTwoFluid struct
 # ======================================================================
 
-@fieldwise_init
 struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
     comptime NUM_COMPONENTS = 17
 
@@ -163,6 +162,90 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
     # Floor values for each species' density and pressure.
     var min_density:  Float32
     var min_pressure: Float32
+
+    # BC_INFLOW ghost state: one conservative value per component
+    # (electrons 0..4, ions 5..9, EM 10..15, GLM psi 16).  Defaults
+    # zero so existing drivers keep working with just the physics
+    # constants.
+    var inflow_rho_e:  Float32
+    var inflow_mxe:    Float32
+    var inflow_mye:    Float32
+    var inflow_mze:    Float32
+    var inflow_E_e:    Float32
+    var inflow_rho_i:  Float32
+    var inflow_mxi:    Float32
+    var inflow_myi:    Float32
+    var inflow_mzi:    Float32
+    var inflow_E_i:    Float32
+    var inflow_Ex:     Float32
+    var inflow_Ey:     Float32
+    var inflow_Ez:     Float32
+    var inflow_Bx:     Float32
+    var inflow_By:     Float32
+    var inflow_Bz:     Float32
+    var inflow_psi:    Float32
+
+    def __init__(
+        out self,
+        gamma_e: Float32,
+        gamma_i: Float32,
+        q_e: Float32,
+        m_e: Float32,
+        q_i: Float32,
+        m_i: Float32,
+        eps0: Float32,
+        c_light: Float32,
+        c_h: Float32,
+        alpha_d: Float32,
+        min_density: Float32,
+        min_pressure: Float32,
+        inflow_rho_e: Float32  = Float32(0.0),
+        inflow_mxe: Float32    = Float32(0.0),
+        inflow_mye: Float32    = Float32(0.0),
+        inflow_mze: Float32    = Float32(0.0),
+        inflow_E_e: Float32    = Float32(0.0),
+        inflow_rho_i: Float32  = Float32(0.0),
+        inflow_mxi: Float32    = Float32(0.0),
+        inflow_myi: Float32    = Float32(0.0),
+        inflow_mzi: Float32    = Float32(0.0),
+        inflow_E_i: Float32    = Float32(0.0),
+        inflow_Ex: Float32     = Float32(0.0),
+        inflow_Ey: Float32     = Float32(0.0),
+        inflow_Ez: Float32     = Float32(0.0),
+        inflow_Bx: Float32     = Float32(0.0),
+        inflow_By: Float32     = Float32(0.0),
+        inflow_Bz: Float32     = Float32(0.0),
+        inflow_psi: Float32    = Float32(0.0),
+    ):
+        self.gamma_e = gamma_e
+        self.gamma_i = gamma_i
+        self.q_e = q_e
+        self.m_e = m_e
+        self.q_i = q_i
+        self.m_i = m_i
+        self.eps0 = eps0
+        self.c_light = c_light
+        self.c_h = c_h
+        self.alpha_d = alpha_d
+        self.min_density = min_density
+        self.min_pressure = min_pressure
+        self.inflow_rho_e = inflow_rho_e
+        self.inflow_mxe = inflow_mxe
+        self.inflow_mye = inflow_mye
+        self.inflow_mze = inflow_mze
+        self.inflow_E_e = inflow_E_e
+        self.inflow_rho_i = inflow_rho_i
+        self.inflow_mxi = inflow_mxi
+        self.inflow_myi = inflow_myi
+        self.inflow_mzi = inflow_mzi
+        self.inflow_E_i = inflow_E_i
+        self.inflow_Ex = inflow_Ex
+        self.inflow_Ey = inflow_Ey
+        self.inflow_Ez = inflow_Ez
+        self.inflow_Bx = inflow_Bx
+        self.inflow_By = inflow_By
+        self.inflow_Bz = inflow_Bz
+        self.inflow_psi = inflow_psi
 
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
@@ -367,6 +450,29 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
             q_ghost[13] = q_int[13] - Float32(2.0) * Bn * nx
             q_ghost[14] = q_int[14] - Float32(2.0) * Bn * ny
             q_ghost[15] = q_int[15] - Float32(2.0) * Bn * nz
+        elif bc_type == BC_INFLOW:
+            # Dirichlet inflow: user-set ghost state for all 17
+            # conservative components.  Rusanov still arbitrates which
+            # side's information propagates into the domain via the
+            # wave-speed dissipation, so upstream characteristics pull
+            # from the inflow state and downstream-moving ones do not.
+            q_ghost[0]  = self.inflow_rho_e
+            q_ghost[1]  = self.inflow_mxe
+            q_ghost[2]  = self.inflow_mye
+            q_ghost[3]  = self.inflow_mze
+            q_ghost[4]  = self.inflow_E_e
+            q_ghost[5]  = self.inflow_rho_i
+            q_ghost[6]  = self.inflow_mxi
+            q_ghost[7]  = self.inflow_myi
+            q_ghost[8]  = self.inflow_mzi
+            q_ghost[9]  = self.inflow_E_i
+            q_ghost[10] = self.inflow_Ex
+            q_ghost[11] = self.inflow_Ey
+            q_ghost[12] = self.inflow_Ez
+            q_ghost[13] = self.inflow_Bx
+            q_ghost[14] = self.inflow_By
+            q_ghost[15] = self.inflow_Bz
+            q_ghost[16] = self.inflow_psi
         # BC_OUTFLOW / default: ghost == interior (already copied).
         var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
             q_ghost.unsafe_ptr()
