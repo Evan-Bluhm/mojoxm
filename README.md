@@ -78,7 +78,8 @@ Nine reference drivers under `examples/`:
   rho = 0.998, right rho = 0.119 (within ~0.2%/5% of exact).
 - **2D triangular elements (CPU)**: parallel stack at `src/reference_2d.mojo`
   / `local_mesh_2d.mojo` / `dg_rhs_2d.mojo` / `vtu_2d.mojo`.
-  `Physics2D` trait + Advection2D / Euler2D / ShallowWater2D;
+  `Physics2D` trait + **Advection2D / Euler2D / ShallowWater2D /
+  IdealMHD2D** (4 physics);
   full BC menu: periodic / wall / outflow / **inflow** (each physics
   carries its own user-set inflow ghost state); SSPRK2, SSPRK3, RK4
   time integrators.  Spatial convergence rates verified to (P+1)
