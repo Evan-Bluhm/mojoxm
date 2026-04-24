@@ -101,7 +101,8 @@ TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test \
 # self-consistency invariants) with end-to-end analytic correctness.
 BENCH_DRIVERS = bench_advection_translation_2d bench_euler_vortex_2d \
                 bench_mhd_alfven_2d bench_euler_sod_2d \
-                bench_euler_sod_limited_2d bench_euler_smooth_wave_2d
+                bench_euler_sod_limited_2d bench_euler_smooth_wave_2d \
+                bench_euler_channel_steady_2d
 
 .PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-limiter-2d-gpu test-diagnostics test-p3 test-all test-klone bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
@@ -233,8 +234,10 @@ bench-euler-sod-limited-2d: bench_euler_sod_limited_2d
 	./bench_euler_sod_limited_2d
 bench-euler-smooth-wave-2d: bench_euler_smooth_wave_2d
 	./bench_euler_smooth_wave_2d
+bench-euler-channel-steady-2d: bench_euler_channel_steady_2d
+	./bench_euler_channel_steady_2d
 
-bench-all: bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d bench-euler-sod-limited-2d bench-euler-smooth-wave-2d
+bench-all: bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d bench-euler-sod-limited-2d bench-euler-smooth-wave-2d bench-euler-channel-steady-2d
 	@echo '=== ALL BENCHMARKS PASSED ==='
 
 # Profiling: run a benchmark under nsys with --stats=true and capture
@@ -263,8 +266,10 @@ profile-bench-euler-sod-limited-2d: bench_euler_sod_limited_2d
 	@bin=bench_euler_sod_limited_2d; $(PROFILE_BIN)
 profile-bench-euler-smooth-wave-2d: bench_euler_smooth_wave_2d
 	@bin=bench_euler_smooth_wave_2d; $(PROFILE_BIN)
+profile-bench-euler-channel-steady-2d: bench_euler_channel_steady_2d
+	@bin=bench_euler_channel_steady_2d; $(PROFILE_BIN)
 
-profile-bench-all: profile-bench-advection-translation-2d profile-bench-euler-vortex-2d profile-bench-mhd-alfven-2d profile-bench-euler-sod-2d profile-bench-euler-sod-limited-2d profile-bench-euler-smooth-wave-2d
+profile-bench-all: profile-bench-advection-translation-2d profile-bench-euler-vortex-2d profile-bench-mhd-alfven-2d profile-bench-euler-sod-2d profile-bench-euler-sod-limited-2d profile-bench-euler-smooth-wave-2d profile-bench-euler-channel-steady-2d
 	@echo '=== All profile reports written to benchmarks/profile_reports/ ==='
 
 test-klone:
