@@ -42,6 +42,7 @@ mpi_advection_test
 mpi_bc_test
 diagnostics_test
 p3_smoke_test
+local_mesh_2d_gpu_test
 mojo.sif
 
 # build products
