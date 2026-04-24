@@ -132,16 +132,21 @@ struct Advection2D(Physics2D, ImplicitlyCopyable, Movable):
     ) -> Float64:
         var vn = self.vx * nx + self.vy * ny
         var abs_vn = vn if vn >= 0.0 else -vn
-        if bc_type == BC_OUTFLOW:
-            # Zero-gradient: ghost = interior.  Upwind becomes
-            # interior-side on outflow, zero on inflow.
+        # For advection, the physically correct boundary flux depends
+        # on whether the characteristic is outgoing (vn > 0) or incoming
+        # (vn < 0) relative to the outward normal:
+        #   * Outgoing: the upwind state is the interior -- material
+        #     leaves the domain carrying its q value (all BC kinds agree).
+        #   * Incoming: the upwind state is the ghost.  The three BC
+        #     kinds we support (WALL, OUTFLOW, anything else) all use
+        #     a zero-Dirichlet ghost for advection -- nothing new
+        #     enters the domain.  (A BC_INFLOW variant that uses a
+        #     user-specified inflow q is future work; the constant
+        #     is defined in src/boundary.mojo.)
+        if vn >= 0.0:
             flux[0] = vn * q_int[0]
         else:
-            # BC_WALL and anything else: zero-Dirichlet ghost.
-            if vn >= 0.0:
-                flux[0] = vn * q_int[0]
-            else:
-                flux[0] = 0.0
+            flux[0] = 0.0
         return abs_vn
 
     def source_term(

@@ -24,6 +24,7 @@
 comptime BC_INTERIOR:  Int32 = 0
 comptime BC_WALL:      Int32 = 1   # reflecting / slip wall
 comptime BC_OUTFLOW:   Int32 = 2   # zero-gradient transmissive outflow
+comptime BC_INFLOW:    Int32 = 3   # Dirichlet inflow to a user-set state
 
 
 # ----------------------------------------------------------------------
