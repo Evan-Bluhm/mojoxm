@@ -232,6 +232,32 @@ bench-euler-sod-2d: bench_euler_sod_2d
 bench-all: bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 	@echo '=== ALL BENCHMARKS PASSED ==='
 
+# Profiling: run a benchmark under nsys with --stats=true and capture
+# the kernel-time summary to benchmarks/profile_reports/<name>.kern.txt.
+# Requires nsys on PATH (ships with CUDA).  The awk filter keeps only
+# the kernel-time table from nsys's multi-section report for
+# diff-ability across runs; the full .nsys-rep trace is discarded.
+PROFILE_BIN = mkdir -p benchmarks/profile_reports; \
+              nsys profile --stats=true --force-overwrite=true \
+                  -o benchmarks/profile_reports/$$bin ./$$bin 2>&1 \
+              | awk '/Executing .cuda_gpu_kern_sum. stats report/,/\[7\/8\]/' \
+              > benchmarks/profile_reports/$$bin.kern.txt; \
+              echo "Kernel summary: benchmarks/profile_reports/$$bin.kern.txt"; \
+              cat benchmarks/profile_reports/$$bin.kern.txt; \
+              rm -f benchmarks/profile_reports/$$bin.nsys-rep benchmarks/profile_reports/$$bin.sqlite
+
+profile-bench-advection-translation-2d: bench_advection_translation_2d
+	@bin=bench_advection_translation_2d; $(PROFILE_BIN)
+profile-bench-euler-vortex-2d: bench_euler_vortex_2d
+	@bin=bench_euler_vortex_2d; $(PROFILE_BIN)
+profile-bench-mhd-alfven-2d: bench_mhd_alfven_2d
+	@bin=bench_mhd_alfven_2d; $(PROFILE_BIN)
+profile-bench-euler-sod-2d: bench_euler_sod_2d
+	@bin=bench_euler_sod_2d; $(PROFILE_BIN)
+
+profile-bench-all: profile-bench-advection-translation-2d profile-bench-euler-vortex-2d profile-bench-mhd-alfven-2d profile-bench-euler-sod-2d
+	@echo '=== All profile reports written to benchmarks/profile_reports/ ==='
+
 test-klone:
 	test/test_mpi_correctness.sh --klone
 
