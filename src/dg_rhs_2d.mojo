@@ -27,7 +27,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
-from src.boundary import BC_INTERIOR, BC_WALL, BC_OUTFLOW
+from src.boundary import BC_INTERIOR, BC_WALL, BC_OUTFLOW, BC_INFLOW
 
 
 # ----------------------------------------------------------------------
@@ -92,12 +92,23 @@ trait Physics2D(Copyable, Movable, ImplicitlyDestructible):
 # Advection2D: scalar linear advection
 # ----------------------------------------------------------------------
 
-@fieldwise_init
 struct Advection2D(Physics2D, ImplicitlyCopyable, Movable):
     comptime NUM_COMPONENTS = 1
 
     var vx: Float64
     var vy: Float64
+    # Inflow state (used only when a boundary face has bc_type ==
+    # BC_INFLOW).  Default 0 so pre-BC_INFLOW drivers work unchanged.
+    var inflow_q: Float64
+
+    def __init__(
+        out self,
+        vx: Float64, vy: Float64,
+        inflow_q: Float64 = 0.0,
+    ):
+        self.vx = vx
+        self.vy = vy
+        self.inflow_q = inflow_q
 
     def internal_flux(
         self,
@@ -135,18 +146,18 @@ struct Advection2D(Physics2D, ImplicitlyCopyable, Movable):
         # For advection, the physically correct boundary flux depends
         # on whether the characteristic is outgoing (vn > 0) or incoming
         # (vn < 0) relative to the outward normal:
-        #   * Outgoing: the upwind state is the interior -- material
-        #     leaves the domain carrying its q value (all BC kinds agree).
-        #   * Incoming: the upwind state is the ghost.  The three BC
-        #     kinds we support (WALL, OUTFLOW, anything else) all use
-        #     a zero-Dirichlet ghost for advection -- nothing new
-        #     enters the domain.  (A BC_INFLOW variant that uses a
-        #     user-specified inflow q is future work; the constant
-        #     is defined in src/boundary.mojo.)
+        #   * Outgoing: upwind = interior; all BC kinds agree.
+        #   * Incoming: upwind = ghost.  BC_WALL / BC_OUTFLOW use
+        #     a zero-Dirichlet ghost (nothing enters); BC_INFLOW uses
+        #     the `inflow_q` carried on the physics instance (set by
+        #     the driver's Advection2D(..., inflow_q=...) constructor).
         if vn >= 0.0:
             flux[0] = vn * q_int[0]
         else:
-            flux[0] = 0.0
+            if bc_type == BC_INFLOW:
+                flux[0] = vn * self.inflow_q
+            else:
+                flux[0] = 0.0
         return abs_vn
 
     def source_term(
@@ -166,13 +177,36 @@ struct Advection2D(Physics2D, ImplicitlyCopyable, Movable):
 # for prototyping.  A full 2D Euler suite (Roe / HLLE / HLLEC) can
 # parallel the 3D module if the demand ever arrives.
 
-@fieldwise_init
 struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
     comptime NUM_COMPONENTS = 4
 
     var gamma: Float64
     var min_density: Float64
     var min_pressure: Float64
+    # BC_INFLOW ghost state in conservative variables
+    # (rho, rho*u, rho*v, E).  Defaults zero so existing drivers work.
+    var inflow_rho: Float64
+    var inflow_rhou: Float64
+    var inflow_rhov: Float64
+    var inflow_E: Float64
+
+    def __init__(
+        out self,
+        gamma: Float64,
+        min_density: Float64,
+        min_pressure: Float64,
+        inflow_rho: Float64 = 0.0,
+        inflow_rhou: Float64 = 0.0,
+        inflow_rhov: Float64 = 0.0,
+        inflow_E: Float64 = 0.0,
+    ):
+        self.gamma = gamma
+        self.min_density = min_density
+        self.min_pressure = min_pressure
+        self.inflow_rho = inflow_rho
+        self.inflow_rhou = inflow_rhou
+        self.inflow_rhov = inflow_rhov
+        self.inflow_E = inflow_E
 
     def internal_flux(
         self,
@@ -245,9 +279,6 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
         var q_g_buf = InlineArray[Float64, 4](fill=0.0)
         if bc_type == BC_WALL:
             # Reflect normal momentum: q_ghost has (rho, m_t, -m_n, E).
-            # In (x, y) coords with normal (nx, ny):
-            #   m_n = mx * nx + my * ny
-            #   m_ghost = m - 2 m_n * (nx, ny)
             var mx = q_int[1]
             var my = q_int[2]
             var m_n = mx * nx + my * ny
@@ -255,6 +286,13 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
             q_g_buf[1] = mx - 2.0 * m_n * nx
             q_g_buf[2] = my - 2.0 * m_n * ny
             q_g_buf[3] = q_int[3]
+        elif bc_type == BC_INFLOW:
+            # Dirichlet inflow: ghost = user-specified state carried on
+            # the physics instance.
+            q_g_buf[0] = self.inflow_rho
+            q_g_buf[1] = self.inflow_rhou
+            q_g_buf[2] = self.inflow_rhov
+            q_g_buf[3] = self.inflow_E
         else:
             # BC_OUTFLOW (default): zero-gradient ghost.
             for c in range(4):
@@ -282,12 +320,29 @@ struct Euler2D(Physics2D, ImplicitlyCopyable, Movable):
 # Flat bed (no source term).  Rusanov numerical flux -- same pattern
 # as Euler2D, just a simpler 3-component state.
 
-@fieldwise_init
 struct ShallowWater2D(Physics2D, ImplicitlyCopyable, Movable):
     comptime NUM_COMPONENTS = 3
 
     var g: Float64            # gravitational acceleration
     var min_h: Float64        # depth floor (avoids divide-by-zero at dry patches)
+    # BC_INFLOW ghost state (h, h*u, h*v).  Defaults zero.
+    var inflow_h: Float64
+    var inflow_hu: Float64
+    var inflow_hv: Float64
+
+    def __init__(
+        out self,
+        g: Float64,
+        min_h: Float64,
+        inflow_h: Float64 = 0.0,
+        inflow_hu: Float64 = 0.0,
+        inflow_hv: Float64 = 0.0,
+    ):
+        self.g = g
+        self.min_h = min_h
+        self.inflow_h = inflow_h
+        self.inflow_hu = inflow_hu
+        self.inflow_hv = inflow_hv
 
     def internal_flux(
         self,
@@ -355,6 +410,10 @@ struct ShallowWater2D(Physics2D, ImplicitlyCopyable, Movable):
             q_g_buf[0] = q_int[0]
             q_g_buf[1] = mx - 2.0 * m_n * nx
             q_g_buf[2] = my - 2.0 * m_n * ny
+        elif bc_type == BC_INFLOW:
+            q_g_buf[0] = self.inflow_h
+            q_g_buf[1] = self.inflow_hu
+            q_g_buf[2] = self.inflow_hv
         else:
             for c in range(3):
                 q_g_buf[c] = q_int[c]
