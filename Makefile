@@ -85,9 +85,9 @@ ALL_DRIVERS  = $(CPU_DRIVERS) $(GPU_DRIVERS)
 # Test drivers live under test/; they use the same Physics / Solver
 # machinery as the examples/ drivers but emit per-rank binary dumps
 # that the test harness diffs across rank counts.
-TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test
+TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test local_mesh_2d_gpu_test
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-diagnostics test-p3 test-all test-klone
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-local-mesh-2d-gpu test-diagnostics test-p3 test-all test-klone
 
 help:
 	@echo 'mojoxm build targets'
@@ -239,9 +239,16 @@ test-diagnostics: diagnostics_test
 test-p3: p3_smoke_test
 	./p3_smoke_test
 
+# 2D GPU mesh upload smoke test (task #19 foundation).  Builds a host
+# LocalMesh2D[P], wraps it in LocalMesh2DGpu[P], and downloads a few
+# buffers to verify the Float64 -> Float32 conversion + Int32 transfer
+# round-trip cleanly.  No GPU kernels yet -- just the buffer plumbing.
+test-local-mesh-2d-gpu: local_mesh_2d_gpu_test
+	./local_mesh_2d_gpu_test
+
 # Convenience target: run every test in the suite.  Stops on the first
 # failure.  Doesn't include test-klone (that's for cluster submission).
-test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-diagnostics test-p3 test test-bc
+test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-local-mesh-2d-gpu test-diagnostics test-p3 test test-bc
 	@echo '=== ALL TESTS PASSED ==='
 
 test-klone:
