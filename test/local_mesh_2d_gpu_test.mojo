@@ -22,7 +22,8 @@ from src import mpi
 from std.math import sin, cos, pi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import (
-    LocalMesh2DGpu, launch_cell_avg_2d, launch_advection_volume_rhs_2d,
+    LocalMesh2DGpu, launch_cell_avg_2d,
+    launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
 )
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
@@ -41,7 +42,7 @@ def check[P: Int]() raises:
     comptime Nx = 5
     comptime Ny = 4
     comptime NP_p = num_tri_nodes_2d(P)
-    var NFP_e = num_edge_nodes(P)
+    comptime NFP_e = num_edge_nodes(P)
 
     var host = LocalMesh2D[P](Nx, Ny, 1.0, 1.0)
     var ctx = DeviceContext()
@@ -246,6 +247,57 @@ def check[P: Int]() raises:
         raise Error(
             "advection_volume_rhs_kernel_2d: max err "
             + String(max_vol_err)
+        )
+
+    # GPU face-flux kernel for scalar advection (periodic mesh, so
+    # every face is BC_INTERIOR and the CPU reference collapses to
+    # pure upwind).
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_faces * NFP_e
+    )
+    launch_advection_face_flux_2d[NP_p, NFP_e](
+        ctx,
+        d_q.unsafe_ptr(),
+        gpu.d_face_elem.unsafe_ptr(),
+        gpu.d_face_elem_node.unsafe_ptr(),
+        gpu.d_face_normal.unsafe_ptr(),
+        gpu.d_face_bc_type.unsafe_ptr(),
+        gpu.num_faces,
+        vx, vy, Float32(0.0),
+        d_fstar.unsafe_ptr(),
+    )
+    var hbuf_fstar = ctx.enqueue_create_host_buffer[DType.float32](
+        gpu.num_faces * NFP_e
+    )
+    ctx.enqueue_copy(hbuf_fstar, d_fstar)
+    ctx.synchronize()
+    var fstar_ptr = hbuf_fstar.unsafe_ptr()
+    var max_fstar_err: Float32 = 0.0
+    for fid in range(gpu.num_faces):
+        var fnx = Float32(host2.face_normal[fid * 2 + 0])
+        var fny = Float32(host2.face_normal[fid * 2 + 1])
+        var vn = vx * fnx + vy * fny
+        var e_l = Int(host2.face_elem[fid * 2 + 0])
+        var e_r = Int(host2.face_elem[fid * 2 + 1])
+        for m in range(NFP_e):
+            var n_l = Int(host2.face_elem_node[(fid * 2 + 0) * NFP_e + m])
+            var n_r = Int(host2.face_elem_node[(fid * 2 + 1) * NFP_e + m])
+            var q_l = q_host_f32[e_l * NP_p + n_l]
+            var q_r = q_host_f32[e_r * NP_p + n_r]
+            var cpu_fstar: Float32
+            if vn >= Float32(0.0):
+                cpu_fstar = vn * q_l
+            else:
+                cpu_fstar = vn * q_r
+            var diff = cpu_fstar - fstar_ptr[fid * NFP_e + m]
+            var adiff = diff if diff >= Float32(0.0) else -diff
+            if adiff > max_fstar_err:
+                max_fstar_err = adiff
+    print("    face flux GPU vs CPU max err =", max_fstar_err)
+    if max_fstar_err > Float32(1.0e-5):
+        raise Error(
+            "advection_face_flux_kernel_2d: max err "
+            + String(max_fstar_err)
         )
 
 

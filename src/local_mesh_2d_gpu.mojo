@@ -31,6 +31,7 @@
 
 from src.local_mesh_2d import LocalMesh2D
 from src.reference_2d import num_tri_nodes_2d, num_edge_nodes
+from src.boundary import BC_INTERIOR, BC_WALL, BC_OUTFLOW, BC_INFLOW
 from std.gpu import global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.math import ceildiv
@@ -222,6 +223,89 @@ def launch_advection_volume_rhs_2d[NP: Int](
     comptime _kernel = advection_volume_rhs_kernel_2d[NP]
     ctx.enqueue_function[_kernel, _kernel](
         q, elem_invJ, D_ref, num_elements, vx, vy, vol_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
+
+
+# ----------------------------------------------------------------------
+# Advection face-flux kernel (2D, scalar).
+# ----------------------------------------------------------------------
+# Computes upwind fstar at every face-local slot:
+#   fstar = vn * q_upwind
+# where vn = v . n (side-0's outward normal).  On non-periodic BC
+# faces we pick the ghost state by bc_type (zero for WALL/OUTFLOW
+# incoming direction; `inflow_q` for BC_INFLOW).
+#
+# One thread per (face, slot) = num_faces * NFP_edge threads.
+# ----------------------------------------------------------------------
+
+def advection_face_flux_kernel_2d[NP: Int, NFP: Int](
+    q:               UnsafePointer[Float32, MutAnyOrigin],
+    face_elem:       UnsafePointer[Int32,   MutAnyOrigin],
+    face_elem_node:  UnsafePointer[Int32,   MutAnyOrigin],
+    face_normal:     UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type:    UnsafePointer[Int32,   MutAnyOrigin],
+    num_faces:       Int,
+    vx: Float32, vy: Float32, inflow_q: Float32,
+    fstar_out:       UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_faces * NFP
+    if tid >= total:
+        return
+    var fid = tid // NFP
+    var m   = tid %  NFP
+
+    var nx = face_normal[fid * 2 + 0]
+    var ny = face_normal[fid * 2 + 1]
+    var vn = vx * nx + vy * ny
+    var e_l = Int(face_elem[fid * 2 + 0])
+    var n_l = Int(face_elem_node[(fid * 2 + 0) * NFP + m])
+    var q_l = q[e_l * NP + n_l]
+    var bc_type = face_bc_type[fid]
+
+    var fstar: Float32
+    if bc_type == BC_INTERIOR:
+        var e_r = Int(face_elem[fid * 2 + 1])
+        var n_r = Int(face_elem_node[(fid * 2 + 1) * NFP + m])
+        var q_r = q[e_r * NP + n_r]
+        if vn >= Float32(0.0):
+            fstar = vn * q_l
+        else:
+            fstar = vn * q_r
+    elif bc_type == BC_INFLOW:
+        # Characteristic entering domain (vn < 0) picks user-set
+        # inflow; exiting (vn >= 0) still upwinds from interior.
+        if vn >= Float32(0.0):
+            fstar = vn * q_l
+        else:
+            fstar = vn * inflow_q
+    else:
+        # BC_WALL / BC_OUTFLOW / default: zero-Dirichlet ghost.
+        if vn >= Float32(0.0):
+            fstar = vn * q_l
+        else:
+            fstar = Float32(0.0)
+    fstar_out[fid * NFP + m] = fstar
+
+
+def launch_advection_face_flux_2d[NP: Int, NFP: Int](
+    mut ctx: DeviceContext,
+    q:              UnsafePointer[Float32, MutAnyOrigin],
+    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
+    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
+    num_faces:      Int,
+    vx: Float32, vy: Float32, inflow_q: Float32,
+    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_faces * NFP
+    comptime _kernel = advection_face_flux_kernel_2d[NP, NFP]
+    ctx.enqueue_function[_kernel, _kernel](
+        q, face_elem, face_elem_node, face_normal, face_bc_type,
+        num_faces, vx, vy, inflow_q, fstar_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
