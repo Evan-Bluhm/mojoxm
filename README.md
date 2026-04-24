@@ -91,11 +91,15 @@ Nine reference drivers under `examples/`:
   to MP4 via matplotlib + ffmpeg.
   **GPU port (task #19, complete):** all four 2D physics
   (Advection / Euler / ShallowWater / IdealMHD) run on device via
-  Float32 kernels orchestrated as volume-rhs + Rusanov face-flux +
+  Float32 kernels orchestrated as volume-rhs + face-flux +
   multi-component lift-combine + rk-update.  Each physics's SSPRK3
-  step matches the CPU Float64 reference to ~1e-7 at P=1..3.  Six
-  end-to-end drivers under `examples/*_2d_gpu.mojo` emit 21-frame
-  VTU sequences (+ .pvd) matching the CPU format so
+  step matches the CPU Float64 reference to ~1e-7 at P=1..3.
+  Two Euler Riemann solvers on device: Rusanov (default) and HLLC
+  (Toro 1994, resolves contact waves exactly).  A Venkat-smoothed
+  Barth-Jespersen cell-level limiter also runs on device
+  (`bj_limit_full_2d`) and matches the CPU reference to 2.4e-7.
+  Eight end-to-end drivers under `examples/*_2d_gpu.mojo` emit
+  21-frame VTU sequences (+ .pvd) matching the CPU format so
   `scripts/animate_2d.py` works on either family:
   * **Periodic:** `advection_gaussian_2d_gpu` (~7700 compute
     steps/sec, 0.07 % rel L2 over one period), `euler_vortex_2d_gpu`
@@ -104,11 +108,16 @@ Nine reference drivers under `examples/`:
     `mhd_alfven_2d_gpu` (~9100, 0.36 % rel L2 on a one-period
     linear Alfven wave at P=2 / 64x4).
   * **Non-periodic (BC_WALL / BC_INFLOW / BC_OUTFLOW on GPU):**
-    `euler_channel_2d_gpu` (Mach-2 wind tunnel with inflow +
-    outflow + walls; rho_max_drift = 1.2e-7 -- analytic steady
-    answer preserved to Float32 epsilon),
+    `advection_outflow_2d_gpu` (Gaussian drains out, mass -> 5e-7
+    of IC by t=1), `euler_channel_2d_gpu` (Mach-2 wind tunnel
+    with inflow + outflow + walls; rho_max_drift = 1.2e-7 --
+    analytic steady answer preserved to Float32 epsilon),
     `shallow_water_dam_break_2d_gpu` (h_L=2 / h_R=1 Riemann in a
-    closed basin with walls on all 4 sides; ~8700 steps/sec).
+    closed basin; ~8700 steps/sec).
+  * **Shocks (HLLC + BJ limiter):** `euler_sod_2d_gpu` (classical
+    Sod lifted to 2D at P=2 / 128x16: rho overshoot 0.27 %% above
+    rho_L, boundary states within 0.2 %% of expected; 5100
+    steps/sec with three limiter passes per SSPRK3 step).
 
 ## Numerical scheme
 
