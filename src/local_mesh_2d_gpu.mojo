@@ -1352,6 +1352,159 @@ def launch_sw_face_flux_2d[NP: Int, NFP: Int](
     )
 
 
+# ----------------------------------------------------------------------
+# ShallowWater2D HLL face flux (Einfeldt 1988, 3 components).
+# ----------------------------------------------------------------------
+# Same signature as the Rusanov kernel; uses Davis wave-speed estimates
+# S_L = min(unL - cL, unR - cR), S_R = max(unL + cL, unR + cR), then
+# the three-region HLL formula for the middle state.  Less dissipative
+# than Rusanov's single-alpha fan, particularly around contacts and
+# expansion fans.  Ghost-state plumbing (WALL / INFLOW / OUTFLOW) is
+# the same as the Rusanov kernel -- only the interior flux differs.
+# ----------------------------------------------------------------------
+
+def sw_face_flux_hll_kernel_2d[NP: Int, NFP: Int](
+    q:              UnsafePointer[Float32, MutAnyOrigin],
+    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
+    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
+    num_faces:      Int,
+    g:              Float32,
+    min_h:          Float32,
+    inflow_h:       Float32,
+    inflow_hu:      Float32,
+    inflow_hv:      Float32,
+    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_faces * NFP
+    if tid >= total:
+        return
+    var fid = tid // NFP
+    var m   = tid %  NFP
+
+    var nx = face_normal[fid * 2 + 0]
+    var ny = face_normal[fid * 2 + 1]
+    var bc_type = face_bc_type[fid]
+
+    var e_l = Int(face_elem[fid * 2 + 0])
+    var n_l = Int(face_elem_node[(fid * 2 + 0) * NFP + m])
+    var l_off = (e_l * NP + n_l) * 3
+    var qL0 = q[l_off + 0]
+    var qL1 = q[l_off + 1]
+    var qL2 = q[l_off + 2]
+
+    var qR0: Float32
+    var qR1: Float32
+    var qR2: Float32
+    if bc_type == BC_INTERIOR:
+        var e_r = Int(face_elem[fid * 2 + 1])
+        var n_r = Int(face_elem_node[(fid * 2 + 1) * NFP + m])
+        var r_off = (e_r * NP + n_r) * 3
+        qR0 = q[r_off + 0]
+        qR1 = q[r_off + 1]
+        qR2 = q[r_off + 2]
+    elif bc_type == BC_WALL:
+        var m_n = qL1 * nx + qL2 * ny
+        qR0 = qL0
+        qR1 = qL1 - Float32(2.0) * m_n * nx
+        qR2 = qL2 - Float32(2.0) * m_n * ny
+    elif bc_type == BC_INFLOW:
+        qR0 = inflow_h
+        qR1 = inflow_hu
+        qR2 = inflow_hv
+    else:
+        qR0 = qL0
+        qR1 = qL1
+        qR2 = qL2
+
+    var hL = qL0
+    if hL < min_h: hL = min_h
+    var hR = qR0
+    if hR < min_h: hR = min_h
+    var uL = qL1 / hL
+    var vL = qL2 / hL
+    var uR = qR1 / hR
+    var vR = qR2 / hR
+    var pL = Float32(0.5) * g * hL * hL
+    var pR = Float32(0.5) * g * hR * hR
+    var cL = sqrt(g * hL)
+    var cR = sqrt(g * hR)
+    var unL = uL * nx + vL * ny
+    var unR = uR * nx + vR * ny
+
+    # Davis wave speeds.
+    var S_L = unL - cL
+    var tmp = unR - cR
+    if tmp < S_L: S_L = tmp
+    var S_R = unL + cL
+    tmp = unR + cR
+    if tmp > S_R: S_R = tmp
+
+    # Normal fluxes on each side.
+    var FxL0 = qL1
+    var FxL1 = qL1 * uL + pL
+    var FxL2 = qL1 * vL
+    var FyL0 = qL2
+    var FyL1 = qL2 * uL
+    var FyL2 = qL2 * vL + pL
+    var FxR0 = qR1
+    var FxR1 = qR1 * uR + pR
+    var FxR2 = qR1 * vR
+    var FyR0 = qR2
+    var FyR1 = qR2 * uR
+    var FyR2 = qR2 * vR + pR
+    var FnL0 = FxL0 * nx + FyL0 * ny
+    var FnL1 = FxL1 * nx + FyL1 * ny
+    var FnL2 = FxL2 * nx + FyL2 * ny
+    var FnR0 = FxR0 * nx + FyR0 * ny
+    var FnR1 = FxR1 * nx + FyR1 * ny
+    var FnR2 = FxR2 * nx + FyR2 * ny
+
+    var out = (fid * NFP + m) * 3
+    if S_L >= Float32(0.0):
+        fstar_out[out + 0] = FnL0
+        fstar_out[out + 1] = FnL1
+        fstar_out[out + 2] = FnL2
+    elif S_R <= Float32(0.0):
+        fstar_out[out + 0] = FnR0
+        fstar_out[out + 1] = FnR1
+        fstar_out[out + 2] = FnR2
+    else:
+        var inv = Float32(1.0) / (S_R - S_L)
+        fstar_out[out + 0] = (S_R * FnL0 - S_L * FnR0 + S_L * S_R * (qR0 - qL0)) * inv
+        fstar_out[out + 1] = (S_R * FnL1 - S_L * FnR1 + S_L * S_R * (qR1 - qL1)) * inv
+        fstar_out[out + 2] = (S_R * FnL2 - S_L * FnR2 + S_L * S_R * (qR2 - qL2)) * inv
+
+
+def launch_sw_face_flux_hll_2d[NP: Int, NFP: Int](
+    mut ctx: DeviceContext,
+    q:              UnsafePointer[Float32, MutAnyOrigin],
+    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
+    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
+    num_faces:      Int,
+    g:              Float32,
+    min_h:          Float32,
+    inflow_h:       Float32,
+    inflow_hu:      Float32,
+    inflow_hv:      Float32,
+    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_faces * NFP
+    comptime _kernel = sw_face_flux_hll_kernel_2d[NP, NFP]
+    ctx.enqueue_function[_kernel, _kernel](
+        q, face_elem, face_elem_node, face_normal, face_bc_type,
+        num_faces,
+        g, min_h, inflow_h, inflow_hu, inflow_hv,
+        fstar_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
+
+
 def sw_rk_stage_2d[P: Int](
     mut ctx: DeviceContext,
     mesh: LocalMesh2DGpu[P],
@@ -1375,6 +1528,59 @@ def sw_rk_stage_2d[P: Int](
         mesh.num_elements, g, min_h, vol_scratch,
     )
     launch_sw_face_flux_2d[NP, NFP](
+        ctx, q_in,
+        mesh.d_face_elem.unsafe_ptr(),
+        mesh.d_face_elem_node.unsafe_ptr(),
+        mesh.d_face_normal.unsafe_ptr(),
+        mesh.d_face_bc_type.unsafe_ptr(),
+        mesh.num_faces,
+        g, min_h, inflow_h, inflow_hu, inflow_hv,
+        fstar_scratch,
+    )
+    launch_lift_combine_2d[NP, NFP, 3](
+        ctx, vol_scratch, fstar_scratch,
+        mesh.d_elem_inv_2A.unsafe_ptr(),
+        mesh.d_elem_faces.unsafe_ptr(),
+        mesh.d_elem_face_side.unsafe_ptr(),
+        mesh.d_elem_canon_to_ref.unsafe_ptr(),
+        mesh.d_face_length.unsafe_ptr(),
+        Lift_ref,
+        mesh.num_elements, rhs_scratch,
+    )
+    launch_rk_update_2d[NP, 3](
+        ctx, q_a, q_b, rhs_scratch,
+        mesh.num_elements, a, b, cc, dt, q_out,
+    )
+
+
+# ----------------------------------------------------------------------
+# ShallowWater RK stage using HLL instead of Rusanov for the interior
+# numerical flux.  Drop-in replacement for sw_rk_stage_2d.
+# ----------------------------------------------------------------------
+
+def sw_rk_stage_hll_2d[P: Int](
+    mut ctx: DeviceContext,
+    mesh: LocalMesh2DGpu[P],
+    Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:    UnsafePointer[Float32, MutAnyOrigin],
+    q_in:     UnsafePointer[Float32, MutAnyOrigin],
+    q_a:      UnsafePointer[Float32, MutAnyOrigin],
+    q_b:      UnsafePointer[Float32, MutAnyOrigin],
+    q_out:    UnsafePointer[Float32, MutAnyOrigin],
+    vol_scratch:   UnsafePointer[Float32, MutAnyOrigin],
+    fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
+    rhs_scratch:   UnsafePointer[Float32, MutAnyOrigin],
+    g: Float32, min_h: Float32,
+    inflow_h: Float32, inflow_hu: Float32, inflow_hv: Float32,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+) raises:
+    comptime NP = num_tri_nodes_2d(P)
+    comptime NFP = num_edge_nodes(P)
+    launch_sw_volume_rhs_2d[NP](
+        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        mesh.num_elements, g, min_h, vol_scratch,
+    )
+    launch_sw_face_flux_hll_2d[NP, NFP](
         ctx, q_in,
         mesh.d_face_elem.unsafe_ptr(),
         mesh.d_face_elem_node.unsafe_ptr(),
@@ -1754,8 +1960,7 @@ def mhd_rk_stage_2d[P: Int](
 # regions -- epsilon=0 recovers raw BJ, which kills P+1 accuracy even
 # where the solution is smooth.
 #
-# This kernel mirrors `bj_limit_2d` in `src/dg_rhs_2d.mojo` with the
-# two-pass structure:
+# Two-pass structure:
 #   1. Caller first runs `cell_avg_kernel_2d[NP, NC]` into `d_cell_avg`
 #      (num_elements * NC Float32).
 #   2. `bj_limit_kernel_2d[NP, NC]` -- one thread per element.  Reads
@@ -1849,8 +2054,8 @@ def launch_bj_limit_2d[NP: Int, NC: Int](
 
 
 # Convenience two-pass orchestrator: run cell_avg then the limiter on
-# top of an existing cell_avg scratch buffer.  Drivers that call this
-# between RK stages get the CPU bj_limit_2d behaviour 1:1 at Float32.
+# top of a caller-supplied cell_avg scratch buffer.  Drivers call this
+# between RK stages to enforce monotonicity on shocked problems.
 
 def bj_limit_full_2d[P: Int, NC: Int](
     mut ctx: DeviceContext,

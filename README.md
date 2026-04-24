@@ -76,38 +76,29 @@ Nine reference drivers under `examples/`:
   Venkatakrishnan-smoothed Barth-Jespersen slope limiter that runs
   after every RK stage.  Brings classical Sod to T=0.20 with left
   rho = 0.998, right rho = 0.119 (within ~0.2%/5% of exact).
-- **2D triangular elements (CPU)**: parallel stack at `src/reference_2d.mojo`
-  / `local_mesh_2d.mojo` / `dg_rhs_2d.mojo` / `vtu_2d.mojo`.
-  `Physics2D` trait + **Advection2D / Euler2D / ShallowWater2D /
-  IdealMHD2D** (4 physics);
-  full BC menu: periodic / wall / outflow / **inflow** (each physics
-  carries its own user-set inflow ghost state); SSPRK2, SSPRK3, RK4
-  time integrators.  Spatial convergence rates verified to (P+1)
-  on smooth advection (P=1: 1.99, P=2: 3.28, P=3: 3.96).
-  7 demo drivers under `examples/*_2d_cpu.mojo` cover advection (periodic
-  + outflow), Euler (vortex / Sod / Mach-2 channel with inflow),
-  shallow water (drop / dam break).  `dump_vtu_2d_frame` writes
-  ParaView-visualisable VTU; `scripts/animate_2d.py` renders them
-  to MP4 via matplotlib + ffmpeg.
-  **GPU port (task #19, complete):** all four 2D physics
-  (Advection / Euler / ShallowWater / IdealMHD) run on device via
-  Float32 kernels orchestrated as volume-rhs + face-flux +
-  multi-component lift-combine + rk-update.  Each physics's SSPRK3
-  step matches the CPU Float64 reference to ~1e-7 at P=1..3.
-  Two Euler Riemann solvers on device: Rusanov (default) and HLLC
-  (Toro 1994, resolves contact waves exactly).  A Venkat-smoothed
-  Barth-Jespersen cell-level limiter also runs on device
-  (`bj_limit_full_2d`) and matches the CPU reference to 2.4e-7.
-  Eight end-to-end drivers under `examples/*_2d_gpu.mojo` emit
-  21-frame VTU sequences (+ .pvd) matching the CPU format so
-  `scripts/animate_2d.py` works on either family:
+- **2D triangulated DG (GPU-only)**: `src/reference_2d.mojo` +
+  `local_mesh_2d.mojo` build the host-side mesh / reference element
+  (validated by `make test-reference-2d` / `test-local-mesh-2d`) and
+  are uploaded to the device through `LocalMesh2DGpu[P]` /
+  `ReferenceElement2DGpu[P]`.  All physics run on device in Float32
+  via kernels in `src/local_mesh_2d_gpu.mojo`:
+  volume-rhs + face-flux + multi-component lift-combine + rk-update,
+  orchestrated per physics by `<name>_rk_stage_2d[P]`.  Four physics
+  (Advection / Euler / ShallowWater / IdealMHD), full BC menu
+  (periodic / wall / outflow / inflow), two Euler Riemann solvers
+  (Rusanov and HLLC) and two SW Riemann solvers (Rusanov and HLL), a
+  Venkat-smoothed Barth-Jespersen cell-level limiter
+  (`bj_limit_full_2d`) for shock stability.  Eight end-to-end
+  drivers under `examples/*_2d_gpu.mojo` emit 21-frame VTU
+  sequences + `.pvd` collections (see
+  [`scripts/animate_2d.py`](scripts/animate_2d.py) for MP4 export):
   * **Periodic:** `advection_gaussian_2d_gpu` (~7700 compute
     steps/sec, 0.07 % rel L2 over one period), `euler_vortex_2d_gpu`
     (~7600, isentropic vortex, 6.8 % rel L2 at P=2 / 32x32),
     `shallow_water_drop_2d_gpu` (~6300, mean-h conservation ~4e-5),
     `mhd_alfven_2d_gpu` (~9100, 0.36 % rel L2 on a one-period
     linear Alfven wave at P=2 / 64x4).
-  * **Non-periodic (BC_WALL / BC_INFLOW / BC_OUTFLOW on GPU):**
+  * **Non-periodic (BC_WALL / BC_INFLOW / BC_OUTFLOW):**
     `advection_outflow_2d_gpu` (Gaussian drains out, mass -> 5e-7
     of IC by t=1), `euler_channel_2d_gpu` (Mach-2 wind tunnel
     with inflow + outflow + walls; rho_max_drift = 1.2e-7 --
@@ -115,9 +106,19 @@ Nine reference drivers under `examples/`:
     `shallow_water_dam_break_2d_gpu` (h_L=2 / h_R=1 Riemann in a
     closed basin; ~8700 steps/sec).
   * **Shocks (HLLC + BJ limiter):** `euler_sod_2d_gpu` (classical
-    Sod lifted to 2D at P=2 / 128x16: rho overshoot 0.27 %% above
-    rho_L, boundary states within 0.2 %% of expected; 5100
-    steps/sec with three limiter passes per SSPRK3 step).
+    Sod lifted to 2D at P=2 / 128x16: rho overshoot 0.27 % above
+    rho_L, boundary states within 0.2 % of expected; 5100 steps/sec
+    with three limiter passes per SSPRK3 step).
+
+  **Tests:** GPU kernels are validated by self-consistent invariants
+  rather than CPU reference code: `local_mesh_2d_gpu_test` confirms
+  upload round-trips and constant-state SSPRK3 preservation at
+  P=1/2/3; `euler_2d_gpu_test` / `sw_2d_gpu_test` / `mhd_2d_gpu_test`
+  run the same constant-state check per-physics; `limiter_2d_gpu_test`
+  asserts smooth passthrough + within-cell spike monotonicity.
+  End-to-end correctness is proven by the drivers' analytic
+  diagnostics (vortex / Alfven one-period L2, channel steady state,
+  Sod boundary-plateau deviations).
 
 ## Numerical scheme
 

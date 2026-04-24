@@ -43,6 +43,10 @@ mpi_bc_test
 diagnostics_test
 p3_smoke_test
 local_mesh_2d_gpu_test
+euler_2d_gpu_test
+sw_2d_gpu_test
+mhd_2d_gpu_test
+limiter_2d_gpu_test
 advection_gaussian_2d_gpu
 euler_vortex_2d_gpu
 shallow_water_drop_2d_gpu

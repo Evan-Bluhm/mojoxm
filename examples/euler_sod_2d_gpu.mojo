@@ -2,8 +2,8 @@
 # euler_sod_2d_gpu -- GPU 2D Sod shock tube (HLLC + BJ limiter)
 # ======================================================================
 #
-# GPU analog of `euler_sod_2d_cpu.mojo`.  The 1D Sod shock tube
-# (rho_L=1, p_L=1, rho_R=0.125, p_R=0.1, u=v=0) lifted to a 2D strip
+# 1D Sod shock tube (rho_L=1, p_L=1, rho_R=0.125, p_R=0.1, u=v=0)
+# lifted to a 2D strip
 # on [0, 1] x [0, 0.125], with BC_OUTFLOW on the x ends and BC_WALL on
 # the y ends.  Runs to T=0.20, the classical Sod horizon.
 #

@@ -71,10 +71,11 @@ SRC_MOJO    := $(wildcard src/*.mojo)
 
 # Driver groupings.
 #   CPU_DRIVERS -- MPI drivers that don't touch the GPU at all.  Safe
-#                  to build on login nodes.
-#   GPU_DRIVERS -- drivers that instantiate Mesh / Solver and therefore
-#                  require a GPU at build time (Mojo elaborates the RK
-#                  kernel at compile time).
+#                  to build on login nodes.  No simulations here: we
+#                  solve exclusively on the GPU.
+#   GPU_DRIVERS -- every simulation driver.  All require a GPU at
+#                  build time (Mojo elaborates the kernels at compile
+#                  time) and at run time.
 CPU_DRIVERS  = mpi_hello mpi_partition
 GPU_DRIVERS  = advection_gaussian euler_vortex euler_taylor_green euler_sod \
                euler_rising_bubble maxwell_cavity shallow_water_drop \
@@ -86,12 +87,15 @@ GPU_DRIVERS  = advection_gaussian euler_vortex euler_taylor_green euler_sod \
                mpi_patch_mesh mpi_halo_pingpong
 ALL_DRIVERS  = $(CPU_DRIVERS) $(GPU_DRIVERS)
 
-# Test drivers live under test/; they use the same Physics / Solver
-# machinery as the examples/ drivers but emit per-rank binary dumps
-# that the test harness diffs across rank counts.
-TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test local_mesh_2d_gpu_test
+# Test drivers live under test/; they validate GPU kernels against
+# self-consistent invariants (constant-state preservation, upload
+# round-trips) or against known analytic solutions.  All require a
+# GPU.
+TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test \
+               local_mesh_2d_gpu_test euler_2d_gpu_test sw_2d_gpu_test \
+               mhd_2d_gpu_test limiter_2d_gpu_test
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-hllc test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-local-mesh-2d-gpu test-diagnostics test-p3 test-all test-klone
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-limiter-2d-gpu test-diagnostics test-p3 test-all test-klone
 
 help:
 	@echo 'mojoxm build targets'
@@ -140,101 +144,28 @@ test: $(TEST_DRIVERS)
 test-bc: $(TEST_DRIVERS)
 	test/test_mpi_bc_correctness.sh
 
-# Host-side reference-element unit test: validates Lagrange basis
-# construction (Vandermonde + analytic integration) at orders P=1..4
-# via SPD mass matrix + node-position + face-to-element map checks.
-# No GPU, no MPI -- runs as a plain `mojo run`.
+# Host-side reference-element unit test: validates the 3D Lagrange
+# basis construction (Vandermonde + analytic integration) at orders
+# P=1..4 via SPD mass matrix + node-position + face-to-element map
+# checks.  Host math only, but the same tables are uploaded to the
+# GPU by ReferenceElement[P].
 test-reference:
 	.venv/bin/mojo run -I . test/reference_element_test.mojo
 
 # Same for the 2D triangular reference element (ReferenceElement2D[P]).
 # Covers node positions, SPD 2D mass matrix, edge-to-element map.
-# Host-only; future 2D mesh/solver/VTU work will build on this.
+# ReferenceElement2DGpu uploads from this; validating the host tables
+# catches the bulk of basis-construction bugs before a GPU run.
 test-reference-2d:
 	.venv/bin/mojo run -I . test/reference_element_2d_test.mojo
 
 # 2D triangulated Cartesian mesh topology: element / face counts,
 # elem_faces <-> face_elem round-trip, side-0 / side-1 node coordinate
-# agreement across shared edges, Jacobian positivity.  Host-only.
+# agreement across shared edges, Jacobian positivity.  The mesh
+# LocalMesh2D uploads is built here; catching topology errors on the
+# host side avoids expensive GPU debugging.
 test-local-mesh-2d:
 	.venv/bin/mojo run -I . test/local_mesh_2d_test.mojo
-
-# Host-side 2D DG advection rhs: constant-state preservation.  On a
-# periodic domain a constant q has zero divergence of v.q and the face
-# fluxes cancel pair-wise around each cell (divergence theorem), so
-# `advection_rhs_2d` must produce rhs = 0 to within roundoff.  Tests
-# that the mesh Jacobian, D_ref / Lift_ref operators, face-normal
-# convention, and elem_canon_to_ref mapping are internally consistent.
-test-dg-rhs-2d:
-	.venv/bin/mojo run -I . test/dg_rhs_2d_test.mojo
-
-# End-to-end 2D DG advection: run SSPRK3 for one full period on a
-# periodic Gaussian IC and verify L2 error against the initial state is
-# small (< 10%).  Proves the mesh + rhs + time stepper compose without
-# sign/scale mistakes.  Host-only (Float64 CPU reference path).
-test-advection-step-2d:
-	.venv/bin/mojo run -I . test/advection_step_2d_test.mojo
-
-# 2D Euler physics sanity: constant-state preservation + Gaussian
-# density bump translation under a uniform flow.  Validates the 2D
-# Rusanov numerical flux and the Physics2D trait dispatch.
-test-euler2d:
-	.venv/bin/mojo run -I . test/euler2d_test.mojo
-
-# HLLC numerical flux vs Rusanov on the one-period Shu-Erlebacher
-# isentropic vortex.  Both schemes must converge to the IC after one
-# full advection period on a periodic mesh; HLLC's reduced dissipation
-# should show up as a notably smaller L2 error.
-test-hllc:
-	.venv/bin/mojo run -I . test/hllc_vs_rusanov_test.mojo
-
-# 2D shallow-water physics sanity: constant-state preservation on
-# lake-at-rest + uniform-flow IC.  Verifies the flux for p = g h^2 / 2
-# and the 3-component state vector are plumbed correctly.
-test-shallow-water-2d:
-	.venv/bin/mojo run -I . test/shallow_water_2d_test.mojo
-
-# Non-periodic 2D BC overlay sanity: wall BCs on all four sides produce
-# the expected face count (3 Nx Ny + Nx + Ny) and at-rest states for
-# ShallowWater2D / Euler2D give rhs = 0 to roundoff (wall reflection
-# cancels symmetrically).
-test-mesh-2d-bc:
-	.venv/bin/mojo run -I . test/mesh_2d_bc_test.mojo
-
-# 2D shallow-water BCs under *evolution*: Gaussian bump in a walled
-# box, integrated for T=0.2.  Checks h stays positive + bounded + mass
-# stays within 1% over the full simulation -- catches wall-flux bugs
-# that don't show up at-rest.
-test-sw-bc-dynamics:
-	.venv/bin/mojo run -I . test/sw_bc_dynamics_test.mojo
-
-# 2D time integrators: SSPRK2 vs SSPRK3 vs RK4 on a smooth periodic
-# Gaussian translation.  Verifies each runs without NaN, conserves
-# mass to ~ 1e-10, and higher-order methods produce lower L2 error on
-# this smooth problem.
-test-time-integrators-2d:
-	.venv/bin/mojo run -I . test/time_integrators_2d_test.mojo
-
-# Spatial convergence rate of the 2D DG scheme under successive mesh
-# refinement.  Smooth sinusoidal IC, short integration so temporal
-# error is negligible; observed rates log2(e_N / e_{2N}) should be
-# >= (P + 1) asymptotically.  Checks against loose floors (1.5, 2.5,
-# 3.0 for P=1/2/3) so pre-asymptotic / Rusanov dissipation wiggle
-# doesn't cause false negatives.
-test-convergence-2d:
-	.venv/bin/mojo run -I . test/convergence_2d_test.mojo
-
-# 2D BC_INFLOW: at-rest preservation when inflow state equals interior
-# (SW + Euler) + Advection inflow fill (domain populates from empty
-# via an inflow edge).
-test-bc-inflow-2d:
-	.venv/bin/mojo run -I . test/bc_inflow_2d_test.mojo
-
-# 2D ideal MHD sanity: uniform (rho, u, v, Bx, By, p) preservation
-# on a periodic mesh, with a perfectly-conducting wall variant that
-# reflects both velocity and B along the normal.
-test-ideal-mhd-2d:
-	.venv/bin/mojo run -I . test/ideal_mhd_2d_test.mojo
 
 # GPU diagnostics writer test: uniform-field integrals recover
 # analytic values; max_abs reports the peak on a checkerboard field;
@@ -257,9 +188,22 @@ test-p3: p3_smoke_test
 test-local-mesh-2d-gpu: local_mesh_2d_gpu_test
 	./local_mesh_2d_gpu_test
 
+# Per-physics GPU tests (split out of the monolithic local_mesh_2d_gpu_test
+# so the Mojo compiler's comptime-specialization working set stays
+# bounded).  Each validates one physics's GPU path vs the CPU Float64
+# reference in a one-SSPRK3-step diff at P=2.
+test-euler-2d-gpu: euler_2d_gpu_test
+	./euler_2d_gpu_test
+test-sw-2d-gpu: sw_2d_gpu_test
+	./sw_2d_gpu_test
+test-mhd-2d-gpu: mhd_2d_gpu_test
+	./mhd_2d_gpu_test
+test-limiter-2d-gpu: limiter_2d_gpu_test
+	./limiter_2d_gpu_test
+
 # Convenience target: run every test in the suite.  Stops on the first
 # failure.  Doesn't include test-klone (that's for cluster submission).
-test-all: test-reference test-reference-2d test-local-mesh-2d test-dg-rhs-2d test-advection-step-2d test-euler2d test-hllc test-shallow-water-2d test-mesh-2d-bc test-sw-bc-dynamics test-time-integrators-2d test-convergence-2d test-bc-inflow-2d test-ideal-mhd-2d test-local-mesh-2d-gpu test-diagnostics test-p3 test test-bc
+test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-limiter-2d-gpu test-diagnostics test-p3 test test-bc
 	@echo '=== ALL TESTS PASSED ==='
 
 test-klone:

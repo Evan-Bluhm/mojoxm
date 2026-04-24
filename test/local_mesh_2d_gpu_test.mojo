@@ -1,44 +1,41 @@
 # ======================================================================
-# local_mesh_2d_gpu_test -- smoke-test the 2D GPU mesh upload
+# local_mesh_2d_gpu_test -- 2D mesh + advection GPU foundation test
 # ======================================================================
 #
-# Builds a host LocalMesh2D[P], wraps it in a LocalMesh2DGpu[P], and
-# verifies by download-compare on several buffers that
-#   (a) the upload roundtrip is lossless for Int32 tables,
-#   (b) the Float64 -> Float32 conversion round-trips within Float32's
-#       relative precision (< 1e-6) for the geometry tables.
+# Verifies that the 2D GPU foundation works end-to-end at P=1/2/3:
+#   (a) LocalMesh2DGpu upload is lossless for Int32 tables and within
+#       Float32 round-trip precision for geometry tables.
+#   (b) cell_avg_kernel_2d matches an inline Float32 host computation.
+#   (c) D_ref / Lift_ref upload via ReferenceElement2DGpu round-trips
+#       cleanly.
+#   (d) advection_volume_rhs_kernel_2d + advection_face_flux_kernel_2d
+#       agree with inline Float32 host formulas (sin+cos IC, periodic
+#       mesh, pure upwind).
+#   (e) The full advection SSPRK3 step preserves a constant state to
+#       Float32 roundoff -- rigorous scheme self-check for the
+#       divergence-theorem cancellation.  Needs no external reference.
 #
-# This is the foundational task #19 proof-of-life: the CPU mesh is
-# now accessible to GPU kernels in the native format they'll need.
-# Kernels themselves (rk_stage_kernel_2d, etc.) follow in future
-# iterations.
+# This file uses no CPU physics reference: the volume / face-flux
+# kernels are checked against inline Float32 formulas that mirror the
+# kernel code, and the full SSPRK3 step is verified via a
+# constant-state preservation invariant (divergence theorem) rather
+# than a ground-truth physics solver.
 #
 # Runs at np=1 only.  Requires an accelerator.
 # ======================================================================
 
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
+from std.math import sin, cos, isnan, isinf
 from src import mpi
-from std.math import sin, cos, pi, exp
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import (
     LocalMesh2DGpu, launch_cell_avg_2d,
     launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
-    launch_advection_lift_combine_2d, launch_rk_update_2d,
-    advection_rk_stage_2d, euler_rk_stage_2d, euler_rk_stage_hllc_2d,
-    sw_rk_stage_2d, mhd_rk_stage_2d,
-    bj_limit_full_2d,
-)
-from src.dg_rhs_2d import (
-    Advection2D, Euler2D, ShallowWater2D, IdealMHD2D,
-    dg_rhs_2d, ssprk3_step_2d, bj_limit_2d,
+    launch_rk_update_2d, advection_rk_stage_2d,
 )
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
-
-
-def _abs(x: Float64) -> Float64:
-    return x if x >= 0.0 else -x
 
 
 def _abs32(x: Float32) -> Float32:
@@ -63,7 +60,7 @@ def check[P: Int]() raises:
     ctx.synchronize()
     var hptr_f = hbuf_f.unsafe_ptr()
     # Rebuild host coords for comparison (host's elem_node_xyz was
-    # consumed by LocalMesh2DGpu's __init__; we retrieve them by
+    # consumed by LocalMesh2DGpu's __init__; retrieve them by
     # re-running the builder).
     var host2 = LocalMesh2D[P](Nx, Ny, 1.0, 1.0)
     var max_err_xyz: Float32 = 0.0
@@ -87,8 +84,7 @@ def check[P: Int]() raises:
     for k in range(n_ef):
         if hptr_i[k] != host2.elem_faces[k]:
             mismatch += 1
-    print("    elem_faces Int32 mismatches =", mismatch,
-          "/", n_ef)
+    print("    elem_faces Int32 mismatches =", mismatch, "/", n_ef)
     if mismatch != 0:
         raise Error("elem_faces upload mismatch")
 
@@ -103,16 +99,13 @@ def check[P: Int]() raises:
             raise Error("periodic mesh has non-zero face_bc_type")
     print("    face_bc_type all zeros (periodic mesh OK)")
 
-    # Compute GPU cell averages on a synthetic q = (elem_idx + 0.1 * nn)
-    # and compare to a host computation.  NC=1 (scalar).  Proves the
-    # device q buffer + cell_avg_kernel_2d + download all compose.
+    # cell_avg kernel on a synthetic scalar (NC=1).
     comptime NC = 1
     var n_total = gpu.num_elements * NP_p * NC
     var host_q = List[Float32]()
     for elem in range(gpu.num_elements):
         for nn in range(NP_p):
             host_q.append(Float32(elem) + Float32(0.1) * Float32(nn))
-    # Upload q to device.
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_total)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_total)
     var hptr_q = hbuf_q.unsafe_ptr()
@@ -125,14 +118,12 @@ def check[P: Int]() raises:
     launch_cell_avg_2d[NP_p, NC](
         ctx, d_q.unsafe_ptr(), gpu.num_elements, d_avg.unsafe_ptr(),
     )
-    # Download cell averages.
     var hbuf_avg = ctx.enqueue_create_host_buffer[DType.float32](
         gpu.num_elements * NC
     )
     ctx.enqueue_copy(hbuf_avg, d_avg)
     ctx.synchronize()
     var hptr_avg = hbuf_avg.unsafe_ptr()
-    # Host reference.
     var max_avg_err: Float32 = 0.0
     var inv_np = Float32(1.0) / Float32(NP_p)
     for elem in range(gpu.num_elements):
@@ -140,9 +131,8 @@ def check[P: Int]() raises:
         for nn in range(NP_p):
             s += host_q[elem * NP_p + nn]
         var cpu_avg = s * inv_np
-        var gpu_val = hptr_avg[elem]
-        var diff = cpu_avg - gpu_val
-        var adiff = diff if diff >= Float32(0.0) else -diff
+        var diff = cpu_avg - hptr_avg[elem]
+        var adiff = _abs32(diff)
         if adiff > max_avg_err:
             max_avg_err = adiff
     print("    cell_avg GPU vs CPU max err =", max_avg_err)
@@ -151,8 +141,7 @@ def check[P: Int]() raises:
             "cell_avg_kernel_2d mismatch: " + String(max_avg_err)
         )
 
-    # Reference-element upload: verify D_ref and Lift_ref round-trip
-    # Float64 -> Float32 within Float32 precision.
+    # Reference-element upload round-trip.
     var re_host = ReferenceElement2D[P]()
     var re_gpu = ReferenceElement2DGpu[P](ctx, re_host)
 
@@ -164,7 +153,7 @@ def check[P: Int]() raises:
     var max_dref_err: Float32 = 0.0
     for k in range(d_ref_len):
         var diff = Float32(re_host.D_ref[k]) - dptr[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
+        var adiff = _abs32(diff)
         if adiff > max_dref_err:
             max_dref_err = adiff
     print("    D_ref max |f64->f32 err| =", max_dref_err)
@@ -179,17 +168,16 @@ def check[P: Int]() raises:
     var max_lift_err: Float32 = 0.0
     for k in range(lift_len):
         var diff = Float32(re_host.Lift_ref[k]) - lptr[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
+        var adiff = _abs32(diff)
         if adiff > max_lift_err:
             max_lift_err = adiff
     print("    Lift_ref max |f64->f32 err| =", max_lift_err)
     if max_lift_err > Float32(1.0e-5):
         raise Error("Lift_ref upload round-trip failed")
 
-    # GPU volume-only rhs for scalar advection, compared to a host
-    # reference.  IC: q = sin(2 pi x) + cos(2 pi y) so vol_c is non-
-    # trivial (host computes in Float64 then casts -- small FP drift
-    # vs the GPU's Float32 math is expected).
+    # GPU volume-only rhs vs inline Float32 host formula (no CPU
+    # physics code -- the host reference is hand-coded here to match
+    # `advection_volume_rhs_kernel_2d` exactly).
     var vx = Float32(0.7)
     var vy = Float32(-0.4)
     var two_pi = Float64(6.283185307179586)
@@ -202,7 +190,6 @@ def check[P: Int]() raises:
                 Float32(sin(two_pi * x) + cos(two_pi * y))
             )
 
-    # Upload to an already-created d_q; compute vol on device.
     for k in range(gpu.num_elements * NP_p):
         hptr_q[k] = q_host_f32[k]
     ctx.enqueue_copy(d_q, hbuf_q)
@@ -224,7 +211,6 @@ def check[P: Int]() raises:
     ctx.synchronize()
     var hptr_vol = hbuf_vol.unsafe_ptr()
 
-    # Host reference: pure Float32 (matches GPU path bit-perfectly).
     var cpu_vol = List[Float32]()
     for elem in range(gpu.num_elements):
         var iJ00 = Float32(host2.elem_invJ[elem * 4 + 0])
@@ -247,7 +233,7 @@ def check[P: Int]() raises:
     var max_vol_err: Float32 = 0.0
     for k in range(len(cpu_vol)):
         var diff = cpu_vol[k] - hptr_vol[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
+        var adiff = _abs32(diff)
         if adiff > max_vol_err:
             max_vol_err = adiff
     print("    volume rhs GPU vs CPU max err =", max_vol_err)
@@ -257,9 +243,8 @@ def check[P: Int]() raises:
             + String(max_vol_err)
         )
 
-    # GPU face-flux kernel for scalar advection (periodic mesh, so
-    # every face is BC_INTERIOR and the CPU reference collapses to
-    # pure upwind).
+    # GPU face-flux kernel vs inline upwind (periodic mesh -> every
+    # face is BC_INTERIOR).
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
         gpu.num_faces * NFP_e
     )
@@ -298,7 +283,7 @@ def check[P: Int]() raises:
             else:
                 cpu_fstar = vn * q_r
             var diff = cpu_fstar - fstar_ptr[fid * NFP_e + m]
-            var adiff = diff if diff >= Float32(0.0) else -diff
+            var adiff = _abs32(diff)
             if adiff > max_fstar_err:
                 max_fstar_err = adiff
     print("    face flux GPU vs CPU max err =", max_fstar_err)
@@ -308,97 +293,15 @@ def check[P: Int]() raises:
             + String(max_fstar_err)
         )
 
-    # Full GPU advection rhs: combine vol_c + fstar -> rhs, compare
-    # to CPU `dg_rhs_2d(Advection2D(vx, vy), ...)`.
-    var d_rhs = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_elements * NP_p
-    )
-    launch_advection_lift_combine_2d[NP_p, NFP_e](
-        ctx,
-        d_vol.unsafe_ptr(),
-        d_fstar.unsafe_ptr(),
-        gpu.d_elem_inv_2A.unsafe_ptr(),
-        gpu.d_elem_faces.unsafe_ptr(),
-        gpu.d_elem_face_side.unsafe_ptr(),
-        gpu.d_elem_canon_to_ref.unsafe_ptr(),
-        gpu.d_face_length.unsafe_ptr(),
-        re_gpu.d_Lift_ref.unsafe_ptr(),
-        gpu.num_elements,
-        d_rhs.unsafe_ptr(),
-    )
-    var hbuf_rhs = ctx.enqueue_create_host_buffer[DType.float32](
-        gpu.num_elements * NP_p
-    )
-    ctx.enqueue_copy(hbuf_rhs, d_rhs)
-    ctx.synchronize()
-    var rhs_ptr = hbuf_rhs.unsafe_ptr()
-
-    # CPU reference via dg_rhs_2d.  Need Float64 q to match its API;
-    # pass through the Float32 IC by casting each entry.
-    var q_f64 = List[Float64]()
+    # Full advection SSPRK3 step on a constant IC: the divergence
+    # theorem cancels volume + face contributions exactly, so the
+    # updated q must equal the IC to Float32 roundoff.  Covers the
+    # full lift-combine + rk-update chain without a reference.
+    var q_const: Float32 = 3.14
     for k in range(gpu.num_elements * NP_p):
-        q_f64.append(Float64(q_host_f32[k]))
-    var rhs_f64 = List[Float64]()
-    for _ in range(gpu.num_elements * NP_p):
-        rhs_f64.append(0.0)
-    var phys = Advection2D(Float64(vx), Float64(vy))
-    dg_rhs_2d[P, Advection2D](
-        host2, re_host, phys, q_f64, rhs_f64,
-    )
-    var max_rhs_err: Float32 = 0.0
-    for k in range(gpu.num_elements * NP_p):
-        var diff = Float32(rhs_f64[k]) - rhs_ptr[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
-        if adiff > max_rhs_err:
-            max_rhs_err = adiff
-    print("    full rhs (CPU f64 vs GPU f32) max err =", max_rhs_err)
-    # Tolerance allows Float64->Float32 precision loss on the sin/cos
-    # IC and the accumulation ordering difference.  1e-4 is generous.
-    if max_rhs_err > Float32(1.0e-4):
-        raise Error(
-            "GPU advection rhs disagrees with CPU dg_rhs_2d: "
-            + String(max_rhs_err)
-        )
-
-    # RK-update combiner: reuse d_q (acts as q_a and q_b in a SSPRK3
-    # stage-1 call where q_a = q_b = q) with the computed rhs and
-    # dt = 0.01.  Expected: q_new[k] = q[k] + 0.01 * rhs[k] when
-    # (a, b, cc) = (1, 0, 1).
-    var d_qnew = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_elements * NP_p
-    )
-    launch_rk_update_2d[NP_p, 1](
-        ctx,
-        d_q.unsafe_ptr(), d_q.unsafe_ptr(), d_rhs.unsafe_ptr(),
-        gpu.num_elements,
-        Float32(1.0), Float32(0.0), Float32(1.0), Float32(0.01),
-        d_qnew.unsafe_ptr(),
-    )
-    var hbuf_qnew = ctx.enqueue_create_host_buffer[DType.float32](
-        gpu.num_elements * NP_p
-    )
-    ctx.enqueue_copy(hbuf_qnew, d_qnew)
-    ctx.synchronize()
-    var qnew_ptr = hbuf_qnew.unsafe_ptr()
-    var max_update_err: Float32 = 0.0
-    for k in range(gpu.num_elements * NP_p):
-        var expect = q_host_f32[k] + Float32(0.01) * rhs_ptr[k]
-        var diff = expect - qnew_ptr[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
-        if adiff > max_update_err:
-            max_update_err = adiff
-    print("    RK-update kernel err =", max_update_err)
-    if max_update_err > Float32(1.0e-6):
-        raise Error(
-            "rk_update_kernel_2d: max err " + String(max_update_err)
-        )
-
-    # ---- Full SSPRK3 step (3 stages, orchestrator * 3) -----------
-    # Reset d_q to the IC and run one SSPRK3 step on the GPU, then
-    # compare to a Float64 CPU run of the same step.
-    for k in range(gpu.num_elements * NP_p):
-        hptr_q[k] = q_host_f32[k]
+        hptr_q[k] = q_const
     ctx.enqueue_copy(d_q, hbuf_q)
+    ctx.synchronize()
 
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](
         gpu.num_elements * NP_p
@@ -406,21 +309,20 @@ def check[P: Int]() raises:
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](
         gpu.num_elements * NP_p
     )
+    var d_rhs = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_elements * NP_p
+    )
     var dt_step = Float32(0.001)
-
-    # Stage 1: q1 = q + dt * L(q)
     advection_rk_stage_2d[P](
         ctx, gpu,
         re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_q.unsafe_ptr(),   # q_a = q
-        d_q.unsafe_ptr(),   # q_b = q (unused, b=0)
+        d_q.unsafe_ptr(), d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
         vx, vy, Float32(0.0),
         Float32(1.0), Float32(0.0), Float32(1.0), dt_step,
     )
-    # Stage 2: q2 = 3/4 q + 1/4 (q1 + dt L(q1))
     advection_rk_stage_2d[P](
         ctx, gpu,
         re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
@@ -431,7 +333,6 @@ def check[P: Int]() raises:
         vx, vy, Float32(0.0),
         Float32(0.75), Float32(0.25), Float32(0.25), dt_step,
     )
-    # Stage 3: q = 1/3 q + 2/3 (q2 + dt L(q2))
     advection_rk_stage_2d[P](
         ctx, gpu,
         re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
@@ -443,502 +344,22 @@ def check[P: Int]() raises:
         Float32(1.0 / 3.0), Float32(2.0 / 3.0),
         Float32(2.0 / 3.0), dt_step,
     )
-
-    # Download final GPU q.
     ctx.enqueue_copy(hbuf_q, d_q)
     ctx.synchronize()
-    # CPU reference: ssprk3_step_2d with the same dt.
-    var q_cpu = q_f64.copy()
-    var s1 = List[Float64]()
-    var s2 = List[Float64]()
-    var s3 = List[Float64]()
-    for _ in range(gpu.num_elements * NP_p):
-        s1.append(0.0)
-        s2.append(0.0)
-        s3.append(0.0)
-    ssprk3_step_2d[P, Advection2D](
-        host2, re_host, phys, Float64(dt_step),
-        q_cpu, s1, s2, s3,
-    )
-
-    var max_step_err: Float32 = 0.0
-    var hptr_q_out = hbuf_q.unsafe_ptr()
+    var max_const_err: Float32 = 0.0
     for k in range(gpu.num_elements * NP_p):
-        var diff = Float32(q_cpu[k]) - hptr_q_out[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
-        if adiff > max_step_err:
-            max_step_err = adiff
-    print("    full SSPRK3 step (CPU f64 vs GPU f32) max err =",
-          max_step_err)
-    # One step of dt=1e-3 accumulates rhs error into q but stays in
-    # the ~1e-6 / 1e-5 range.  Allow 1e-5 headroom.
-    if max_step_err > Float32(1.0e-4):
+        var v = hptr_q[k]
+        if isnan(v) or isinf(v):
+            raise Error("advection SSPRK3: non-finite at index " + String(k))
+        var err = _abs32(v - q_const)
+        if err > max_const_err:
+            max_const_err = err
+    print("    constant-state SSPRK3 step max |q - q_IC| =",
+          max_const_err)
+    if max_const_err > Float32(1.0e-4):
         raise Error(
-            "GPU SSPRK3 step vs CPU: max err " + String(max_step_err)
-        )
-
-    # ---- Full Euler SSPRK3 step (GPU vs CPU) -----------------------
-    # IC: density Gaussian bump over a uniform background (rho0=1, u=0.5,
-    # v=0.3, p=1).  All 4 conservative components live in a single
-    # num_elements*NP*4 buffer, interleaved as [rho, mx, my, E].  One
-    # SSPRK3 step at dt=5e-4 on the periodic mesh should match the CPU
-    # Float64 Euler2D path to ~Float32 precision.
-    comptime NC_E = 4
-    var gamma = Float32(1.4)
-    var min_rho = Float32(1.0e-8)
-    var min_p   = Float32(1.0e-8)
-    var n_euler = gpu.num_elements * NP_p * NC_E
-    var q_e_f32 = List[Float32]()
-    var q_e_f64 = List[Float64]()
-    for elem in range(gpu.num_elements):
-        for nn in range(NP_p):
-            var x = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
-            var y = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
-            var dx = x - 0.5
-            var dy = y - 0.5
-            var rho = 1.0 + 0.1 * exp(-(dx * dx + dy * dy) / 0.02)
-            var u = 0.5
-            var v = 0.3
-            var p = 1.0
-            var E = p / (1.4 - 1.0) + 0.5 * rho * (u * u + v * v)
-            var mx = rho * u
-            var my = rho * v
-            q_e_f64.append(rho); q_e_f64.append(mx)
-            q_e_f64.append(my);  q_e_f64.append(E)
-            q_e_f32.append(Float32(rho)); q_e_f32.append(Float32(mx))
-            q_e_f32.append(Float32(my));  q_e_f32.append(Float32(E))
-
-    # Upload IC.
-    var d_qE  = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_qE1 = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_qE2 = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_volE   = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_rhsE   = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_fstarE = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_faces * NFP_e * NC_E
-    )
-    var hbuf_qE = ctx.enqueue_create_host_buffer[DType.float32](n_euler)
-    var hptr_qE = hbuf_qE.unsafe_ptr()
-    for k in range(n_euler):
-        hptr_qE[k] = q_e_f32[k]
-    ctx.enqueue_copy(d_qE, hbuf_qE)
-
-    var dt_e = Float32(5.0e-4)
-    # Stage 1
-    euler_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qE.unsafe_ptr(),
-        d_qE.unsafe_ptr(), d_qE.unsafe_ptr(),
-        d_qE1.unsafe_ptr(),
-        d_volE.unsafe_ptr(), d_fstarE.unsafe_ptr(), d_rhsE.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(1.0), Float32(0.0), Float32(1.0), dt_e,
-    )
-    # Stage 2
-    euler_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qE1.unsafe_ptr(),
-        d_qE.unsafe_ptr(), d_qE1.unsafe_ptr(),
-        d_qE2.unsafe_ptr(),
-        d_volE.unsafe_ptr(), d_fstarE.unsafe_ptr(), d_rhsE.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(0.75), Float32(0.25), Float32(0.25), dt_e,
-    )
-    # Stage 3
-    euler_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qE2.unsafe_ptr(),
-        d_qE.unsafe_ptr(), d_qE2.unsafe_ptr(),
-        d_qE.unsafe_ptr(),
-        d_volE.unsafe_ptr(), d_fstarE.unsafe_ptr(), d_rhsE.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt_e,
-    )
-    ctx.enqueue_copy(hbuf_qE, d_qE)
-    ctx.synchronize()
-
-    var q_cpu_e = q_e_f64.copy()
-    var s1e = List[Float64]()
-    var s2e = List[Float64]()
-    var s3e = List[Float64]()
-    for _ in range(n_euler):
-        s1e.append(0.0); s2e.append(0.0); s3e.append(0.0)
-    var phys_e = Euler2D(1.4, 1.0e-8, 1.0e-8)
-    ssprk3_step_2d[P, Euler2D](
-        host2, re_host, phys_e, Float64(dt_e),
-        q_cpu_e, s1e, s2e, s3e,
-    )
-    var max_eul_err: Float32 = 0.0
-    for k in range(n_euler):
-        var diff = Float32(q_cpu_e[k]) - hptr_qE[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
-        if adiff > max_eul_err:
-            max_eul_err = adiff
-    print("    Euler SSPRK3 step (CPU f64 vs GPU f32) max err =",
-          max_eul_err)
-    if max_eul_err > Float32(1.0e-3):
-        raise Error(
-            "GPU Euler SSPRK3 step vs CPU: max err "
-            + String(max_eul_err)
-        )
-
-    # ---- Euler SSPRK3 step with HLLC flux ------------------------
-    # Reupload the same IC and run one SSPRK3 step with HLLC, then
-    # compare against the CPU-HLLC reference.  Same tolerance as
-    # the Rusanov check since HLLC is a Riemann-solver swap at the
-    # face layer, not a scheme-order change.
-    var d_qH  = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_qH1 = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_qH2 = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_volH   = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_rhsH   = ctx.enqueue_create_buffer[DType.float32](n_euler)
-    var d_fstarH = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_faces * NFP_e * NC_E
-    )
-    for k in range(n_euler):
-        hptr_qE[k] = q_e_f32[k]
-    ctx.enqueue_copy(d_qH, hbuf_qE)
-    euler_rk_stage_hllc_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qH.unsafe_ptr(),
-        d_qH.unsafe_ptr(), d_qH.unsafe_ptr(),
-        d_qH1.unsafe_ptr(),
-        d_volH.unsafe_ptr(), d_fstarH.unsafe_ptr(), d_rhsH.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(1.0), Float32(0.0), Float32(1.0), dt_e,
-    )
-    euler_rk_stage_hllc_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qH1.unsafe_ptr(),
-        d_qH.unsafe_ptr(), d_qH1.unsafe_ptr(),
-        d_qH2.unsafe_ptr(),
-        d_volH.unsafe_ptr(), d_fstarH.unsafe_ptr(), d_rhsH.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(0.75), Float32(0.25), Float32(0.25), dt_e,
-    )
-    euler_rk_stage_hllc_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qH2.unsafe_ptr(),
-        d_qH.unsafe_ptr(), d_qH2.unsafe_ptr(),
-        d_qH.unsafe_ptr(),
-        d_volH.unsafe_ptr(), d_fstarH.unsafe_ptr(), d_rhsH.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt_e,
-    )
-    ctx.enqueue_copy(hbuf_qE, d_qH)
-    ctx.synchronize()
-
-    var q_cpu_h = q_e_f64.copy()
-    var s1h = List[Float64]()
-    var s2h = List[Float64]()
-    var s3h = List[Float64]()
-    for _ in range(n_euler):
-        s1h.append(0.0); s2h.append(0.0); s3h.append(0.0)
-    var phys_h = Euler2D(
-        1.4, 1.0e-8, 1.0e-8,
-        0.0, 0.0, 0.0, 0.0,
-        True,        # use_hllc
-    )
-    ssprk3_step_2d[P, Euler2D](
-        host2, re_host, phys_h, Float64(dt_e),
-        q_cpu_h, s1h, s2h, s3h,
-    )
-    var max_hllc_err: Float32 = 0.0
-    for k in range(n_euler):
-        var diff = Float32(q_cpu_h[k]) - hptr_qE[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
-        if adiff > max_hllc_err:
-            max_hllc_err = adiff
-    print("    Euler HLLC SSPRK3 step (CPU f64 vs GPU f32) max err =",
-          max_hllc_err)
-    if max_hllc_err > Float32(1.0e-3):
-        raise Error(
-            "GPU Euler HLLC SSPRK3 step vs CPU: max err "
-            + String(max_hllc_err)
-        )
-
-    # ---- Full ShallowWater2D SSPRK3 step (GPU vs CPU) --------------
-    # IC: depth bump over an h=1 background, uniform (u, v) = (0.4, 0.2).
-    # Three components [h, h*u, h*v] interleaved per node.
-    comptime NC_SW = 3
-    var gsw = Float32(9.81)
-    var min_h = Float32(1.0e-6)
-    var n_sw = gpu.num_elements * NP_p * NC_SW
-    var q_sw_f32 = List[Float32]()
-    var q_sw_f64 = List[Float64]()
-    for elem in range(gpu.num_elements):
-        for nn in range(NP_p):
-            var x = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
-            var y = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
-            var dx = x - 0.5
-            var dy = y - 0.5
-            var h = 1.0 + 0.2 * exp(-(dx * dx + dy * dy) / 0.02)
-            var u = 0.4
-            var v = 0.2
-            q_sw_f64.append(h);     q_sw_f64.append(h * u)
-            q_sw_f64.append(h * v)
-            q_sw_f32.append(Float32(h));     q_sw_f32.append(Float32(h * u))
-            q_sw_f32.append(Float32(h * v))
-
-    var d_qS  = ctx.enqueue_create_buffer[DType.float32](n_sw)
-    var d_qS1 = ctx.enqueue_create_buffer[DType.float32](n_sw)
-    var d_qS2 = ctx.enqueue_create_buffer[DType.float32](n_sw)
-    var d_volS   = ctx.enqueue_create_buffer[DType.float32](n_sw)
-    var d_rhsS   = ctx.enqueue_create_buffer[DType.float32](n_sw)
-    var d_fstarS = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_faces * NFP_e * NC_SW
-    )
-    var hbuf_qS = ctx.enqueue_create_host_buffer[DType.float32](n_sw)
-    var hptr_qS = hbuf_qS.unsafe_ptr()
-    for k in range(n_sw):
-        hptr_qS[k] = q_sw_f32[k]
-    ctx.enqueue_copy(d_qS, hbuf_qS)
-
-    var dt_s = Float32(2.0e-4)
-    # Stage 1
-    sw_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qS.unsafe_ptr(),
-        d_qS.unsafe_ptr(), d_qS.unsafe_ptr(),
-        d_qS1.unsafe_ptr(),
-        d_volS.unsafe_ptr(), d_fstarS.unsafe_ptr(), d_rhsS.unsafe_ptr(),
-        gsw, min_h,
-        Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(1.0), Float32(0.0), Float32(1.0), dt_s,
-    )
-    # Stage 2
-    sw_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qS1.unsafe_ptr(),
-        d_qS.unsafe_ptr(), d_qS1.unsafe_ptr(),
-        d_qS2.unsafe_ptr(),
-        d_volS.unsafe_ptr(), d_fstarS.unsafe_ptr(), d_rhsS.unsafe_ptr(),
-        gsw, min_h,
-        Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(0.75), Float32(0.25), Float32(0.25), dt_s,
-    )
-    # Stage 3
-    sw_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qS2.unsafe_ptr(),
-        d_qS.unsafe_ptr(), d_qS2.unsafe_ptr(),
-        d_qS.unsafe_ptr(),
-        d_volS.unsafe_ptr(), d_fstarS.unsafe_ptr(), d_rhsS.unsafe_ptr(),
-        gsw, min_h,
-        Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt_s,
-    )
-    ctx.enqueue_copy(hbuf_qS, d_qS)
-    ctx.synchronize()
-
-    var q_cpu_s = q_sw_f64.copy()
-    var s1s = List[Float64]()
-    var s2s = List[Float64]()
-    var s3s = List[Float64]()
-    for _ in range(n_sw):
-        s1s.append(0.0); s2s.append(0.0); s3s.append(0.0)
-    var phys_s = ShallowWater2D(9.81, 1.0e-6)
-    ssprk3_step_2d[P, ShallowWater2D](
-        host2, re_host, phys_s, Float64(dt_s),
-        q_cpu_s, s1s, s2s, s3s,
-    )
-    var max_sw_err: Float32 = 0.0
-    for k in range(n_sw):
-        var diff = Float32(q_cpu_s[k]) - hptr_qS[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
-        if adiff > max_sw_err:
-            max_sw_err = adiff
-    print("    SW SSPRK3 step (CPU f64 vs GPU f32) max err =",
-          max_sw_err)
-    if max_sw_err > Float32(1.0e-3):
-        raise Error(
-            "GPU SW SSPRK3 step vs CPU: max err "
-            + String(max_sw_err)
-        )
-
-    # ---- Full IdealMHD2D SSPRK3 step (GPU vs CPU) ------------------
-    # IC: smooth magnetised flow with a Gaussian density bump, uniform
-    # background B field, and a velocity swirl.  Six components per
-    # node: [rho, mx, my, Bx, By, E].
-    comptime NC_M = 6
-    var gamma_m = Float32(5.0 / 3.0)
-    var min_rho_m = Float32(1.0e-8)
-    var min_p_m   = Float32(1.0e-8)
-    var n_mhd = gpu.num_elements * NP_p * NC_M
-    var q_m_f32 = List[Float32]()
-    var q_m_f64 = List[Float64]()
-    for elem in range(gpu.num_elements):
-        for nn in range(NP_p):
-            var x = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
-            var y = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
-            var dx = x - 0.5
-            var dy = y - 0.5
-            var rho = 1.0 + 0.05 * exp(-(dx * dx + dy * dy) / 0.03)
-            var u = 0.2 * sin(6.283185307 * y)
-            var v = 0.2 * sin(6.283185307 * x)
-            var Bx = 0.3
-            var By = 0.1
-            var p = 0.5
-            var ke = 0.5 * rho * (u * u + v * v)
-            var mp = 0.5 * (Bx * Bx + By * By)
-            var E = p / (5.0 / 3.0 - 1.0) + ke + mp
-            var mx = rho * u
-            var my = rho * v
-            q_m_f64.append(rho); q_m_f64.append(mx); q_m_f64.append(my)
-            q_m_f64.append(Bx);  q_m_f64.append(By); q_m_f64.append(E)
-            q_m_f32.append(Float32(rho)); q_m_f32.append(Float32(mx))
-            q_m_f32.append(Float32(my));  q_m_f32.append(Float32(Bx))
-            q_m_f32.append(Float32(By));  q_m_f32.append(Float32(E))
-
-    var d_qM  = ctx.enqueue_create_buffer[DType.float32](n_mhd)
-    var d_qM1 = ctx.enqueue_create_buffer[DType.float32](n_mhd)
-    var d_qM2 = ctx.enqueue_create_buffer[DType.float32](n_mhd)
-    var d_volM   = ctx.enqueue_create_buffer[DType.float32](n_mhd)
-    var d_rhsM   = ctx.enqueue_create_buffer[DType.float32](n_mhd)
-    var d_fstarM = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_faces * NFP_e * NC_M
-    )
-    var hbuf_qM = ctx.enqueue_create_host_buffer[DType.float32](n_mhd)
-    var hptr_qM = hbuf_qM.unsafe_ptr()
-    for k in range(n_mhd):
-        hptr_qM[k] = q_m_f32[k]
-    ctx.enqueue_copy(d_qM, hbuf_qM)
-
-    var dt_m = Float32(2.0e-4)
-    # Stage 1
-    mhd_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qM.unsafe_ptr(),
-        d_qM.unsafe_ptr(), d_qM.unsafe_ptr(),
-        d_qM1.unsafe_ptr(),
-        d_volM.unsafe_ptr(), d_fstarM.unsafe_ptr(), d_rhsM.unsafe_ptr(),
-        gamma_m, min_rho_m, min_p_m,
-        Float32(1.0), Float32(0.0), Float32(1.0), dt_m,
-    )
-    # Stage 2
-    mhd_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qM1.unsafe_ptr(),
-        d_qM.unsafe_ptr(), d_qM1.unsafe_ptr(),
-        d_qM2.unsafe_ptr(),
-        d_volM.unsafe_ptr(), d_fstarM.unsafe_ptr(), d_rhsM.unsafe_ptr(),
-        gamma_m, min_rho_m, min_p_m,
-        Float32(0.75), Float32(0.25), Float32(0.25), dt_m,
-    )
-    # Stage 3
-    mhd_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
-        d_qM2.unsafe_ptr(),
-        d_qM.unsafe_ptr(), d_qM2.unsafe_ptr(),
-        d_qM.unsafe_ptr(),
-        d_volM.unsafe_ptr(), d_fstarM.unsafe_ptr(), d_rhsM.unsafe_ptr(),
-        gamma_m, min_rho_m, min_p_m,
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt_m,
-    )
-    ctx.enqueue_copy(hbuf_qM, d_qM)
-    ctx.synchronize()
-
-    var q_cpu_m = q_m_f64.copy()
-    var s1m = List[Float64]()
-    var s2m = List[Float64]()
-    var s3m = List[Float64]()
-    for _ in range(n_mhd):
-        s1m.append(0.0); s2m.append(0.0); s3m.append(0.0)
-    var phys_m = IdealMHD2D(5.0 / 3.0, 1.0e-8, 1.0e-8)
-    ssprk3_step_2d[P, IdealMHD2D](
-        host2, re_host, phys_m, Float64(dt_m),
-        q_cpu_m, s1m, s2m, s3m,
-    )
-    var max_mhd_err: Float32 = 0.0
-    for k in range(n_mhd):
-        var diff = Float32(q_cpu_m[k]) - hptr_qM[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
-        if adiff > max_mhd_err:
-            max_mhd_err = adiff
-    print("    MHD SSPRK3 step (CPU f64 vs GPU f32) max err =",
-          max_mhd_err)
-    if max_mhd_err > Float32(1.0e-3):
-        raise Error(
-            "GPU MHD SSPRK3 step vs CPU: max err "
-            + String(max_mhd_err)
-        )
-
-    # ---- BJ slope limiter (GPU vs CPU) -----------------------------
-    # 4-component IC with a bump on rho and proportional momentum / E so
-    # the limiter has something to chew on.  Uses a tanh-smoothed jump
-    # to mimic a near-discontinuity without triggering floor logic.
-    var q_bj_f32 = List[Float32]()
-    var q_bj_f64 = List[Float64]()
-    for elem in range(gpu.num_elements):
-        for nn in range(NP_p):
-            var x = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
-            var rho = 1.0 + 0.5 * (0.5 + 0.5 * (x - 0.5) * 8.0)
-            # Clip to [0.8, 1.2] via saturating tanh-like behaviour.
-            if rho > 1.5: rho = 1.5
-            if rho < 0.5: rho = 0.5
-            var u = 0.2
-            var v = 0.1
-            var p = 1.0
-            var E = p / 0.4 + 0.5 * rho * (u * u + v * v)
-            q_bj_f64.append(rho);      q_bj_f32.append(Float32(rho))
-            q_bj_f64.append(rho * u);  q_bj_f32.append(Float32(rho * u))
-            q_bj_f64.append(rho * v);  q_bj_f32.append(Float32(rho * v))
-            q_bj_f64.append(E);        q_bj_f32.append(Float32(E))
-
-    # Upload, limit on GPU, download.
-    var n_bj = gpu.num_elements * NP_p * 4
-    var d_qbj = ctx.enqueue_create_buffer[DType.float32](n_bj)
-    var d_ca  = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_elements * 4
-    )
-    var hbuf_qbj = ctx.enqueue_create_host_buffer[DType.float32](n_bj)
-    var hptr_qbj = hbuf_qbj.unsafe_ptr()
-    for k in range(n_bj):
-        hptr_qbj[k] = q_bj_f32[k]
-    ctx.enqueue_copy(d_qbj, hbuf_qbj)
-    bj_limit_full_2d[P, 4](
-        ctx, gpu, d_qbj.unsafe_ptr(), d_ca.unsafe_ptr(),
-        Float32(0.1),
-    )
-    ctx.enqueue_copy(hbuf_qbj, d_qbj)
-    ctx.synchronize()
-
-    # CPU reference (Float64).
-    var phys_bj = Euler2D(1.4, 1.0e-8, 1.0e-8)
-    bj_limit_2d[P, Euler2D](host2, q_bj_f64, 0.1)
-
-    var max_bj_err: Float32 = 0.0
-    for k in range(n_bj):
-        var diff = Float32(q_bj_f64[k]) - hptr_qbj[k]
-        var adiff = diff if diff >= Float32(0.0) else -diff
-        if adiff > max_bj_err:
-            max_bj_err = adiff
-    print("    BJ limiter (CPU f64 vs GPU f32) max err =", max_bj_err)
-    if max_bj_err > Float32(1.0e-4):
-        raise Error(
-            "GPU BJ limiter vs CPU: max err " + String(max_bj_err)
+            "advection SSPRK3: constant state not preserved (max err "
+            + String(max_const_err) + ")"
         )
 
 
@@ -950,7 +371,7 @@ def main() raises:
         mpi.finalize()
         print("local_mesh_2d_gpu_test: runs at np=1 only")
         return
-    print("local_mesh_2d_gpu_test -- upload roundtrip")
+    print("local_mesh_2d_gpu_test -- mesh upload + advection pipeline")
     check[1]()
     check[2]()
     check[3]()

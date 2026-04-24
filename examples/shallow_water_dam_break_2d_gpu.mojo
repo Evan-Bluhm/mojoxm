@@ -2,8 +2,7 @@
 # shallow_water_dam_break_2d_gpu -- GPU 2D SW dam break in a closed box
 # ======================================================================
 #
-# GPU analog of `shallow_water_dam_break_2d_cpu.mojo`: 2D Riemann
-# problem
+# 2D Riemann problem
 #   h(x, y, 0) = h_L for x < Lx/2,  h_R otherwise;  u = v = 0
 # with WALL boundaries on all four sides.  The dam collapses into a
 # rightward bore + leftward rarefaction that reflect off the walls

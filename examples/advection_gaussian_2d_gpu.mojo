@@ -2,8 +2,7 @@
 # advection_gaussian_2d_gpu -- GPU 2D DG scalar advection
 # ======================================================================
 #
-# GPU analog of `advection_gaussian_2d_cpu.mojo`.  Integrates a
-# periodic Gaussian bump on a [0, 1]^2 triangulated mesh under
+# Integrates a periodic Gaussian bump on a [0, 1]^2 triangulated mesh under
 # v = (1, 1) for one full period, using the Float32 GPU kernels in
 # `src/local_mesh_2d_gpu.mojo`.  Writes NUM_FRAMES VTU snapshots of q +
 # `output/solution_adv2d_gpu.pvd` (drop the .pvd into ParaView, or feed

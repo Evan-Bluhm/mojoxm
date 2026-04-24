@@ -2,8 +2,7 @@
 # euler_channel_2d_gpu -- GPU Mach-2 supersonic channel
 # ======================================================================
 #
-# GPU analog of `euler_channel_2d_cpu.mojo`: exercises the
-# non-periodic BC paths in `euler_face_flux_kernel_2d`
+# Exercises the non-periodic BC paths in `euler_face_flux_kernel_2d`
 # (BC_INFLOW on -x, BC_OUTFLOW on +x, BC_WALL on +/- y) end-to-end.
 # The IC is the inflow state everywhere, so the analytic solution is
 # steady -- `rho_max_drift` reports how much the GPU scheme departs

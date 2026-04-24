@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Animate a 2D VTU frame sequence (produced by the 2D CPU drivers) as an
+"""Animate a 2D VTU frame sequence (produced by the 2D GPU drivers) as an
 MP4.  Intended as a lightweight alternative to ParaView for the
 triangulated 2D output.
 
@@ -10,8 +10,8 @@ Usage
 
 Examples
 --------
-    ./examples/advection_gaussian_2d_cpu                 # produces output/solution_2d.pvd
-    scripts/animate_2d.py output/solution_2d.pvd
+    ./advection_gaussian_2d_gpu                          # produces output/solution_adv2d_gpu.pvd
+    scripts/animate_2d.py output/solution_adv2d_gpu.pvd
 
 The PVD file contains the frame list + per-frame time; if the pvd is
 missing the script falls back to sorting the VTU files in the directory

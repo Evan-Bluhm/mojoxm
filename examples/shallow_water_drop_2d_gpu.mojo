@@ -2,8 +2,8 @@
 # shallow_water_drop_2d_gpu -- GPU 2D DG shallow-water drop
 # ======================================================================
 #
-# GPU analog of `shallow_water_drop_2d_cpu.mojo`.  A circular elevated
-# water column collapses under gravity on a [0, 1]^2 periodic basin.
+# A circular elevated water column collapses under gravity on a
+# [0, 1]^2 periodic basin.
 # Waves propagate outward, wrap around, and interfere -- a non-trivial
 # multi-component run to exercise the SW GPU kernels.
 #

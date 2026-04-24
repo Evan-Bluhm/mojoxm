@@ -2,8 +2,8 @@
 # advection_outflow_2d_gpu -- GPU advection with BC_OUTFLOW x 4
 # ======================================================================
 #
-# GPU analog of `advection_outflow_2d_cpu.mojo`.  Gaussian bump at
-# (0.3, 0.3) with v = (1, 1); BC_OUTFLOW on all four sides.  The bump
+# Gaussian bump at (0.3, 0.3) with v = (1, 1); BC_OUTFLOW on all four
+# sides.  The bump
 # exits through the +x / +y boundaries by t ~ 1 -- mass drops to
 # ~zero.  Exercises the BC_OUTFLOW path in
 # `advection_face_flux_kernel_2d` end-to-end (the periodic / channel

@@ -2,8 +2,8 @@
 # euler_vortex_2d_gpu -- GPU 2D DG isentropic Euler vortex
 # ======================================================================
 #
-# GPU analog of `euler_vortex_2d_cpu.mojo`.  The isentropic vortex is
-# the classical DG Euler validation: after one full period on a
+# Isentropic vortex -- the classical DG Euler validation: after one
+# full period on a
 # periodic domain it must equal the initial condition, so the final L2
 # discrepancy is pure scheme dissipation.
 #
