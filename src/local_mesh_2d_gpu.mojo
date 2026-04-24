@@ -445,9 +445,9 @@ def launch_rk_update_2d[NP: Int, NC: Int](
 # reproduces the 2D GPU analog of the 3D Solver.step_ssprk3 loop.
 # ----------------------------------------------------------------------
 
-def advection_rk_stage_2d[NP: Int, NFP: Int](
+def advection_rk_stage_2d[P: Int](
     mut ctx: DeviceContext,
-    mesh: LocalMesh2DGpu[__type_of(NP)],
+    mesh: LocalMesh2DGpu[P],
     Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
     D_ref:    UnsafePointer[Float32, MutAnyOrigin],
     q_in:     UnsafePointer[Float32, MutAnyOrigin],
@@ -460,6 +460,8 @@ def advection_rk_stage_2d[NP: Int, NFP: Int](
     vx: Float32, vy: Float32, inflow_q: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
+    comptime NP = num_tri_nodes_2d(P)
+    comptime NFP = num_edge_nodes(P)
     launch_advection_volume_rhs_2d[NP](
         ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
         mesh.num_elements, vx, vy, vol_scratch,

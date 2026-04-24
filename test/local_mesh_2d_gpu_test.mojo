@@ -25,8 +25,9 @@ from src.local_mesh_2d_gpu import (
     LocalMesh2DGpu, launch_cell_avg_2d,
     launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
     launch_advection_lift_combine_2d, launch_rk_update_2d,
+    advection_rk_stage_2d,
 )
-from src.dg_rhs_2d import Advection2D, dg_rhs_2d
+from src.dg_rhs_2d import Advection2D, dg_rhs_2d, ssprk3_step_2d
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -385,6 +386,90 @@ def check[P: Int]() raises:
     if max_update_err > Float32(1.0e-6):
         raise Error(
             "rk_update_kernel_2d: max err " + String(max_update_err)
+        )
+
+    # ---- Full SSPRK3 step (3 stages, orchestrator * 3) -----------
+    # Reset d_q to the IC and run one SSPRK3 step on the GPU, then
+    # compare to a Float64 CPU run of the same step.
+    for k in range(gpu.num_elements * NP_p):
+        hptr_q[k] = q_host_f32[k]
+    ctx.enqueue_copy(d_q, hbuf_q)
+
+    var d_q1 = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_elements * NP_p
+    )
+    var d_q2 = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_elements * NP_p
+    )
+    var dt_step = Float32(0.001)
+
+    # Stage 1: q1 = q + dt * L(q)
+    advection_rk_stage_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),   # q_a = q
+        d_q.unsafe_ptr(),   # q_b = q (unused, b=0)
+        d_q1.unsafe_ptr(),
+        d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        vx, vy, Float32(0.0),
+        Float32(1.0), Float32(0.0), Float32(1.0), dt_step,
+    )
+    # Stage 2: q2 = 3/4 q + 1/4 (q1 + dt L(q1))
+    advection_rk_stage_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
+        d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        vx, vy, Float32(0.0),
+        Float32(0.75), Float32(0.25), Float32(0.25), dt_step,
+    )
+    # Stage 3: q = 1/3 q + 2/3 (q2 + dt L(q2))
+    advection_rk_stage_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        vx, vy, Float32(0.0),
+        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0), dt_step,
+    )
+
+    # Download final GPU q.
+    ctx.enqueue_copy(hbuf_q, d_q)
+    ctx.synchronize()
+    # CPU reference: ssprk3_step_2d with the same dt.
+    var q_cpu = q_f64.copy()
+    var s1 = List[Float64]()
+    var s2 = List[Float64]()
+    var s3 = List[Float64]()
+    for _ in range(gpu.num_elements * NP_p):
+        s1.append(0.0)
+        s2.append(0.0)
+        s3.append(0.0)
+    ssprk3_step_2d[P, Advection2D](
+        host2, re_host, phys, Float64(dt_step),
+        q_cpu, s1, s2, s3,
+    )
+
+    var max_step_err: Float32 = 0.0
+    var hptr_q_out = hbuf_q.unsafe_ptr()
+    for k in range(gpu.num_elements * NP_p):
+        var diff = Float32(q_cpu[k]) - hptr_q_out[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_step_err:
+            max_step_err = adiff
+    print("    full SSPRK3 step (CPU f64 vs GPU f32) max err =",
+          max_step_err)
+    # One step of dt=1e-3 accumulates rhs error into q but stays in
+    # the ~1e-6 / 1e-5 range.  Allow 1e-5 headroom.
+    if max_step_err > Float32(1.0e-4):
+        raise Error(
+            "GPU SSPRK3 step vs CPU: max err " + String(max_step_err)
         )
 
 
