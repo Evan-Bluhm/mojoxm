@@ -24,17 +24,34 @@
 # ======================================================================
 
 from src.solver import Physics
-from src.boundary import BC_WALL, BC_OUTFLOW
+from src.boundary import BC_WALL, BC_OUTFLOW, BC_INFLOW
 from std.math import sqrt
 
 
-@fieldwise_init
 struct ShallowWater(Physics, ImplicitlyCopyable):
     comptime NUM_COMPONENTS = 3
 
     var g:      Float32   # gravitational acceleration
     var h_min:  Float32   # depth floor; below this, flux computation
                            # treats the cell as dry (c = 0, u = v = 0)
+    # BC_INFLOW ghost state (h, h*u, h*v).  Defaults zero.
+    var inflow_h:  Float32
+    var inflow_hu: Float32
+    var inflow_hv: Float32
+
+    def __init__(
+        out self,
+        g: Float32,
+        h_min: Float32,
+        inflow_h: Float32 = Float32(0.0),
+        inflow_hu: Float32 = Float32(0.0),
+        inflow_hv: Float32 = Float32(0.0),
+    ):
+        self.g = g
+        self.h_min = h_min
+        self.inflow_h = inflow_h
+        self.inflow_hu = inflow_hu
+        self.inflow_hv = inflow_hv
 
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
@@ -137,15 +154,19 @@ struct ShallowWater(Physics, ImplicitlyCopyable):
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         var q_ghost = InlineArray[Float32, 3](fill=0.0)
-        q_ghost[0] = q_int[0]
         if bc_type == BC_WALL:
-            # Reflect the (xy) normal momentum; keep tangential.  The
-            # z-component of normal at y/x boundaries is zero, so
-            # nothing unexpected happens there.
+            # Reflect the (xy) normal momentum; keep tangential.
+            q_ghost[0] = q_int[0]
             var mn = q_int[1] * nx + q_int[2] * ny
             q_ghost[1] = q_int[1] - Float32(2.0) * mn * nx
             q_ghost[2] = q_int[2] - Float32(2.0) * mn * ny
+        elif bc_type == BC_INFLOW:
+            q_ghost[0] = self.inflow_h
+            q_ghost[1] = self.inflow_hu
+            q_ghost[2] = self.inflow_hv
         else:
+            # BC_OUTFLOW (default): zero-gradient ghost.
+            q_ghost[0] = q_int[0]
             q_ghost[1] = q_int[1]
             q_ghost[2] = q_int[2]
         var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](

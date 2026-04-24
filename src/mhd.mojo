@@ -34,7 +34,7 @@
 # ======================================================================
 
 from src.solver import Physics
-from src.boundary import BC_WALL, BC_OUTFLOW
+from src.boundary import BC_WALL, BC_OUTFLOW, BC_INFLOW
 from std.math import sqrt
 
 
@@ -184,7 +184,6 @@ def mhd_normal_flux(
 # Ideal MHD struct
 # ======================================================================
 
-@fieldwise_init
 struct IdealMHD(Physics, ImplicitlyCopyable):
     comptime NUM_COMPONENTS = 9
 
@@ -198,6 +197,50 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
     # GLM entirely and turns this into "plain" (uncleaned) ideal MHD.
     var c_h:     Float32
     var alpha_d: Float32
+
+    # BC_INFLOW ghost state (rho, rho u, rho v, rho w, E, Bx, By, Bz,
+    # psi).  Defaults zero; existing drivers unaffected.
+    var inflow_rho:  Float32
+    var inflow_rhou: Float32
+    var inflow_rhov: Float32
+    var inflow_rhow: Float32
+    var inflow_E:    Float32
+    var inflow_Bx:   Float32
+    var inflow_By:   Float32
+    var inflow_Bz:   Float32
+    var inflow_psi:  Float32
+
+    def __init__(
+        out self,
+        gamma: Float32,
+        min_density: Float32,
+        min_pressure: Float32,
+        c_h: Float32,
+        alpha_d: Float32,
+        inflow_rho: Float32  = Float32(0.0),
+        inflow_rhou: Float32 = Float32(0.0),
+        inflow_rhov: Float32 = Float32(0.0),
+        inflow_rhow: Float32 = Float32(0.0),
+        inflow_E: Float32    = Float32(0.0),
+        inflow_Bx: Float32   = Float32(0.0),
+        inflow_By: Float32   = Float32(0.0),
+        inflow_Bz: Float32   = Float32(0.0),
+        inflow_psi: Float32  = Float32(0.0),
+    ):
+        self.gamma = gamma
+        self.min_density = min_density
+        self.min_pressure = min_pressure
+        self.c_h = c_h
+        self.alpha_d = alpha_d
+        self.inflow_rho = inflow_rho
+        self.inflow_rhou = inflow_rhou
+        self.inflow_rhov = inflow_rhov
+        self.inflow_rhow = inflow_rhow
+        self.inflow_E = inflow_E
+        self.inflow_Bx = inflow_Bx
+        self.inflow_By = inflow_By
+        self.inflow_Bz = inflow_Bz
+        self.inflow_psi = inflow_psi
 
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
@@ -288,10 +331,10 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         var q_ghost = InlineArray[Float32, 9](fill=0.0)
-        q_ghost[0] = q_int[0]
-        q_ghost[4] = q_int[4]
-        q_ghost[8] = q_int[8]
         if bc_type == BC_WALL:
+            q_ghost[0] = q_int[0]
+            q_ghost[4] = q_int[4]
+            q_ghost[8] = q_int[8]
             var mn = q_int[1] * nx + q_int[2] * ny + q_int[3] * nz
             q_ghost[1] = q_int[1] - Float32(2.0) * mn * nx
             q_ghost[2] = q_int[2] - Float32(2.0) * mn * ny
@@ -300,8 +343,21 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
             q_ghost[5] = q_int[5] - Float32(2.0) * bn * nx
             q_ghost[6] = q_int[6] - Float32(2.0) * bn * ny
             q_ghost[7] = q_int[7] - Float32(2.0) * bn * nz
+        elif bc_type == BC_INFLOW:
+            q_ghost[0] = self.inflow_rho
+            q_ghost[1] = self.inflow_rhou
+            q_ghost[2] = self.inflow_rhov
+            q_ghost[3] = self.inflow_rhow
+            q_ghost[4] = self.inflow_E
+            q_ghost[5] = self.inflow_Bx
+            q_ghost[6] = self.inflow_By
+            q_ghost[7] = self.inflow_Bz
+            q_ghost[8] = self.inflow_psi
         else:
             # BC_OUTFLOW / default: zero-gradient
+            q_ghost[0] = q_int[0]
+            q_ghost[4] = q_int[4]
+            q_ghost[8] = q_int[8]
             q_ghost[1] = q_int[1]
             q_ghost[2] = q_int[2]
             q_ghost[3] = q_int[3]

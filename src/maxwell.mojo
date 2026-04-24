@@ -42,10 +42,9 @@
 # ======================================================================
 
 from src.solver import Physics
-from src.boundary import BC_WALL, BC_OUTFLOW
+from src.boundary import BC_WALL, BC_OUTFLOW, BC_INFLOW
 
 
-@fieldwise_init
 struct Maxwell(Physics, ImplicitlyCopyable):
     comptime NUM_COMPONENTS = 6
 
@@ -65,6 +64,36 @@ struct Maxwell(Physics, ImplicitlyCopyable):
     var Mx: Float32
     var My: Float32
     var Mz: Float32
+
+    # BC_INFLOW ghost state (Ex, Ey, Ez, Bx, By, Bz).  Defaults zero.
+    var inflow_Ex: Float32
+    var inflow_Ey: Float32
+    var inflow_Ez: Float32
+    var inflow_Bx: Float32
+    var inflow_By: Float32
+    var inflow_Bz: Float32
+
+    def __init__(
+        out self,
+        c: Float32,
+        Jx: Float32, Jy: Float32, Jz: Float32,
+        Mx: Float32, My: Float32, Mz: Float32,
+        inflow_Ex: Float32 = Float32(0.0),
+        inflow_Ey: Float32 = Float32(0.0),
+        inflow_Ez: Float32 = Float32(0.0),
+        inflow_Bx: Float32 = Float32(0.0),
+        inflow_By: Float32 = Float32(0.0),
+        inflow_Bz: Float32 = Float32(0.0),
+    ):
+        self.c = c
+        self.Jx = Jx; self.Jy = Jy; self.Jz = Jz
+        self.Mx = Mx; self.My = My; self.Mz = Mz
+        self.inflow_Ex = inflow_Ex
+        self.inflow_Ey = inflow_Ey
+        self.inflow_Ez = inflow_Ez
+        self.inflow_Bx = inflow_Bx
+        self.inflow_By = inflow_By
+        self.inflow_Bz = inflow_Bz
 
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
@@ -186,6 +215,13 @@ struct Maxwell(Physics, ImplicitlyCopyable):
             q_ghost[3] = q_int[3] - Float32(2.0) * Bn * nx
             q_ghost[4] = q_int[4] - Float32(2.0) * Bn * ny
             q_ghost[5] = q_int[5] - Float32(2.0) * Bn * nz
+        elif bc_type == BC_INFLOW:
+            q_ghost[0] = self.inflow_Ex
+            q_ghost[1] = self.inflow_Ey
+            q_ghost[2] = self.inflow_Ez
+            q_ghost[3] = self.inflow_Bx
+            q_ghost[4] = self.inflow_By
+            q_ghost[5] = self.inflow_Bz
         else:
             # BC_OUTFLOW / default: zero-gradient extrapolation.
             for k in range(6):
