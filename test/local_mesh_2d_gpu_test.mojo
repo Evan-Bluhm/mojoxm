@@ -24,7 +24,9 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import (
     LocalMesh2DGpu, launch_cell_avg_2d,
     launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
+    launch_advection_lift_combine_2d,
 )
+from src.dg_rhs_2d import Advection2D, dg_rhs_2d
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -298,6 +300,58 @@ def check[P: Int]() raises:
         raise Error(
             "advection_face_flux_kernel_2d: max err "
             + String(max_fstar_err)
+        )
+
+    # Full GPU advection rhs: combine vol_c + fstar -> rhs, compare
+    # to CPU `dg_rhs_2d(Advection2D(vx, vy), ...)`.
+    var d_rhs = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_elements * NP_p
+    )
+    launch_advection_lift_combine_2d[NP_p, NFP_e](
+        ctx,
+        d_vol.unsafe_ptr(),
+        d_fstar.unsafe_ptr(),
+        gpu.d_elem_inv_2A.unsafe_ptr(),
+        gpu.d_elem_faces.unsafe_ptr(),
+        gpu.d_elem_face_side.unsafe_ptr(),
+        gpu.d_elem_canon_to_ref.unsafe_ptr(),
+        gpu.d_face_length.unsafe_ptr(),
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        gpu.num_elements,
+        d_rhs.unsafe_ptr(),
+    )
+    var hbuf_rhs = ctx.enqueue_create_host_buffer[DType.float32](
+        gpu.num_elements * NP_p
+    )
+    ctx.enqueue_copy(hbuf_rhs, d_rhs)
+    ctx.synchronize()
+    var rhs_ptr = hbuf_rhs.unsafe_ptr()
+
+    # CPU reference via dg_rhs_2d.  Need Float64 q to match its API;
+    # pass through the Float32 IC by casting each entry.
+    var q_f64 = List[Float64]()
+    for k in range(gpu.num_elements * NP_p):
+        q_f64.append(Float64(q_host_f32[k]))
+    var rhs_f64 = List[Float64]()
+    for _ in range(gpu.num_elements * NP_p):
+        rhs_f64.append(0.0)
+    var phys = Advection2D(Float64(vx), Float64(vy))
+    dg_rhs_2d[P, Advection2D](
+        host2, re_host, phys, q_f64, rhs_f64,
+    )
+    var max_rhs_err: Float32 = 0.0
+    for k in range(gpu.num_elements * NP_p):
+        var diff = Float32(rhs_f64[k]) - rhs_ptr[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_rhs_err:
+            max_rhs_err = adiff
+    print("    full rhs (CPU f64 vs GPU f32) max err =", max_rhs_err)
+    # Tolerance allows Float64->Float32 precision loss on the sin/cos
+    # IC and the accumulation ordering difference.  1e-4 is generous.
+    if max_rhs_err > Float32(1.0e-4):
+        raise Error(
+            "GPU advection rhs disagrees with CPU dg_rhs_2d: "
+            + String(max_rhs_err)
         )
 
 

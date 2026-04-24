@@ -309,3 +309,81 @@ def launch_advection_face_flux_2d[NP: Int, NFP: Int](
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
+
+
+# ----------------------------------------------------------------------
+# Lift-combine kernel: finishes the DG rhs.
+# ----------------------------------------------------------------------
+# Given the volume-integral output `vol_c[elem, i]` and the per-face
+# numerical flux `fstar[fid, m]`, write the complete rhs into
+# `rhs[elem, i] = vol_c[elem, i] - inv_2A[elem] * face_c[elem, i]`,
+# where
+#
+#   face_c[elem, i] = sum_{lf=0..2} sum_{m=0..P} sign(side)
+#                       * face_length[fid(elem, lf)]
+#                       * Lift_ref[lf, i, r(elem, lf, m)]
+#                       * fstar[fid(elem, lf), m]
+#
+# `r = elem_canon_to_ref[(elem * 3 + lf) * NFP + m]` remaps the
+# canonical face-local slot to the ref-edge slot the Lift_ref entry
+# indexes.  One thread per (elem, i) = num_elements * NP threads.
+# ----------------------------------------------------------------------
+
+def advection_lift_combine_kernel_2d[NP: Int, NFP: Int](
+    vol_c:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    rhs_out:           UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_elements * NP
+    if tid >= total:
+        return
+    var elem = tid // NP
+    var i    = tid %  NP
+
+    var inv_2A = elem_inv_2A[elem]
+    var face_c: Float32 = 0.0
+    for lf in range(3):
+        var fid = Int(elem_faces[elem * 3 + lf])
+        var side = Int(elem_face_side[elem * 3 + lf])
+        var sign: Float32 = Float32(1.0) if side == 0 else Float32(-1.0)
+        var flen = face_length[fid]
+        for m in range(NFP):
+            var r = Int(
+                elem_canon_to_ref[(elem * 3 + lf) * NFP + m]
+            )
+            var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
+            face_c += sign * flen * Lim * fstar[fid * NFP + m]
+
+    rhs_out[elem * NP + i] = vol_c[elem * NP + i] - inv_2A * face_c
+
+
+def launch_advection_lift_combine_2d[NP: Int, NFP: Int](
+    mut ctx: DeviceContext,
+    vol_c:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    rhs_out:           UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_elements * NP
+    comptime _kernel = advection_lift_combine_kernel_2d[NP, NFP]
+    ctx.enqueue_function[_kernel, _kernel](
+        vol_c, fstar, elem_inv_2A, elem_faces, elem_face_side,
+        elem_canon_to_ref, face_length, Lift_ref,
+        num_elements, rhs_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
