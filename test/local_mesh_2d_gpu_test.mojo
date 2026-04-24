@@ -19,15 +19,15 @@
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
 from src import mpi
-from std.math import sin, cos, pi
+from std.math import sin, cos, pi, exp
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import (
     LocalMesh2DGpu, launch_cell_avg_2d,
     launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
     launch_advection_lift_combine_2d, launch_rk_update_2d,
-    advection_rk_stage_2d,
+    advection_rk_stage_2d, euler_rk_stage_2d,
 )
-from src.dg_rhs_2d import Advection2D, dg_rhs_2d, ssprk3_step_2d
+from src.dg_rhs_2d import Advection2D, Euler2D, dg_rhs_2d, ssprk3_step_2d
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -470,6 +470,118 @@ def check[P: Int]() raises:
     if max_step_err > Float32(1.0e-4):
         raise Error(
             "GPU SSPRK3 step vs CPU: max err " + String(max_step_err)
+        )
+
+    # ---- Full Euler SSPRK3 step (GPU vs CPU) -----------------------
+    # IC: density Gaussian bump over a uniform background (rho0=1, u=0.5,
+    # v=0.3, p=1).  All 4 conservative components live in a single
+    # num_elements*NP*4 buffer, interleaved as [rho, mx, my, E].  One
+    # SSPRK3 step at dt=5e-4 on the periodic mesh should match the CPU
+    # Float64 Euler2D path to ~Float32 precision.
+    comptime NC_E = 4
+    var gamma = Float32(1.4)
+    var min_rho = Float32(1.0e-8)
+    var min_p   = Float32(1.0e-8)
+    var n_euler = gpu.num_elements * NP_p * NC_E
+    var q_e_f32 = List[Float32]()
+    var q_e_f64 = List[Float64]()
+    for elem in range(gpu.num_elements):
+        for nn in range(NP_p):
+            var x = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
+            var y = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
+            var dx = x - 0.5
+            var dy = y - 0.5
+            var rho = 1.0 + 0.1 * exp(-(dx * dx + dy * dy) / 0.02)
+            var u = 0.5
+            var v = 0.3
+            var p = 1.0
+            var E = p / (1.4 - 1.0) + 0.5 * rho * (u * u + v * v)
+            var mx = rho * u
+            var my = rho * v
+            q_e_f64.append(rho); q_e_f64.append(mx)
+            q_e_f64.append(my);  q_e_f64.append(E)
+            q_e_f32.append(Float32(rho)); q_e_f32.append(Float32(mx))
+            q_e_f32.append(Float32(my));  q_e_f32.append(Float32(E))
+
+    # Upload IC.
+    var d_qE  = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_qE1 = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_qE2 = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_volE   = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_rhsE   = ctx.enqueue_create_buffer[DType.float32](n_euler)
+    var d_fstarE = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_faces * NFP_e * NC_E
+    )
+    var hbuf_qE = ctx.enqueue_create_host_buffer[DType.float32](n_euler)
+    var hptr_qE = hbuf_qE.unsafe_ptr()
+    for k in range(n_euler):
+        hptr_qE[k] = q_e_f32[k]
+    ctx.enqueue_copy(d_qE, hbuf_qE)
+
+    var dt_e = Float32(5.0e-4)
+    # Stage 1
+    euler_rk_stage_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_qE.unsafe_ptr(),
+        d_qE.unsafe_ptr(), d_qE.unsafe_ptr(),
+        d_qE1.unsafe_ptr(),
+        d_volE.unsafe_ptr(), d_fstarE.unsafe_ptr(), d_rhsE.unsafe_ptr(),
+        gamma, min_rho, min_p,
+        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+        Float32(1.0), Float32(0.0), Float32(1.0), dt_e,
+    )
+    # Stage 2
+    euler_rk_stage_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_qE1.unsafe_ptr(),
+        d_qE.unsafe_ptr(), d_qE1.unsafe_ptr(),
+        d_qE2.unsafe_ptr(),
+        d_volE.unsafe_ptr(), d_fstarE.unsafe_ptr(), d_rhsE.unsafe_ptr(),
+        gamma, min_rho, min_p,
+        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+        Float32(0.75), Float32(0.25), Float32(0.25), dt_e,
+    )
+    # Stage 3
+    euler_rk_stage_2d[P](
+        ctx, gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        d_qE2.unsafe_ptr(),
+        d_qE.unsafe_ptr(), d_qE2.unsafe_ptr(),
+        d_qE.unsafe_ptr(),
+        d_volE.unsafe_ptr(), d_fstarE.unsafe_ptr(), d_rhsE.unsafe_ptr(),
+        gamma, min_rho, min_p,
+        Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0), dt_e,
+    )
+    ctx.enqueue_copy(hbuf_qE, d_qE)
+    ctx.synchronize()
+
+    var q_cpu_e = q_e_f64.copy()
+    var s1e = List[Float64]()
+    var s2e = List[Float64]()
+    var s3e = List[Float64]()
+    for _ in range(n_euler):
+        s1e.append(0.0); s2e.append(0.0); s3e.append(0.0)
+    var phys_e = Euler2D(1.4, 1.0e-8, 1.0e-8)
+    ssprk3_step_2d[P, Euler2D](
+        host2, re_host, phys_e, Float64(dt_e),
+        q_cpu_e, s1e, s2e, s3e,
+    )
+    var max_eul_err: Float32 = 0.0
+    for k in range(n_euler):
+        var diff = Float32(q_cpu_e[k]) - hptr_qE[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_eul_err:
+            max_eul_err = adiff
+    print("    Euler SSPRK3 step (CPU f64 vs GPU f32) max err =",
+          max_eul_err)
+    if max_eul_err > Float32(1.0e-3):
+        raise Error(
+            "GPU Euler SSPRK3 step vs CPU: max err "
+            + String(max_eul_err)
         )
 
 
