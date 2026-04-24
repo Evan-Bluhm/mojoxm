@@ -156,3 +156,72 @@ def launch_cell_avg_2d[NP: Int, NC: Int](
         grid_dim=ceildiv(num_elements, 256),
         block_dim=256,
     )
+
+
+# ----------------------------------------------------------------------
+# Advection volume-rhs kernel (2D, scalar).
+# ----------------------------------------------------------------------
+# Computes, for each owned node (elem, i),
+#
+#   vol_c[elem, i] = sum_j sum_k D_ref[k, i, j] * (invJ[elem, k, :] . F(q_j))
+#
+# where F(q) = (vx * q, vy * q) for scalar linear advection.  One
+# thread per (element, node) = 1 thread per nodal DOF.
+#
+# This is only the volume half of the DG rhs -- the face-flux half
+# requires a two-pass kernel (gather fstar per face, then lift into
+# each element).  Landing the volume kernel first validates the
+# mesh/reference-operator plumbing end-to-end on device; the face
+# pass follows.
+# ----------------------------------------------------------------------
+
+def advection_volume_rhs_kernel_2d[NP: Int](
+    q:          UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ:  UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:      UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    vx: Float32, vy: Float32,
+    vol_out:    UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_elements * NP
+    if tid >= total:
+        return
+    var elem = tid // NP
+    var i    = tid %  NP
+
+    var iJ00 = elem_invJ[elem * 4 + 0]
+    var iJ01 = elem_invJ[elem * 4 + 1]
+    var iJ10 = elem_invJ[elem * 4 + 2]
+    var iJ11 = elem_invJ[elem * 4 + 3]
+
+    var vol_c: Float32 = 0.0
+    for j in range(NP):
+        var qj = q[elem * NP + j]
+        var fx = vx * qj
+        var fy = vy * qj
+        var fr0 = iJ00 * fx + iJ01 * fy
+        var fr1 = iJ10 * fx + iJ11 * fy
+        var D_r = D_ref[0 * NP * NP + i * NP + j]
+        var D_s = D_ref[1 * NP * NP + i * NP + j]
+        vol_c += fr0 * D_r + fr1 * D_s
+
+    vol_out[elem * NP + i] = vol_c
+
+
+def launch_advection_volume_rhs_2d[NP: Int](
+    mut ctx: DeviceContext,
+    q:         UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ: UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:     UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    vx: Float32, vy: Float32,
+    vol_out:   UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_elements * NP
+    comptime _kernel = advection_volume_rhs_kernel_2d[NP]
+    ctx.enqueue_function[_kernel, _kernel](
+        q, elem_invJ, D_ref, num_elements, vx, vy, vol_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )

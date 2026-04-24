@@ -19,8 +19,11 @@
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
 from src import mpi
+from std.math import sin, cos, pi
 from src.local_mesh_2d import LocalMesh2D
-from src.local_mesh_2d_gpu import LocalMesh2DGpu, launch_cell_avg_2d
+from src.local_mesh_2d_gpu import (
+    LocalMesh2DGpu, launch_cell_avg_2d, launch_advection_volume_rhs_2d,
+)
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -173,6 +176,77 @@ def check[P: Int]() raises:
     print("    Lift_ref max |f64->f32 err| =", max_lift_err)
     if max_lift_err > Float32(1.0e-5):
         raise Error("Lift_ref upload round-trip failed")
+
+    # GPU volume-only rhs for scalar advection, compared to a host
+    # reference.  IC: q = sin(2 pi x) + cos(2 pi y) so vol_c is non-
+    # trivial (host computes in Float64 then casts -- small FP drift
+    # vs the GPU's Float32 math is expected).
+    var vx = Float32(0.7)
+    var vy = Float32(-0.4)
+    var two_pi = Float64(6.283185307179586)
+    var q_host_f32 = List[Float32]()
+    for elem in range(gpu.num_elements):
+        for nn in range(NP_p):
+            var x = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
+            var y = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
+            q_host_f32.append(
+                Float32(sin(two_pi * x) + cos(two_pi * y))
+            )
+
+    # Upload to an already-created d_q; compute vol on device.
+    for k in range(gpu.num_elements * NP_p):
+        hptr_q[k] = q_host_f32[k]
+    ctx.enqueue_copy(d_q, hbuf_q)
+    var d_vol = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_elements * NP_p
+    )
+    launch_advection_volume_rhs_2d[NP_p](
+        ctx,
+        d_q.unsafe_ptr(),
+        gpu.d_elem_invJ.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
+        gpu.num_elements, vx, vy,
+        d_vol.unsafe_ptr(),
+    )
+    var hbuf_vol = ctx.enqueue_create_host_buffer[DType.float32](
+        gpu.num_elements * NP_p
+    )
+    ctx.enqueue_copy(hbuf_vol, d_vol)
+    ctx.synchronize()
+    var hptr_vol = hbuf_vol.unsafe_ptr()
+
+    # Host reference: pure Float32 (matches GPU path bit-perfectly).
+    var cpu_vol = List[Float32]()
+    for elem in range(gpu.num_elements):
+        var iJ00 = Float32(host2.elem_invJ[elem * 4 + 0])
+        var iJ01 = Float32(host2.elem_invJ[elem * 4 + 1])
+        var iJ10 = Float32(host2.elem_invJ[elem * 4 + 2])
+        var iJ11 = Float32(host2.elem_invJ[elem * 4 + 3])
+        for i in range(NP_p):
+            var vol_c = Float32(0.0)
+            for j in range(NP_p):
+                var qj = q_host_f32[elem * NP_p + j]
+                var fx = vx * qj
+                var fy = vy * qj
+                var fr0 = iJ00 * fx + iJ01 * fy
+                var fr1 = iJ10 * fx + iJ11 * fy
+                var D_r = Float32(re_host.D_ref[0 * NP_p * NP_p + i * NP_p + j])
+                var D_s = Float32(re_host.D_ref[1 * NP_p * NP_p + i * NP_p + j])
+                vol_c += fr0 * D_r + fr1 * D_s
+            cpu_vol.append(vol_c)
+
+    var max_vol_err: Float32 = 0.0
+    for k in range(len(cpu_vol)):
+        var diff = cpu_vol[k] - hptr_vol[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_vol_err:
+            max_vol_err = adiff
+    print("    volume rhs GPU vs CPU max err =", max_vol_err)
+    if max_vol_err > Float32(1.0e-4):
+        raise Error(
+            "advection_volume_rhs_kernel_2d: max err "
+            + String(max_vol_err)
+        )
 
 
 def main() raises:
