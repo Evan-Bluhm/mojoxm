@@ -433,6 +433,157 @@ struct ShallowWater2D(Physics2D, ImplicitlyCopyable, Movable):
 
 
 # ----------------------------------------------------------------------
+# IdealMHD2D: ideal magnetohydrodynamics (6-component)
+# ----------------------------------------------------------------------
+# State: (rho, rho*u, rho*v, Bx, By, E).  No z-momentum / Bz; flat-plane
+# magnetic-field configuration.  No GLM divergence cleaning here -- a
+# pure constraint-transport equilibrium is preserved if the IC is
+# divergence-free, but the scheme doesn't self-correct violations.
+# For routine test problems (Alfven wave, OT vortex reduced to 2D) this
+# is usually acceptable; for stiff shock cases with strong compressions
+# a Dedner-style GLM psi could be added as a 7th component following
+# the 3D MHD module's pattern.
+
+@fieldwise_init
+struct IdealMHD2D(Physics2D, ImplicitlyCopyable, Movable):
+    comptime NUM_COMPONENTS = 6
+
+    var gamma: Float64
+    var min_density: Float64
+    var min_pressure: Float64
+
+    def _p_thermal(self, q: UnsafePointer[Float64, MutAnyOrigin]) -> Float64:
+        """Thermal pressure from the state: p = (g-1) (E - KE - MP)."""
+        var rho = q[0]
+        if rho < self.min_density:
+            rho = self.min_density
+        var mx = q[1]
+        var my = q[2]
+        var Bx = q[3]
+        var By = q[4]
+        var E  = q[5]
+        var ke = 0.5 * (mx * mx + my * my) / rho
+        var mp = 0.5 * (Bx * Bx + By * By)
+        var p  = (self.gamma - 1.0) * (E - ke - mp)
+        if p < self.min_pressure:
+            p = self.min_pressure
+        return p
+
+    def internal_flux(
+        self,
+        q:    UnsafePointer[Float64, MutAnyOrigin],
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        var rho = q[0]
+        if rho < self.min_density:
+            rho = self.min_density
+        var mx = q[1]
+        var my = q[2]
+        var Bx = q[3]
+        var By = q[4]
+        var E  = q[5]
+        var u = mx / rho
+        var v = my / rho
+        var p = self._p_thermal(q)
+        var BB = Bx * Bx + By * By
+        var pstar = p + 0.5 * BB           # total (thermal + magnetic) pressure
+
+        # x-flux
+        flux[0] = mx
+        flux[1] = mx * u + pstar - Bx * Bx
+        flux[2] = mx * v         - Bx * By
+        flux[3] = 0.0
+        flux[4] = u * By - v * Bx
+        flux[5] = (E + pstar) * u - Bx * (u * Bx + v * By)
+        # y-flux
+        flux[6]  = my
+        flux[7]  = my * u         - By * Bx
+        flux[8]  = my * v + pstar - By * By
+        flux[9]  = v * Bx - u * By
+        flux[10] = 0.0
+        flux[11] = (E + pstar) * v - By * (u * Bx + v * By)
+
+        # Fast magnetosonic speed as the wave bound.
+        var cs2 = self.gamma * p / rho             # sound speed^2
+        var ca2 = BB / rho                          # Alfven speed^2 (full)
+        var s = cs2 + ca2
+        var disc = s * s - 4.0 * cs2 * (Bx * Bx) / rho
+        if disc < 0.0: disc = 0.0
+        var cf2 = 0.5 * (s + sqrt(disc))
+        var cf = sqrt(cf2)
+        var vmag = sqrt(u * u + v * v)
+        return vmag + cf
+
+    def numerical_flux(
+        self,
+        q_l:  UnsafePointer[Float64, MutAnyOrigin],
+        q_r:  UnsafePointer[Float64, MutAnyOrigin],
+        nx: Float64, ny: Float64,
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        var f_l_buf = InlineArray[Float64, 12](fill=0.0)
+        var f_r_buf = InlineArray[Float64, 12](fill=0.0)
+        var f_l = rebind[UnsafePointer[Float64, MutAnyOrigin]](
+            f_l_buf.unsafe_ptr()
+        )
+        var f_r = rebind[UnsafePointer[Float64, MutAnyOrigin]](
+            f_r_buf.unsafe_ptr()
+        )
+        var sl = self.internal_flux(q_l, f_l)
+        var sr = self.internal_flux(q_r, f_r)
+        var alpha = sl if sl > sr else sr
+
+        for c in range(6):
+            var Fn_l = f_l[0 * 6 + c] * nx + f_l[1 * 6 + c] * ny
+            var Fn_r = f_r[0 * 6 + c] * nx + f_r[1 * 6 + c] * ny
+            flux[c] = 0.5 * (Fn_l + Fn_r) - 0.5 * alpha * (q_r[c] - q_l[c])
+        return alpha
+
+    def boundary_flux(
+        self,
+        q_int: UnsafePointer[Float64, MutAnyOrigin],
+        bc_type: Int32,
+        nx: Float64, ny: Float64,
+        flux: UnsafePointer[Float64, MutAnyOrigin],
+    ) -> Float64:
+        var q_g_buf = InlineArray[Float64, 6](fill=0.0)
+        if bc_type == BC_WALL:
+            # Reflect normal momentum AND normal B (standard MHD slip
+            # wall / perfectly-conducting wall).
+            var mx = q_int[1]
+            var my = q_int[2]
+            var Bx = q_int[3]
+            var By = q_int[4]
+            var m_n = mx * nx + my * ny
+            var B_n = Bx * nx + By * ny
+            q_g_buf[0] = q_int[0]
+            q_g_buf[1] = mx - 2.0 * m_n * nx
+            q_g_buf[2] = my - 2.0 * m_n * ny
+            q_g_buf[3] = Bx - 2.0 * B_n * nx
+            q_g_buf[4] = By - 2.0 * B_n * ny
+            q_g_buf[5] = q_int[5]
+        else:
+            # BC_OUTFLOW / BC_INTERIOR / BC_INFLOW (no inflow state
+            # plumbed through for MHD in this minimal module): zero-
+            # gradient ghost.
+            for c in range(6):
+                q_g_buf[c] = q_int[c]
+        var q_g = rebind[UnsafePointer[Float64, MutAnyOrigin]](
+            q_g_buf.unsafe_ptr()
+        )
+        return self.numerical_flux(q_int, q_g, nx, ny, flux)
+
+    def source_term(
+        self,
+        q: UnsafePointer[Float64, MutAnyOrigin],
+        x: Float64, y: Float64,
+        source_out: UnsafePointer[Float64, MutAnyOrigin],
+    ):
+        for c in range(6):
+            source_out[c] = 0.0
+
+
+# ----------------------------------------------------------------------
 # Physics-generic 2D DG rhs
 # ----------------------------------------------------------------------
 
