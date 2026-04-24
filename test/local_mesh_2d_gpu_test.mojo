@@ -20,7 +20,7 @@ from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
 from src import mpi
 from src.local_mesh_2d import LocalMesh2D
-from src.local_mesh_2d_gpu import LocalMesh2DGpu
+from src.local_mesh_2d_gpu import LocalMesh2DGpu, launch_cell_avg_2d
 from src.reference_2d import num_tri_nodes_2d, num_edge_nodes
 
 
@@ -36,7 +36,7 @@ def check[P: Int]() raises:
     print("  P=", P)
     comptime Nx = 5
     comptime Ny = 4
-    var NP_p = num_tri_nodes_2d(P)
+    comptime NP_p = num_tri_nodes_2d(P)
     var NFP_e = num_edge_nodes(P)
 
     var host = LocalMesh2D[P](Nx, Ny, 1.0, 1.0)
@@ -89,6 +89,54 @@ def check[P: Int]() raises:
         if hptr_bc[k] != 0:
             raise Error("periodic mesh has non-zero face_bc_type")
     print("    face_bc_type all zeros (periodic mesh OK)")
+
+    # Compute GPU cell averages on a synthetic q = (elem_idx + 0.1 * nn)
+    # and compare to a host computation.  NC=1 (scalar).  Proves the
+    # device q buffer + cell_avg_kernel_2d + download all compose.
+    comptime NC = 1
+    var n_total = gpu.num_elements * NP_p * NC
+    var host_q = List[Float32]()
+    for elem in range(gpu.num_elements):
+        for nn in range(NP_p):
+            host_q.append(Float32(elem) + Float32(0.1) * Float32(nn))
+    # Upload q to device.
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_total)
+    var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_total)
+    var hptr_q = hbuf_q.unsafe_ptr()
+    for k in range(n_total):
+        hptr_q[k] = host_q[k]
+    ctx.enqueue_copy(d_q, hbuf_q)
+    var d_avg = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_elements * NC
+    )
+    launch_cell_avg_2d[NP_p, NC](
+        ctx, d_q.unsafe_ptr(), gpu.num_elements, d_avg.unsafe_ptr(),
+    )
+    # Download cell averages.
+    var hbuf_avg = ctx.enqueue_create_host_buffer[DType.float32](
+        gpu.num_elements * NC
+    )
+    ctx.enqueue_copy(hbuf_avg, d_avg)
+    ctx.synchronize()
+    var hptr_avg = hbuf_avg.unsafe_ptr()
+    # Host reference.
+    var max_avg_err: Float32 = 0.0
+    var inv_np = Float32(1.0) / Float32(NP_p)
+    for elem in range(gpu.num_elements):
+        var s: Float32 = 0.0
+        for nn in range(NP_p):
+            s += host_q[elem * NP_p + nn]
+        var cpu_avg = s * inv_np
+        var gpu_val = hptr_avg[elem]
+        var diff = cpu_avg - gpu_val
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_avg_err:
+            max_avg_err = adiff
+    print("    cell_avg GPU vs CPU max err =", max_avg_err)
+    if max_avg_err > Float32(1.0e-4):
+        raise Error(
+            "cell_avg_kernel_2d mismatch: " + String(max_avg_err)
+        )
 
 
 def main() raises:

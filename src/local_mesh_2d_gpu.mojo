@@ -31,7 +31,9 @@
 
 from src.local_mesh_2d import LocalMesh2D
 from src.reference_2d import num_tri_nodes_2d, num_edge_nodes
+from std.gpu import global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
+from std.math import ceildiv
 from std.memory import memcpy
 
 
@@ -110,3 +112,47 @@ struct LocalMesh2DGpu[P: Int = 2](Movable):
         self.d_face_length      = _upload_f64_as_f32(ctx, host.face_length)
         self.d_face_bc_type     = _upload_i32(ctx, host.face_bc_type)
         ctx.synchronize()
+
+
+# ----------------------------------------------------------------------
+# First real GPU kernel on the 2D mesh: per-element cell averages.
+# ----------------------------------------------------------------------
+# Simple reduction -- one thread per element, loops over NP nodes and
+# NC components, writes the mean to `cell_avg_out[elem * NC + c]`.
+# Useful in its own right (cell averages feed the BJ slope limiter's
+# neighbour comparison) and serves as the "hello GPU" for the 2D mesh:
+# tests can round-trip an arbitrary q through the device and confirm
+# the kernel reads the right stride layout.
+# ----------------------------------------------------------------------
+
+def cell_avg_kernel_2d[NP: Int, NC: Int](
+    q:            UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    cell_avg:     UnsafePointer[Float32, MutAnyOrigin],
+):
+    var elem = Int(global_idx.x)
+    if elem >= num_elements:
+        return
+    var base_q = elem * NP * NC
+    var base_avg = elem * NC
+    var inv_np = Float32(1.0) / Float32(NP)
+    for c in range(NC):
+        var s: Float32 = 0.0
+        for nn in range(NP):
+            s += q[base_q + nn * NC + c]
+        cell_avg[base_avg + c] = s * inv_np
+
+
+def launch_cell_avg_2d[NP: Int, NC: Int](
+    mut ctx: DeviceContext,
+    q:        UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    cell_avg: UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    """Convenience launcher: 256 threads/block, one element per thread."""
+    comptime _kernel = cell_avg_kernel_2d[NP, NC]
+    ctx.enqueue_function[_kernel, _kernel](
+        q, num_elements, cell_avg,
+        grid_dim=ceildiv(num_elements, 256),
+        block_dim=256,
+    )
