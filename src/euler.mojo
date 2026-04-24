@@ -528,10 +528,9 @@ def euler_flux_from_fluctuations(
 # ======================================================================
 
 from src.solver import Physics
-from src.boundary import BC_WALL, BC_OUTFLOW
+from src.boundary import BC_WALL, BC_OUTFLOW, BC_INFLOW
 
 
-@fieldwise_init
 struct Euler(Physics, ImplicitlyCopyable):
     comptime NUM_COMPONENTS = 5
 
@@ -547,6 +546,45 @@ struct Euler(Physics, ImplicitlyCopyable):
     var gx: Float32
     var gy: Float32
     var gz: Float32
+
+    # BC_INFLOW ghost state in conservative variables.  All zero by
+    # default so existing drivers that use only BC_WALL / BC_OUTFLOW
+    # keep their current behaviour.
+    var inflow_rho: Float32
+    var inflow_rhou: Float32
+    var inflow_rhov: Float32
+    var inflow_rhow: Float32
+    var inflow_E: Float32
+
+    def __init__(
+        out self,
+        gamma: Float32,
+        min_density: Float32,
+        min_pressure: Float32,
+        flux_type: Int,
+        entropy_fix: Bool,
+        gx: Float32 = Float32(0.0),
+        gy: Float32 = Float32(0.0),
+        gz: Float32 = Float32(0.0),
+        inflow_rho: Float32 = Float32(0.0),
+        inflow_rhou: Float32 = Float32(0.0),
+        inflow_rhov: Float32 = Float32(0.0),
+        inflow_rhow: Float32 = Float32(0.0),
+        inflow_E: Float32 = Float32(0.0),
+    ):
+        self.gamma = gamma
+        self.min_density = min_density
+        self.min_pressure = min_pressure
+        self.flux_type = flux_type
+        self.entropy_fix = entropy_fix
+        self.gx = gx
+        self.gy = gy
+        self.gz = gz
+        self.inflow_rho = inflow_rho
+        self.inflow_rhou = inflow_rhou
+        self.inflow_rhov = inflow_rhov
+        self.inflow_rhow = inflow_rhow
+        self.inflow_E = inflow_E
 
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
@@ -705,19 +743,28 @@ struct Euler(Physics, ImplicitlyCopyable):
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         var q_ghost = InlineArray[Float32, 5](fill=0.0)
-        q_ghost[0] = q_int[0]
-        q_ghost[4] = q_int[4]
         if bc_type == BC_WALL:
             # Reflect the normal momentum; preserve tangential.
+            q_ghost[0] = q_int[0]
+            q_ghost[4] = q_int[4]
             var mn = q_int[1] * nx + q_int[2] * ny + q_int[3] * nz
             q_ghost[1] = q_int[1] - Float32(2.0) * mn * nx
             q_ghost[2] = q_int[2] - Float32(2.0) * mn * ny
             q_ghost[3] = q_int[3] - Float32(2.0) * mn * nz
+        elif bc_type == BC_INFLOW:
+            # User-specified inflow state carried on the physics instance.
+            q_ghost[0] = self.inflow_rho
+            q_ghost[1] = self.inflow_rhou
+            q_ghost[2] = self.inflow_rhov
+            q_ghost[3] = self.inflow_rhow
+            q_ghost[4] = self.inflow_E
         else:
             # BC_OUTFLOW (default): pure zero-gradient extrapolation.
+            q_ghost[0] = q_int[0]
             q_ghost[1] = q_int[1]
             q_ghost[2] = q_int[2]
             q_ghost[3] = q_int[3]
+            q_ghost[4] = q_int[4]
         var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
             q_ghost.unsafe_ptr()
         )

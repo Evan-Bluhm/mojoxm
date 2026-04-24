@@ -14,10 +14,9 @@
 # ======================================================================
 
 from src.solver import Physics
-from src.boundary import BC_WALL, BC_OUTFLOW
+from src.boundary import BC_WALL, BC_OUTFLOW, BC_INFLOW
 
 
-@fieldwise_init
 struct Advection(Physics, ImplicitlyCopyable):
     # Number of conserved components.
     comptime NUM_COMPONENTS = 1
@@ -26,6 +25,21 @@ struct Advection(Physics, ImplicitlyCopyable):
     var vx: Float32
     var vy: Float32
     var vz: Float32
+
+    # Dirichlet inflow state used when a boundary face has
+    # bc_type == BC_INFLOW.  Defaults to 0; existing drivers that only
+    # use BC_OUTFLOW / BC_WALL are unaffected.
+    var inflow_q: Float32
+
+    def __init__(
+        out self,
+        vx: Float32, vy: Float32, vz: Float32,
+        inflow_q: Float32 = Float32(0.0),
+    ):
+        self.vx = vx
+        self.vy = vy
+        self.vz = vz
+        self.inflow_q = inflow_q
 
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
@@ -81,11 +95,10 @@ struct Advection(Physics, ImplicitlyCopyable):
         )
         return absnc
 
-    # Boundary flux.  Scalars don't have a normal component to reflect,
-    # so the two BCs are: BC_WALL = zero-Dirichlet (q_ghost = 0), which
-    # makes the boundary a perfect absorber; BC_OUTFLOW = zero-gradient
-    # (q_ghost = q_int), the natural upwind-through pass-through.  Any
-    # other bc_type falls through to zero-gradient defensively.
+    # Boundary flux.  Per-kind ghost state for a scalar advection BC:
+    #   BC_WALL    -> q_ghost = 0 (perfect absorber; wall can't inject).
+    #   BC_INFLOW  -> q_ghost = self.inflow_q (user-set Dirichlet state).
+    #   otherwise  -> q_ghost = q_int (zero-gradient pass-through = OUTFLOW).
     def boundary_flux(
         self,
         q_int: UnsafePointer[Float32, MutAnyOrigin],
@@ -93,7 +106,13 @@ struct Advection(Physics, ImplicitlyCopyable):
         nx: Float32, ny: Float32, nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
-        var q_ghost = Float32(0.0) if bc_type == BC_WALL else q_int[0]
+        var q_ghost: Float32
+        if bc_type == BC_WALL:
+            q_ghost = Float32(0.0)
+        elif bc_type == BC_INFLOW:
+            q_ghost = self.inflow_q
+        else:
+            q_ghost = q_int[0]
         var nc = self.vx * nx + self.vy * ny + self.vz * nz
         var absnc = nc if nc >= Float32(0.0) else -nc
         flux[0] = Float32(0.5) * (
