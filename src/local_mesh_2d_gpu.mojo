@@ -387,3 +387,102 @@ def launch_advection_lift_combine_2d[NP: Int, NFP: Int](
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
+
+
+# ----------------------------------------------------------------------
+# RK-update combiner: q_out = a * q_a + b * q_b + cc * dt * rhs.
+# ----------------------------------------------------------------------
+# Matches the SSPRK3 weighted combination pattern used in the 3D
+# Solver's rk_stage_kernel (separated here since the 2D pipeline
+# doesn't yet fuse rhs + update into a single shared-memory kernel).
+# One thread per nodal DOF; stateless, just arithmetic.
+# ----------------------------------------------------------------------
+
+def rk_update_kernel_2d[NP: Int, NC: Int](
+    q_a:     UnsafePointer[Float32, MutAnyOrigin],
+    q_b:     UnsafePointer[Float32, MutAnyOrigin],
+    rhs:     UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:   UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_elements * NP * NC
+    if tid >= total:
+        return
+    q_out[tid] = a * q_a[tid] + b * q_b[tid] + cc * dt * rhs[tid]
+
+
+def launch_rk_update_2d[NP: Int, NC: Int](
+    mut ctx: DeviceContext,
+    q_a:     UnsafePointer[Float32, MutAnyOrigin],
+    q_b:     UnsafePointer[Float32, MutAnyOrigin],
+    rhs:     UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:   UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_elements * NP * NC
+    comptime _kernel = rk_update_kernel_2d[NP, NC]
+    ctx.enqueue_function[_kernel, _kernel](
+        q_a, q_b, rhs, num_elements, a, b, cc, dt, q_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
+
+
+# ----------------------------------------------------------------------
+# Full advection RK-stage orchestration (3 rhs kernels + 1 update).
+# ----------------------------------------------------------------------
+# Wraps the volume / face-flux / lift-combine / rk-update chain so a
+# driver only has to provide the per-stage (a, b, cc) weights, the dt,
+# and the q_in / q_a / q_b / q_out buffers.  Uses the caller-supplied
+# scratch buffers for vol_c, fstar, and rhs so the orchestration is
+# allocation-free on the hot path.
+#
+# Signature mirrors what the eventual Solver2D struct will expose
+# internally.  Calling it three times with the SSPRK3 weights
+# reproduces the 2D GPU analog of the 3D Solver.step_ssprk3 loop.
+# ----------------------------------------------------------------------
+
+def advection_rk_stage_2d[NP: Int, NFP: Int](
+    mut ctx: DeviceContext,
+    mesh: LocalMesh2DGpu[__type_of(NP)],
+    Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:    UnsafePointer[Float32, MutAnyOrigin],
+    q_in:     UnsafePointer[Float32, MutAnyOrigin],
+    q_a:      UnsafePointer[Float32, MutAnyOrigin],
+    q_b:      UnsafePointer[Float32, MutAnyOrigin],
+    q_out:    UnsafePointer[Float32, MutAnyOrigin],
+    vol_scratch:   UnsafePointer[Float32, MutAnyOrigin],
+    fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
+    rhs_scratch:   UnsafePointer[Float32, MutAnyOrigin],
+    vx: Float32, vy: Float32, inflow_q: Float32,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+) raises:
+    launch_advection_volume_rhs_2d[NP](
+        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        mesh.num_elements, vx, vy, vol_scratch,
+    )
+    launch_advection_face_flux_2d[NP, NFP](
+        ctx, q_in,
+        mesh.d_face_elem.unsafe_ptr(),
+        mesh.d_face_elem_node.unsafe_ptr(),
+        mesh.d_face_normal.unsafe_ptr(),
+        mesh.d_face_bc_type.unsafe_ptr(),
+        mesh.num_faces, vx, vy, inflow_q, fstar_scratch,
+    )
+    launch_advection_lift_combine_2d[NP, NFP](
+        ctx, vol_scratch, fstar_scratch,
+        mesh.d_elem_inv_2A.unsafe_ptr(),
+        mesh.d_elem_faces.unsafe_ptr(),
+        mesh.d_elem_face_side.unsafe_ptr(),
+        mesh.d_elem_canon_to_ref.unsafe_ptr(),
+        mesh.d_face_length.unsafe_ptr(),
+        Lift_ref,
+        mesh.num_elements, rhs_scratch,
+    )
+    launch_rk_update_2d[NP, 1](
+        ctx, q_a, q_b, rhs_scratch,
+        mesh.num_elements, a, b, cc, dt, q_out,
+    )

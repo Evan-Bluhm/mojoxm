@@ -24,7 +24,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import (
     LocalMesh2DGpu, launch_cell_avg_2d,
     launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
-    launch_advection_lift_combine_2d,
+    launch_advection_lift_combine_2d, launch_rk_update_2d,
 )
 from src.dg_rhs_2d import Advection2D, dg_rhs_2d
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
@@ -352,6 +352,39 @@ def check[P: Int]() raises:
         raise Error(
             "GPU advection rhs disagrees with CPU dg_rhs_2d: "
             + String(max_rhs_err)
+        )
+
+    # RK-update combiner: reuse d_q (acts as q_a and q_b in a SSPRK3
+    # stage-1 call where q_a = q_b = q) with the computed rhs and
+    # dt = 0.01.  Expected: q_new[k] = q[k] + 0.01 * rhs[k] when
+    # (a, b, cc) = (1, 0, 1).
+    var d_qnew = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_elements * NP_p
+    )
+    launch_rk_update_2d[NP_p, 1](
+        ctx,
+        d_q.unsafe_ptr(), d_q.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        gpu.num_elements,
+        Float32(1.0), Float32(0.0), Float32(1.0), Float32(0.01),
+        d_qnew.unsafe_ptr(),
+    )
+    var hbuf_qnew = ctx.enqueue_create_host_buffer[DType.float32](
+        gpu.num_elements * NP_p
+    )
+    ctx.enqueue_copy(hbuf_qnew, d_qnew)
+    ctx.synchronize()
+    var qnew_ptr = hbuf_qnew.unsafe_ptr()
+    var max_update_err: Float32 = 0.0
+    for k in range(gpu.num_elements * NP_p):
+        var expect = q_host_f32[k] + Float32(0.01) * rhs_ptr[k]
+        var diff = expect - qnew_ptr[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_update_err:
+            max_update_err = adiff
+    print("    RK-update kernel err =", max_update_err)
+    if max_update_err > Float32(1.0e-6):
+        raise Error(
+            "rk_update_kernel_2d: max err " + String(max_update_err)
         )
 
 
