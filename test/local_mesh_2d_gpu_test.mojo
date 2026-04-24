@@ -21,7 +21,8 @@ from std.gpu.host import DeviceContext, DeviceBuffer
 from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu, launch_cell_avg_2d
-from src.reference_2d import num_tri_nodes_2d, num_edge_nodes
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
+from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
 def _abs(x: Float64) -> Float64:
@@ -137,6 +138,41 @@ def check[P: Int]() raises:
         raise Error(
             "cell_avg_kernel_2d mismatch: " + String(max_avg_err)
         )
+
+    # Reference-element upload: verify D_ref and Lift_ref round-trip
+    # Float64 -> Float32 within Float32 precision.
+    var re_host = ReferenceElement2D[P]()
+    var re_gpu = ReferenceElement2DGpu[P](ctx, re_host)
+
+    var d_ref_len = 2 * NP_p * NP_p
+    var hbuf_dref = ctx.enqueue_create_host_buffer[DType.float32](d_ref_len)
+    ctx.enqueue_copy(hbuf_dref, re_gpu.d_D_ref)
+    ctx.synchronize()
+    var dptr = hbuf_dref.unsafe_ptr()
+    var max_dref_err: Float32 = 0.0
+    for k in range(d_ref_len):
+        var diff = Float32(re_host.D_ref[k]) - dptr[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_dref_err:
+            max_dref_err = adiff
+    print("    D_ref max |f64->f32 err| =", max_dref_err)
+    if max_dref_err > Float32(1.0e-5):
+        raise Error("D_ref upload round-trip failed")
+
+    var lift_len = 3 * NP_p * NFP_e
+    var hbuf_lift = ctx.enqueue_create_host_buffer[DType.float32](lift_len)
+    ctx.enqueue_copy(hbuf_lift, re_gpu.d_Lift_ref)
+    ctx.synchronize()
+    var lptr = hbuf_lift.unsafe_ptr()
+    var max_lift_err: Float32 = 0.0
+    for k in range(lift_len):
+        var diff = Float32(re_host.Lift_ref[k]) - lptr[k]
+        var adiff = diff if diff >= Float32(0.0) else -diff
+        if adiff > max_lift_err:
+            max_lift_err = adiff
+    print("    Lift_ref max |f64->f32 err| =", max_lift_err)
+    if max_lift_err > Float32(1.0e-5):
+        raise Error("Lift_ref upload round-trip failed")
 
 
 def main() raises:
