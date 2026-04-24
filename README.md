@@ -93,15 +93,22 @@ Nine reference drivers under `examples/`:
   (Advection / Euler / ShallowWater / IdealMHD) run on device via
   Float32 kernels orchestrated as volume-rhs + Rusanov face-flux +
   multi-component lift-combine + rk-update.  Each physics's SSPRK3
-  step matches the CPU Float64 reference to ~1e-7 at P=1..3.  Four
-  end-to-end periodic drivers under `examples/*_2d_gpu.mojo` emit
-  21-frame VTU sequences (+ .pvd) matching the CPU format so
+  step matches the CPU Float64 reference to ~1e-7 at P=1..3.  Six
+  end-to-end drivers under `examples/*_2d_gpu.mojo` emit 21-frame
+  VTU sequences (+ .pvd) matching the CPU format so
   `scripts/animate_2d.py` works on either family:
-  `advection_gaussian_2d_gpu` (~7700 compute steps/sec, 0.07 % rel
-  L2 over one period), `euler_vortex_2d_gpu` (~7600, isentropic
-  vortex, 6.8 % rel L2 at P=2 / 32x32), `shallow_water_drop_2d_gpu`
-  (~6300, mean-h conservation ~4e-5), `mhd_alfven_2d_gpu` (~9100,
-  0.36 % rel L2 on a one-period linear Alfven wave at P=2 / 64x4).
+  * **Periodic:** `advection_gaussian_2d_gpu` (~7700 compute
+    steps/sec, 0.07 % rel L2 over one period), `euler_vortex_2d_gpu`
+    (~7600, isentropic vortex, 6.8 % rel L2 at P=2 / 32x32),
+    `shallow_water_drop_2d_gpu` (~6300, mean-h conservation ~4e-5),
+    `mhd_alfven_2d_gpu` (~9100, 0.36 % rel L2 on a one-period
+    linear Alfven wave at P=2 / 64x4).
+  * **Non-periodic (BC_WALL / BC_INFLOW / BC_OUTFLOW on GPU):**
+    `euler_channel_2d_gpu` (Mach-2 wind tunnel with inflow +
+    outflow + walls; rho_max_drift = 1.2e-7 -- analytic steady
+    answer preserved to Float32 epsilon),
+    `shallow_water_dam_break_2d_gpu` (h_L=2 / h_R=1 Riemann in a
+    closed basin with walls on all 4 sides; ~8700 steps/sec).
 
 ## Numerical scheme
 
