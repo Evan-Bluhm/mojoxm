@@ -10,11 +10,15 @@
 # Uses the Float32 Euler kernels from `src/local_mesh_2d_gpu.mojo`:
 #   euler_volume_rhs_kernel_2d + euler_face_flux_kernel_2d +
 #   lift_combine_kernel_2d[NC=4] + rk_update_kernel_2d[NC=4],
-# orchestrated by `euler_rk_stage_2d`.  Prints wall-clock time and
-# final relative L2 error on state (rho, mx, my, E).
+# orchestrated by `euler_rk_stage_2d`.  Every NUM_FRAMES-th step
+# downloads the state, extracts density, and writes a VTU frame to
+# `output/frame_euler2d_gpu_NNNNN.vtu` + a `.pvd` collection -- same
+# layout as the CPU driver, so `scripts/animate_2d.py` works unchanged.
+# Prints wall time (compute only vs total), throughput, final rel L2.
 # ======================================================================
 
 from std.math import sqrt, exp, pi
+from std.pathlib import Path
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.time import perf_counter_ns
@@ -25,6 +29,7 @@ from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
+from src.vtu_2d import dump_vtu_2d_frame
 
 
 comptime P = 2
@@ -33,6 +38,7 @@ comptime NY = 32
 comptime LX = 10.0
 comptime LY = 10.0
 comptime T_FINAL = 10.0
+comptime NUM_FRAMES = 20
 comptime CFL = 0.15
 
 comptime GAMMA = 1.4
@@ -49,6 +55,16 @@ def _periodic_delta(a: Float64, b: Float64, L: Float64) -> Float64:
     if d >  L * 0.5: d -= L
     if d < -L * 0.5: d += L
     return d
+
+
+def _frame_name(i: Int) raises -> String:
+    var s = String("frame_euler2d_gpu_")
+    var idx = String(i)
+    for _ in range(5 - idx.byte_length()):
+        s += "0"
+    s += idx
+    s += ".vtu"
+    return s^
 
 
 def main() raises:
@@ -69,7 +85,7 @@ def main() raises:
 
     var host_mesh = LocalMesh2D[P](NX, NY, LX, LY)
     var host_re = ReferenceElement2D[P]()
-    var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY)  # keep coords for IC
+    var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY)  # kept for IC + VTU
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
     print("  elements:", gpu_mesh.num_elements,
@@ -123,68 +139,106 @@ def main() raises:
     ctx.enqueue_copy(d_q, hbuf_q)
     ctx.synchronize()
 
-    # dt from CFL / DG scaling (same (2P+1) factor the CPU driver uses).
+    # dt: choose num_steps as a multiple of NUM_FRAMES so each frame
+    # closes exactly on a stage-3 boundary.
     var h = LX / Float64(NX)
     var c_inf = sqrt(GAMMA * T_INF)
     var wave_max = sqrt(U0 * U0 + V0 * V0) + c_inf + BETA / two_pi
     var dt_est = CFL * h / (wave_max * Float64(2 * P + 1))
-    var num_steps = Int(T_FINAL / dt_est) + 1
-    var dt = Float32(T_FINAL / Float64(num_steps))
-    print("  dt=", dt, "  num_steps=", num_steps,
-          "  wave_max=", wave_max)
+    var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
+    var total_steps = NUM_FRAMES * steps_per_frame
+    var dt = Float32(T_FINAL / Float64(total_steps))
+    print("  dt=", dt, "  steps/frame=", steps_per_frame,
+          "  total steps=", total_steps)
 
     var gamma = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
     var min_p = Float32(1.0e-6)
 
-    var step_start = perf_counter_ns()
-    for _ in range(num_steps):
-        # Stage 1: q1 = q + dt L(q)
-        euler_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
-            gamma, min_rho, min_p,
-            Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
-            Float32(1.0), Float32(0.0), Float32(1.0), dt,
-        )
-        # Stage 2: q2 = 3/4 q + 1/4 (q1 + dt L(q1))
-        euler_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
-            gamma, min_rho, min_p,
-            Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
-            Float32(0.75), Float32(0.25), Float32(0.25), dt,
-        )
-        # Stage 3: q <- 1/3 q + 2/3 (q2 + dt L(q2))
-        euler_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
-            gamma, min_rho, min_p,
-            Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
-            Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-            Float32(2.0 / 3.0), dt,
-        )
-    ctx.synchronize()
-    var step_end = perf_counter_ns()
-    var wall_sec = Float64(step_end - step_start) * 1.0e-9
-    print("  wall time:", wall_sec, "s")
-    print("  throughput:", Float64(num_steps) / wall_sec, "steps/s")
+    var density = List[Float64]()
+    for _ in range(gpu_mesh.num_elements * NP_p):
+        density.append(0.0)
+    var paths = List[String]()
+    var times = List[Float64]()
 
-    # Download final q and compare to IC (one period == exact IC).
-    ctx.enqueue_copy(hbuf_q, d_q)
-    ctx.synchronize()
+    # Frame 0: dump IC before stepping.
+    for elem in range(gpu_mesh.num_elements):
+        for nn in range(NP_p):
+            density[elem * NP_p + nn] = Float64(host_q[(elem * NP_p + nn) * NC + 0])
+    var f0_path = String("output/") + _frame_name(0)
+    dump_vtu_2d_frame[P](mesh_coords, density, f0_path, String("rho"))
+    paths.append(_frame_name(0))
+    times.append(0.0)
+
+    var run_start = perf_counter_ns()
+    var compute_ns: UInt = 0
+    for fi in range(1, NUM_FRAMES + 1):
+        var c_start = perf_counter_ns()
+        for _ in range(steps_per_frame):
+            # Stage 1
+            euler_rk_stage_2d[P](
+                ctx, gpu_mesh,
+                gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+                d_q.unsafe_ptr(),
+                d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+                d_q1.unsafe_ptr(),
+                d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+                gamma, min_rho, min_p,
+                Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+                Float32(1.0), Float32(0.0), Float32(1.0), dt,
+            )
+            # Stage 2
+            euler_rk_stage_2d[P](
+                ctx, gpu_mesh,
+                gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+                d_q1.unsafe_ptr(),
+                d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+                d_q2.unsafe_ptr(),
+                d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+                gamma, min_rho, min_p,
+                Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+                Float32(0.75), Float32(0.25), Float32(0.25), dt,
+            )
+            # Stage 3
+            euler_rk_stage_2d[P](
+                ctx, gpu_mesh,
+                gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+                d_q2.unsafe_ptr(),
+                d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+                d_q.unsafe_ptr(),
+                d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+                gamma, min_rho, min_p,
+                Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+                Float32(1.0 / 3.0), Float32(2.0 / 3.0),
+                Float32(2.0 / 3.0), dt,
+            )
+        ctx.synchronize()
+        var c_end = perf_counter_ns()
+        compute_ns += c_end - c_start
+
+        ctx.enqueue_copy(hbuf_q, d_q)
+        ctx.synchronize()
+        for elem in range(gpu_mesh.num_elements):
+            for nn in range(NP_p):
+                density[elem * NP_p + nn] = Float64(
+                    hptr_q[(elem * NP_p + nn) * NC + 0]
+                )
+        var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
+        var path_i = String("output/") + _frame_name(fi)
+        dump_vtu_2d_frame[P](mesh_coords, density, path_i, String("rho"))
+        paths.append(_frame_name(fi))
+        times.append(t)
+        print("    frame", fi, "/", NUM_FRAMES, " t=", t)
+    var run_end = perf_counter_ns()
+
+    var total_sec = Float64(run_end - run_start) * 1.0e-9
+    var compute_sec = Float64(compute_ns) * 1.0e-9
+    print("  compute time:", compute_sec, "s")
+    print("  total time  :", total_sec, "s (incl. frame I/O)")
+    print("  throughput  :", Float64(total_steps) / compute_sec,
+          "steps/s (compute only)")
+
+    # Final relative L2 vs IC (one period == exact IC on periodic).
     var sum_sq: Float64 = 0.0
     var sum_ic: Float64 = 0.0
     for k in range(n_q):
@@ -196,5 +250,23 @@ def main() raises:
     var l2_ic = sqrt(sum_ic / Float64(n_q))
     print("  L2 err =", l2, "  rel err =", l2 / l2_ic,
           "  (IC L2 =", l2_ic, ")")
+
+    # PVD collection -- `scripts/animate_2d.py` walks this directly.
+    var pvd = String()
+    pvd += '<?xml version="1.0"?>\n'
+    pvd += ('<VTKFile type="Collection" version="0.1"'
+            ' byte_order="LittleEndian">\n')
+    pvd += '<Collection>\n'
+    for i in range(len(paths)):
+        pvd += '<DataSet timestep="'
+        pvd += String(times[i])
+        pvd += '" group="" part="0" file="'
+        pvd += paths[i]
+        pvd += '"/>\n'
+    pvd += '</Collection>\n'
+    pvd += '</VTKFile>\n'
+    Path("output/solution_euler2d_gpu.pvd").write_text(pvd)
+    print("  wrote output/solution_euler2d_gpu.pvd +",
+          NUM_FRAMES + 1, "VTU frames")
 
     mpi.finalize()

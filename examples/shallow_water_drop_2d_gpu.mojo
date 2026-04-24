@@ -5,14 +5,16 @@
 # GPU analog of `shallow_water_drop_2d_cpu.mojo`.  A circular elevated
 # water column collapses under gravity on a [0, 1]^2 periodic basin.
 # Waves propagate outward, wrap around, and interfere -- a non-trivial
-# multi-component run with a discontinuous-like IC (smooth Gaussian
-# bump) to exercise the SW GPU kernels.
+# multi-component run to exercise the SW GPU kernels.
 #
-# No VTU output here; reports wall time, throughput, and mass / mean-h
-# conservation (should be bit-stable on periodic meshes).
+# Writes NUM_FRAMES VTU snapshots of depth h +
+# `output/solution_sw2d_gpu.pvd` -- open in ParaView, or feed to
+# `scripts/animate_2d.py` for an MP4.  Also prints wall time (compute
+# vs total) + mass conservation diagnostic.
 # ======================================================================
 
 from std.math import sqrt, exp, pi
+from std.pathlib import Path
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.time import perf_counter_ns
@@ -23,6 +25,7 @@ from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
+from src.vtu_2d import dump_vtu_2d_frame
 
 
 comptime P = 2
@@ -31,6 +34,7 @@ comptime NY = 48
 comptime LX = 1.0
 comptime LY = 1.0
 comptime T_FINAL = 0.4
+comptime NUM_FRAMES = 20
 comptime CFL = 0.2
 
 comptime G = 9.81
@@ -46,6 +50,16 @@ def _periodic_delta(a: Float64, b: Float64, L: Float64) -> Float64:
     if d >  L * 0.5: d -= L
     if d < -L * 0.5: d += L
     return d
+
+
+def _frame_name(i: Int) raises -> String:
+    var s = String("frame_sw2d_gpu_")
+    var idx = String(i)
+    for _ in range(5 - idx.byte_length()):
+        s += "0"
+    s += idx
+    s += ".vtu"
+    return s^
 
 
 def main() raises:
@@ -109,58 +123,95 @@ def main() raises:
     var h_cell = LX / Float64(NX)
     var c_peak = sqrt(G * (H_BG + H_AMP))
     var dt_est = CFL * h_cell / (c_peak * Float64(2 * P + 1))
-    var num_steps = Int(T_FINAL / dt_est) + 1
-    var dt = Float32(T_FINAL / Float64(num_steps))
-    print("  dt=", dt, "  num_steps=", num_steps,
-          "  c_peak=", c_peak)
+    var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
+    var total_steps = NUM_FRAMES * steps_per_frame
+    var dt = Float32(T_FINAL / Float64(total_steps))
+    print("  dt=", dt, "  steps/frame=", steps_per_frame,
+          "  total steps=", total_steps)
 
     var g = Float32(G)
     var min_h = Float32(1.0e-6)
 
-    var step_start = perf_counter_ns()
-    for _ in range(num_steps):
-        sw_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
-            g, min_h,
-            Float32(0.0), Float32(0.0), Float32(0.0),
-            Float32(1.0), Float32(0.0), Float32(1.0), dt,
-        )
-        sw_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
-            g, min_h,
-            Float32(0.0), Float32(0.0), Float32(0.0),
-            Float32(0.75), Float32(0.25), Float32(0.25), dt,
-        )
-        sw_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
-            g, min_h,
-            Float32(0.0), Float32(0.0), Float32(0.0),
-            Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-            Float32(2.0 / 3.0), dt,
-        )
-    ctx.synchronize()
-    var step_end = perf_counter_ns()
-    var wall_sec = Float64(step_end - step_start) * 1.0e-9
-    print("  wall time:", wall_sec, "s")
-    print("  throughput:", Float64(num_steps) / wall_sec, "steps/s")
+    var depth = List[Float64]()
+    for _ in range(gpu_mesh.num_elements * NP_p):
+        depth.append(0.0)
+    var paths = List[String]()
+    var times = List[Float64]()
 
-    ctx.enqueue_copy(hbuf_q, d_q)
-    ctx.synchronize()
+    # Frame 0: IC.
+    for elem in range(gpu_mesh.num_elements):
+        for nn in range(NP_p):
+            depth[elem * NP_p + nn] = Float64(host_q[(elem * NP_p + nn) * NC + 0])
+    var f0_path = String("output/") + _frame_name(0)
+    dump_vtu_2d_frame[P](mesh_coords, depth, f0_path, String("h"))
+    paths.append(_frame_name(0))
+    times.append(0.0)
+
+    var run_start = perf_counter_ns()
+    var compute_ns: UInt = 0
+    for fi in range(1, NUM_FRAMES + 1):
+        var c_start = perf_counter_ns()
+        for _ in range(steps_per_frame):
+            sw_rk_stage_2d[P](
+                ctx, gpu_mesh,
+                gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+                d_q.unsafe_ptr(),
+                d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+                d_q1.unsafe_ptr(),
+                d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+                g, min_h,
+                Float32(0.0), Float32(0.0), Float32(0.0),
+                Float32(1.0), Float32(0.0), Float32(1.0), dt,
+            )
+            sw_rk_stage_2d[P](
+                ctx, gpu_mesh,
+                gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+                d_q1.unsafe_ptr(),
+                d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+                d_q2.unsafe_ptr(),
+                d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+                g, min_h,
+                Float32(0.0), Float32(0.0), Float32(0.0),
+                Float32(0.75), Float32(0.25), Float32(0.25), dt,
+            )
+            sw_rk_stage_2d[P](
+                ctx, gpu_mesh,
+                gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+                d_q2.unsafe_ptr(),
+                d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+                d_q.unsafe_ptr(),
+                d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+                g, min_h,
+                Float32(0.0), Float32(0.0), Float32(0.0),
+                Float32(1.0 / 3.0), Float32(2.0 / 3.0),
+                Float32(2.0 / 3.0), dt,
+            )
+        ctx.synchronize()
+        var c_end = perf_counter_ns()
+        compute_ns += c_end - c_start
+
+        ctx.enqueue_copy(hbuf_q, d_q)
+        ctx.synchronize()
+        for elem in range(gpu_mesh.num_elements):
+            for nn in range(NP_p):
+                depth[elem * NP_p + nn] = Float64(
+                    hptr_q[(elem * NP_p + nn) * NC + 0]
+                )
+        var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
+        var path_i = String("output/") + _frame_name(fi)
+        dump_vtu_2d_frame[P](mesh_coords, depth, path_i, String("h"))
+        paths.append(_frame_name(fi))
+        times.append(t)
+        print("    frame", fi, "/", NUM_FRAMES, " t=", t)
+    var run_end = perf_counter_ns()
+
+    var total_sec = Float64(run_end - run_start) * 1.0e-9
+    var compute_sec = Float64(compute_ns) * 1.0e-9
+    print("  compute time:", compute_sec, "s")
+    print("  total time  :", total_sec, "s (incl. frame I/O)")
+    print("  throughput  :", Float64(total_steps) / compute_sec,
+          "steps/s (compute only)")
+
     var total_h: Float64 = 0.0
     var h_min = Float64(hptr_q[0])
     var h_max = Float64(hptr_q[0])
@@ -175,5 +226,22 @@ def main() raises:
     print("  mean h (t=0):", mean_h0,
           "  mean h (final):", mean_h)
     print("  h range (final): [", h_min, ",", h_max, "]")
+
+    var pvd = String()
+    pvd += '<?xml version="1.0"?>\n'
+    pvd += ('<VTKFile type="Collection" version="0.1"'
+            ' byte_order="LittleEndian">\n')
+    pvd += '<Collection>\n'
+    for i in range(len(paths)):
+        pvd += '<DataSet timestep="'
+        pvd += String(times[i])
+        pvd += '" group="" part="0" file="'
+        pvd += paths[i]
+        pvd += '"/>\n'
+    pvd += '</Collection>\n'
+    pvd += '</VTKFile>\n'
+    Path("output/solution_sw2d_gpu.pvd").write_text(pvd)
+    print("  wrote output/solution_sw2d_gpu.pvd +",
+          NUM_FRAMES + 1, "VTU frames")
 
     mpi.finalize()
