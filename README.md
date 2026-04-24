@@ -78,11 +78,16 @@ Nine reference drivers under `examples/`:
   rho = 0.998, right rho = 0.119 (within ~0.2%/5% of exact).
 - **2D triangular elements (CPU)**: parallel stack at `src/reference_2d.mojo`
   / `local_mesh_2d.mojo` / `dg_rhs_2d.mojo` / `vtu_2d.mojo`.
-  `Physics2D` trait + Advection2D / Euler2D / ShallowWater2D; periodic
-  and wall / outflow BCs; SSPRK2, SSPRK3, RK4 time integrators.
-  Drivers emit ParaView-visualisable VTU frames; `scripts/animate_2d.py`
-  turns them into MP4 via matplotlib + ffmpeg.  GPU port of the 2D
-  stack is future work.
+  `Physics2D` trait + Advection2D / Euler2D / ShallowWater2D;
+  full BC menu: periodic / wall / outflow / **inflow** (each physics
+  carries its own user-set inflow ghost state); SSPRK2, SSPRK3, RK4
+  time integrators.  Spatial convergence rates verified to (P+1)
+  on smooth advection (P=1: 1.99, P=2: 3.28, P=3: 3.96).
+  7 demo drivers under `examples/*_2d_cpu.mojo` cover advection (periodic
+  + outflow), Euler (vortex / Sod / Mach-2 channel with inflow),
+  shallow water (drop / dam break).  `dump_vtu_2d_frame` writes
+  ParaView-visualisable VTU; `scripts/animate_2d.py` renders them
+  to MP4 via matplotlib + ffmpeg.  GPU port is task #19 (future work).
 
 ## Numerical scheme
 
