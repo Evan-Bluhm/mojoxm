@@ -111,13 +111,13 @@ Nine reference drivers under `examples/`:
     with three limiter passes per SSPRK3 step).
 
   **Tests:** GPU kernels are validated by self-consistent invariants
-  rather than CPU reference code.  18 tests run under `make test-all`
+  rather than CPU reference code.  19 tests run under `make test-all`
   (each gates a hard regression):
   * 2D pipeline -- `local_mesh_2d_gpu_test` (upload round-trips +
     constant-state at P=1/2/3), `euler_2d_gpu_test` /
-    `sw_2d_gpu_test` / `mhd_2d_gpu_test` (constant-state per
-    physics), `limiter_2d_gpu_test` (smooth passthrough +
-    within-cell spike monotonicity).
+    `sw_2d_gpu_test` / `mhd_2d_gpu_test` / `maxwell_2d_gpu_test`
+    (constant-state per physics), `limiter_2d_gpu_test` (smooth
+    passthrough + within-cell spike monotonicity).
   * 3D pipeline -- `euler_3d_test` / `maxwell_3d_test` /
     `sw_3d_test` / `mhd_3d_test` / `two_fluid_3d_test` (constant-
     state preservation per physics through Solver[PhysT, P]),
@@ -130,7 +130,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  27 analytic-solution gates tying schemes to closed-form reference
+  28 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   and P=3 rate gates for advection (2D and 3D) and Euler (2D and 3D).
@@ -142,11 +142,12 @@ Nine reference drivers under `examples/`:
     `bench_mhd_glm_psi_transport_2d` (c_h>0 psi/Bx wave coupling),
     `bench_mhd_glm_psi_damp_2d` (alpha_d>0 decay matches A0/e),
     `bench_shallow_water_wave_2d`, `bench_euler_channel_steady_2d`.
-  * **2D shocks (3):** `bench_euler_sod_2d`,
+  * **2D shocks + EM (4):** `bench_euler_sod_2d`,
     `bench_euler_sod_limited_2d` (HLLC + BJ limiter, shock position
     within 0.2 cells of exact Rankine-Hugoniot),
     `bench_shallow_water_dam_break_2d` (closed-pool conservation
-    invariants).
+    invariants), `bench_maxwell_cavity_2d` (TM(1,1) standing wave in
+    PEC cavity, period sqrt(2), rel L2 ~3e-4).
   * **3D smooth (9):** `bench_advection_3d` + `_p3` (rate ~3.7),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -182,12 +183,13 @@ Nine reference drivers under `examples/`:
   then a single per-(elem, node) fused vol+lift+RK kernel computes
   the volume RHS contribution locally (no global vol_c round-trip),
   applies the face-lift, and does the RK update.  Implemented for
-  all four 2D physics:
+  all five 2D physics:
   * `advection_vol_lift_combine_rk_kernel_2d`     (NC=1)
   * `euler_vol_lift_combine_rk_kernel_2d`         (NC=4, Rusanov + HLLC)
   * `sw_vol_lift_combine_rk_kernel_2d`            (NC=3, Rusanov + HLL)
   * `mhd_vol_lift_combine_rk_kernel_2d`           (NC=6)
   * `mhd_glm_vol_lift_combine_rk_kernel_2d`       (NC=7, with c_h^2 B / psi flux additions)
+  * `maxwell_vol_lift_combine_rk_kernel_2d`       (NC=6, EM)
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches

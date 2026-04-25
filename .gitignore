@@ -46,6 +46,7 @@ local_mesh_2d_gpu_test
 euler_2d_gpu_test
 sw_2d_gpu_test
 mhd_2d_gpu_test
+maxwell_2d_gpu_test
 limiter_2d_gpu_test
 limiter_3d_test
 mhd_3d_test
