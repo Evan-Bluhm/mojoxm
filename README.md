@@ -170,11 +170,29 @@ Nine reference drivers under `examples/`:
 - **Profiling**: `make profile-bench-<name>` runs a benchmark under
   `nsys profile --stats=true` and saves a per-kernel time summary
   to `benchmarks/profile_reports/<name>.kern.txt` for diff-ability
-  across runs.  Baseline reports live in git.  Key finding: the 2D
-  pipeline is launch-bound (~75 %% of wall time in
-  `cuLaunchKernelEx`, 12 kernel launches per SSPRK3 step) whereas
-  the 3D stack's `rk_stage_kernel` is a single fused kernel that
-  spends > 99 %% of GPU time in one kernel.
+  across runs.  Baseline reports live in git for every benchmark.
+
+- **2D kernel fusion (task #36 phase 2):** Each 2D physics path now
+  runs its flux pipeline in **2 kernel launches per SSPRK3 stage**
+  (down from 3): the per-face flux kernel writes `fstar` to global,
+  then a single per-(elem, node) fused vol+lift+RK kernel computes
+  the volume RHS contribution locally (no global vol_c round-trip),
+  applies the face-lift, and does the RK update.  Implemented for
+  all four 2D physics:
+  * `advection_vol_lift_combine_rk_kernel_2d`     (NC=1)
+  * `euler_vol_lift_combine_rk_kernel_2d`         (NC=4, Rusanov + HLLC)
+  * `sw_vol_lift_combine_rk_kernel_2d`            (NC=3, Rusanov + HLL)
+  * `mhd_vol_lift_combine_rk_kernel_2d`           (NC=6)
+  * `mhd_glm_vol_lift_combine_rk_kernel_2d`       (NC=7, with c_h^2 B / psi flux additions)
+
+  Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
+  per-stage compute is **20-30%% smaller** depending on NC; launches
+  per stage **3 -> 2 (-33%%)**.  All 22 benchmarks remain
+  bit-identical to the pre-fusion path.
+
+  The 3D pipeline's `rk_stage_kernel` is already a single fused
+  kernel that spends > 99 %% of GPU time in one launch; that pattern
+  is the reference target for any further 2D consolidation.
 
 ## Numerical scheme
 
@@ -670,9 +688,13 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
   don't yet have -- GLM alone is insufficient.  See
   `bench_mhd_alfven_glm_2d` (smooth gate that passes) for the current
   state.
-- **2D pipeline is launch-bound.** 12 kernel launches per SSPRK3
-  step vs 1 in 3D's `rk_stage_kernel`; full 2D fusion is the next
-  big perf win (task #36 phase 2).
+- **2D pipeline still uses 2 kernel launches per RK stage** vs 1 in
+  the 3D `rk_stage_kernel`.  The vol+lift+RK fusion in commits
+  f7bff49..fa4257a brought 2D from 3 launches/stage down to 2
+  (per-face flux + per-element fused vol+lift); collapsing into a
+  single launch would require unifying the per-face and per-element
+  parallelism (e.g. via cooperative shared-memory phases like the
+  3D kernel uses).
 - **VTU writer emits one scalar per frame**; visualizing multiple
   Euler components (momentum, pressure) requires extending the
   writer.
