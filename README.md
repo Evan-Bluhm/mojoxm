@@ -111,30 +111,61 @@ Nine reference drivers under `examples/`:
     with three limiter passes per SSPRK3 step).
 
   **Tests:** GPU kernels are validated by self-consistent invariants
-  rather than CPU reference code: `local_mesh_2d_gpu_test` confirms
-  upload round-trips and constant-state SSPRK3 preservation at
-  P=1/2/3; `euler_2d_gpu_test` / `sw_2d_gpu_test` / `mhd_2d_gpu_test`
-  run the same constant-state check per-physics; `limiter_2d_gpu_test`
-  asserts smooth passthrough + within-cell spike monotonicity.
-  End-to-end correctness is proven by the drivers' analytic
-  diagnostics (vortex / Alfven one-period L2, channel steady state,
-  Sod boundary-plateau deviations).
+  rather than CPU reference code.  18 tests run under `make test-all`
+  (each gates a hard regression):
+  * 2D pipeline -- `local_mesh_2d_gpu_test` (upload round-trips +
+    constant-state at P=1/2/3), `euler_2d_gpu_test` /
+    `sw_2d_gpu_test` / `mhd_2d_gpu_test` (constant-state per
+    physics), `limiter_2d_gpu_test` (smooth passthrough +
+    within-cell spike monotonicity).
+  * 3D pipeline -- `euler_3d_test` / `maxwell_3d_test` /
+    `sw_3d_test` / `mhd_3d_test` / `two_fluid_3d_test` (constant-
+    state preservation per physics through Solver[PhysT, P]),
+    `limiter_3d_test` (BJ slope-limiter cell-mean conservation
+    invariant, drift = 0 exactly), `p3_smoke_test` (Mesh[3] +
+    Solver[Advection, 3] round-trip).
+  * MPI -- `mpi_advection_test` / `mpi_bc_test` (np=1 vs np=4
+    bit-identical periodic / non-periodic).
+  * Misc -- `reference_element_test`, `reference_element_2d_test`,
+    `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  12 analytic-solution gates that tie schemes to closed-form
-  reference states.  Seven 2D benchmarks
-  (`bench_advection_translation_2d`, `bench_euler_vortex_2d`,
-  `bench_euler_smooth_wave_2d`, `bench_euler_sod_2d`,
-  `bench_euler_sod_limited_2d`, `bench_euler_channel_steady_2d`,
-  `bench_mhd_alfven_2d`) and five 3D (`bench_advection_3d`,
-  `bench_euler_smooth_wave_3d`, `bench_mhd_alfven_3d`,
-  `bench_maxwell_cavity_3d`, `bench_two_fluid_langmuir_3d`).
-  Every core physics has at least one 2D and one 3D analytic gate.
-  Tight tolerances where the problem admits them
-  (Sod shock position within 0.2 cells of exact Rankine-Hugoniot;
-  Mach-2 channel steady state to 1.2e-7 = Float32 epsilon;
-  Langmuir return to 0.057%% of IC after 29k SSPRK3 stages;
-  Maxwell cavity standing wave to 3.5e-5 rel L2 after 1600 stages).
+  18 analytic-solution gates tying schemes to closed-form reference
+  states.  Coverage is parity across dimensions for every core
+  physics, plus shocked-flow gates wherever a stable scheme exists.
+  * **2D smooth (8):** `bench_advection_translation_2d` (rate gate
+    >= 2.0), `bench_euler_vortex_2d`, `bench_euler_smooth_wave_2d`,
+    `bench_mhd_alfven_2d`, `bench_mhd_alfven_glm_2d` (smoke test of
+    new GLM kernels with c_h=0 -- bit-for-bit reduction to plain
+    MHD), `bench_mhd_glm_psi_transport_2d` (validates c_h>0
+    psi/Bx wave coupling), `bench_shallow_water_wave_2d`,
+    `bench_euler_channel_steady_2d`.
+  * **2D shocks (2):** `bench_euler_sod_2d`,
+    `bench_euler_sod_limited_2d` (HLLC + BJ limiter, shock
+    position within 0.2 cells of exact Rankine-Hugoniot).
+  * **3D smooth (5):** `bench_advection_3d` (rate gate >= 2.0),
+    `bench_euler_smooth_wave_3d` (rate gate >= 2.0 between
+    N=12->16), `bench_mhd_alfven_3d`, `bench_maxwell_cavity_3d`
+    (3.5e-5 rel L2 = Float32 floor), `bench_shallow_water_wave_3d`,
+    `bench_two_fluid_langmuir_3d` (Langmuir return to 0.057%% of
+    IC after 29k SSPRK3 stages).
+  * **3D shocks (2):** `bench_euler_sod_3d` (BJ-limited, bounds +
+    mass conservation), `bench_mhd_brio_wu_3d` (canonical 1D
+    MHD Riemann embedded in 3D, GLM + BJ limiter).
+
+  Tight tolerances where the problem admits them, with each gate's
+  threshold sized to ~1.4-3x the empirical error floor (catches any
+  meaningful regression away from current accuracy).  Single-physics
+  bugs that move L2 by more than a small constant trip the gate.
+
+- **GLM-enabled 2D MHD** (`mhd_glm_*` kernels in
+  `local_mesh_2d_gpu.mojo`):  Dedner divergence-cleaning ported from
+  3D as a parallel NC=7 path; the existing NC=6 `mhd_rk_stage_2d`
+  remains the smooth-flow workhorse.  Validated end-to-end through
+  `bench_mhd_alfven_glm_2d` and `bench_mhd_glm_psi_transport_2d`.
+  Note: GLM alone is not enough for shocked 2D MHD (Brio-Wu) without
+  HLLD or constrained-transport divB handling -- the kernels are
+  available infrastructure for that future work.
 
 - **Profiling**: `make profile-bench-<name>` runs a benchmark under
   `nsys profile --stats=true` and saves a per-kernel time summary
@@ -623,21 +654,28 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
 
 ## Limitations
 
-- Only periodic BCs. No wall, Dirichlet, inflow/outflow.
-- Only P2 elements. The reference-element module could be generalized
-  to higher orders; the kernel ABI is order-independent but the
-  on-face orientation handling assumes the current 6-face-node
-  triangle layout.
-- Cartesian block mesh only. Unstructured tet meshes from GMSH/etc.
-  would need a different `Mesh` that loads from file and computes
+- **Cartesian block mesh only.** Unstructured tet meshes from GMSH /
+  etc. would need a different `Mesh` that loads from file and computes
   face-node mappings via the sorted-global-ID scheme (with care at
   periodic boundaries).
-- Float32 everywhere. RTX 3090 FP64 is 1/64 of FP32, so FP32 is the
-  right call, but some applications may need FP64 mass-matrix inversion.
-- No limiter (Moe-Rossmanith, etc.) — smooth solutions only. Gibbs
-  oscillations on discontinuous ICs grow without bound.
-- VTU writer emits one scalar per frame; visualizing multiple Euler
-  components (momentum, pressure) requires extending the writer.
+- **Float32 everywhere.** RTX 3090 FP64 is 1/64 of FP32, so FP32 is
+  the right call for performance, but some applications may need FP64
+  mass-matrix inversion or accumulation.
+- **2D MPI not implemented.** The 2D triangular GPU stack runs at
+  np=1 only; the 3D Mesh + HaloExchange + Solver path supports np>=2
+  via `make test`/`test-bc`.
+- **2D MHD lacks GLM by default.** The new `mhd_glm_*` kernels add
+  GLM as an opt-in NC=7 path, but shocked 2D MHD (Brio-Wu, OT vortex,
+  ...) requires HLLD or constrained-transport divB handling that we
+  don't yet have -- GLM alone is insufficient.  See
+  `bench_mhd_alfven_glm_2d` (smooth gate that passes) for the current
+  state.
+- **2D pipeline is launch-bound.** 12 kernel launches per SSPRK3
+  step vs 1 in 3D's `rk_stage_kernel`; full 2D fusion is the next
+  big perf win (task #36 phase 2).
+- **VTU writer emits one scalar per frame**; visualizing multiple
+  Euler components (momentum, pressure) requires extending the
+  writer.
 
 ## References
 
