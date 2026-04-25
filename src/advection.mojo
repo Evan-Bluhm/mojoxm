@@ -98,7 +98,13 @@ struct Advection(Physics, ImplicitlyCopyable):
     # Boundary flux.  Per-kind ghost state for a scalar advection BC:
     #   BC_WALL    -> q_ghost = 0 (perfect absorber; wall can't inject).
     #   BC_INFLOW  -> q_ghost = self.inflow_q (user-set Dirichlet state).
-    #   otherwise  -> q_ghost = q_int (zero-gradient pass-through = OUTFLOW).
+    #   BC_OUTFLOW -> use the upwind scalar:
+    #     v.n >= 0  (wave leaving the domain): flux = vn * q_int
+    #     v.n <  0  (would-be inflow direction): flux = 0
+    #   The earlier "q_ghost = q_int unconditionally" handling was
+    #   numerically unstable when v.n < 0 along part of the boundary
+    #   (it pulled spurious flux into the domain proportional to
+    #   q_int).  See README Limitations for the bug discovery.
     def boundary_flux(
         self,
         q_int: UnsafePointer[Float32, MutAnyOrigin],
@@ -106,15 +112,18 @@ struct Advection(Physics, ImplicitlyCopyable):
         nx: Float32, ny: Float32, nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
+        var nc = self.vx * nx + self.vy * ny + self.vz * nz
+        var absnc = nc if nc >= Float32(0.0) else -nc
         var q_ghost: Float32
         if bc_type == BC_WALL:
             q_ghost = Float32(0.0)
         elif bc_type == BC_INFLOW:
             q_ghost = self.inflow_q
         else:
-            q_ghost = q_int[0]
-        var nc = self.vx * nx + self.vy * ny + self.vz * nz
-        var absnc = nc if nc >= Float32(0.0) else -nc
+            # BC_OUTFLOW (and default): zero-Dirichlet on the inflowing
+            # half so the flux upwinds purely from the interior when
+            # vn >= 0 and is exactly zero when vn < 0.
+            q_ghost = Float32(0.0)
         flux[0] = Float32(0.5) * (
             (nc + absnc) * q_int[0] + (nc - absnc) * q_ghost
         )

@@ -698,16 +698,6 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
 - **VTU writer emits one scalar per frame**; visualizing multiple
   Euler components (momentum, pressure) requires extending the
   writer.
-- **3D BC_OUTFLOW path is numerically unstable at long times.**  An
-  attempt at `bench_advection_outflow_3d` showed mass growing past
-  the IC value at T=0.7 (8.78x) and onward, despite the analytic
-  solution being a drain-out.  The 2D BC_OUTFLOW path
-  (`bench_advection_outflow_2d`) drains correctly to 1e-12 of IC
-  mass.  The existing `mpi_bc_test` only runs 50 steps and only
-  asserts np=1 vs np=4 bit-identicality, so a symmetric instability
-  slips through.  Suspect either Kuhn-tet boundary-face outward-
-  normal handling or HaloExchange's `skip_mpi` flag leaving stale
-  halo values for the upwind face flux.  Not yet debugged.
 
 ## References
 

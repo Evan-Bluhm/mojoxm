@@ -72,6 +72,7 @@ bench_shallow_water_wave_2d
 bench_shallow_water_dam_break_2d
 bench_advection_3d
 bench_advection_3d_p3
+bench_advection_outflow_3d
 bench_mhd_alfven_3d
 bench_maxwell_cavity_3d
 bench_two_fluid_langmuir_3d
