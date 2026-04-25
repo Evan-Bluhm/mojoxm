@@ -56,7 +56,10 @@ comptime NY = 24
 comptime NZ = 24
 comptime IC_BLOCK = 256
 
-comptime DRAIN_TOL_REL: Float64 = 1.0e-3
+# Measured residual mass ~1.4e-12 of IC (essentially noise) on
+# current code.  1e-9 leaves 3 orders of headroom and would catch
+# any regression that leaves more than O(1e-9) mass behind.
+comptime DRAIN_TOL_REL: Float64 = 1.0e-9
 
 
 def gaussian_ic_kernel(

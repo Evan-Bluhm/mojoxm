@@ -46,7 +46,10 @@ comptime CX: Float32 = 0.3
 comptime CY: Float32 = 0.3
 comptime SIGMA: Float32 = 0.1
 
-comptime DRAIN_TOL_REL: Float64 = 1.0e-3
+# Measured residual mass ~1e-12 of IC (essentially noise) on
+# current code.  1e-9 leaves 3 orders of headroom and would catch
+# any regression that leaves more than O(1e-9) mass behind.
+comptime DRAIN_TOL_REL: Float64 = 1.0e-9
 
 
 def main() raises:
