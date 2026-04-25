@@ -2,11 +2,10 @@
 
  Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                           Name                          
  --------  ---------------  ---------  --------  --------  --------  --------  -----------  -------------------------------------------------------
-     29.7         94024613      12117    7759.7    7520.0      6208     13408        875.6  src_local_mesh_2d_gpu_bj_limit6A6A6A6A_29764516c7703c25
-     26.5         84060680      12117    6937.4    6720.0      6496     10816        432.6  src_local_mesh_2d_gpu_lift_com6A6A6A6A_5937aa88d09e3255
-     14.0         44378343      12117    3662.5    3552.0      3456      9952        216.8  src_local_mesh_2d_gpu_euler_vo6A6A6A6A_bba186d72b75fb1a
-     11.7         36965349      12117    3050.7    2912.0      2848      7872        238.0  src_local_mesh_2d_gpu_euler_fa6A6A6A6A_29ae9ead1bf63be7
-      9.5         29925981      12117    2469.8    2400.0      2336      4096        122.9  src_local_mesh_2d_gpu_cell_mea6A6A6A6A_66b15adeefac0d99
-      8.6         27264152      12117    2250.1    2208.0      1984      6976        244.8  src_local_mesh_2d_gpu_rk_updat6A6A6A6A_d4cb7d66a73c7052
+     32.2         93667841      12117    7730.3    7584.0      6368     12096        825.8  src_local_mesh_2d_gpu_bj_limit6A6A6A6A_29764516c7703c25
+     29.6         86240564      12117    7117.3    6880.0      6688      9664        430.6  src_local_mesh_2d_gpu_lift_com6A6A6A6A_1a7265f1a92738b8
+     15.2         44326548      12117    3658.2    3520.0      3424      6976        230.7  src_local_mesh_2d_gpu_euler_vo6A6A6A6A_bba186d72b75fb1a
+     12.7         36906464      12117    3045.8    2912.0      2847      4544        227.9  src_local_mesh_2d_gpu_euler_fa6A6A6A6A_29ae9ead1bf63be7
+     10.2         29820810      12117    2461.1    2400.0      2335      5312        136.3  src_local_mesh_2d_gpu_cell_mea6A6A6A6A_66b15adeefac0d99
 
 [7/8] Executing 'cuda_gpu_mem_time_sum' stats report

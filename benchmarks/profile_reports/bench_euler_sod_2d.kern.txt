@@ -2,9 +2,8 @@
 
  Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                           Name                          
  --------  ---------------  ---------  --------  --------  --------  --------  -----------  -------------------------------------------------------
-     43.6         84072340      12117    6938.4    6688.0      6464     10400        445.4  src_local_mesh_2d_gpu_lift_com6A6A6A6A_5937aa88d09e3255
-     23.1         44577096      12117    3678.9    3552.0      3456      7392        241.2  src_local_mesh_2d_gpu_euler_vo6A6A6A6A_bba186d72b75fb1a
-     19.2         36969633      12117    3051.1    2912.0      2816      4736        225.8  src_local_mesh_2d_gpu_euler_fa6A6A6A6A_29ae9ead1bf63be7
-     14.2         27341561      12117    2256.5    2240.0      1952      5856        195.9  src_local_mesh_2d_gpu_rk_updat6A6A6A6A_d4cb7d66a73c7052
+     51.6         90242592      12117    7447.6    7713.0      6657     10722        449.2  src_local_mesh_2d_gpu_lift_com6A6A6A6A_1a7265f1a92738b8
+     26.4         46152461      12117    3808.9    3936.0      3424      6433        231.7  src_local_mesh_2d_gpu_euler_vo6A6A6A6A_bba186d72b75fb1a
+     22.0         38549773      12117    3181.5    3265.0      2816      5376        219.7  src_local_mesh_2d_gpu_euler_fa6A6A6A6A_29ae9ead1bf63be7
 
 [7/8] Executing 'cuda_gpu_mem_time_sum' stats report
