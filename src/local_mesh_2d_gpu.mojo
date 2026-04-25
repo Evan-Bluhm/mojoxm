@@ -2222,6 +2222,167 @@ def launch_mhd_volume_rhs_2d[NP: Int](
 
 
 # ----------------------------------------------------------------------
+# Fused IdealMHD volume + lift + RK update (2D, NC=6).
+# ----------------------------------------------------------------------
+# Same fusion pattern as advection / Euler / SW 2D variants.
+# ----------------------------------------------------------------------
+
+def mhd_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
+    q_in:              UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    q_a:               UnsafePointer[Float32, MutAnyOrigin],
+    q_b:               UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    gamma:             Float32,
+    min_density:       Float32,
+    min_pressure:      Float32,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_elements * NP
+    if tid >= total:
+        return
+    var elem = tid // NP
+    var i    = tid %  NP
+
+    # ---- Volume RHS contribution (NC=6).
+    var iJ00 = elem_invJ[elem * 4 + 0]
+    var iJ01 = elem_invJ[elem * 4 + 1]
+    var iJ10 = elem_invJ[elem * 4 + 2]
+    var iJ11 = elem_invJ[elem * 4 + 3]
+    var acc0: Float32 = 0.0
+    var acc1: Float32 = 0.0
+    var acc2: Float32 = 0.0
+    var acc3: Float32 = 0.0
+    var acc4: Float32 = 0.0
+    var acc5: Float32 = 0.0
+    for j in range(NP):
+        var base = (elem * NP + j) * 6
+        var rho = q_in[base + 0]
+        if rho < min_density:
+            rho = min_density
+        var mx = q_in[base + 1]
+        var my = q_in[base + 2]
+        var Bx = q_in[base + 3]
+        var By = q_in[base + 4]
+        var E  = q_in[base + 5]
+        var u = mx / rho
+        var v = my / rho
+        var BB = Bx * Bx + By * By
+        var ke = Float32(0.5) * (mx * mx + my * my) / rho
+        var mp = Float32(0.5) * BB
+        var p = (gamma - Float32(1.0)) * (E - ke - mp)
+        if p < min_pressure:
+            p = min_pressure
+        var pstar = p + Float32(0.5) * BB
+        var Fx0 = mx
+        var Fx1 = mx * u + pstar - Bx * Bx
+        var Fx2 = mx * v         - Bx * By
+        var Fx3 = Float32(0.0)
+        var Fx4 = u * By - v * Bx
+        var Fx5 = (E + pstar) * u - Bx * (u * Bx + v * By)
+        var Fy0 = my
+        var Fy1 = my * u         - By * Bx
+        var Fy2 = my * v + pstar - By * By
+        var Fy3 = v * Bx - u * By
+        var Fy4 = Float32(0.0)
+        var Fy5 = (E + pstar) * v - By * (u * Bx + v * By)
+        var D_r = D_ref[0 * NP * NP + i * NP + j]
+        var D_s = D_ref[1 * NP * NP + i * NP + j]
+        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (iJ10 * Fx0 + iJ11 * Fy0) * D_s
+        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (iJ10 * Fx1 + iJ11 * Fy1) * D_s
+        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (iJ10 * Fx2 + iJ11 * Fy2) * D_s
+        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (iJ10 * Fx3 + iJ11 * Fy3) * D_s
+        acc4 += (iJ00 * Fx4 + iJ01 * Fy4) * D_r + (iJ10 * Fx4 + iJ11 * Fy4) * D_s
+        acc5 += (iJ00 * Fx5 + iJ01 * Fy5) * D_r + (iJ10 * Fx5 + iJ11 * Fy5) * D_s
+
+    # ---- Lift contribution (NC=6).
+    var inv_2A = elem_inv_2A[elem]
+    var face0: Float32 = 0.0
+    var face1: Float32 = 0.0
+    var face2: Float32 = 0.0
+    var face3: Float32 = 0.0
+    var face4: Float32 = 0.0
+    var face5: Float32 = 0.0
+    for lf in range(3):
+        var fid = Int(elem_faces[elem * 3 + lf])
+        var side = Int(elem_face_side[elem * 3 + lf])
+        var sign: Float32 = Float32(1.0) if side == 0 else Float32(-1.0)
+        var flen = face_length[fid]
+        for m in range(NFP):
+            var r = Int(
+                elem_canon_to_ref[(elem * 3 + lf) * NFP + m]
+            )
+            var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
+            var sLf = sign * flen * Lim
+            var fbase = (fid * NFP + m) * 6
+            face0 += sLf * fstar[fbase + 0]
+            face1 += sLf * fstar[fbase + 1]
+            face2 += sLf * fstar[fbase + 2]
+            face3 += sLf * fstar[fbase + 3]
+            face4 += sLf * fstar[fbase + 4]
+            face5 += sLf * fstar[fbase + 5]
+
+    # ---- Combine + RK update.
+    var idx = (elem * NP + i) * 6
+    var rhs0 = acc0 - inv_2A * face0
+    var rhs1 = acc1 - inv_2A * face1
+    var rhs2 = acc2 - inv_2A * face2
+    var rhs3 = acc3 - inv_2A * face3
+    var rhs4 = acc4 - inv_2A * face4
+    var rhs5 = acc5 - inv_2A * face5
+    q_out[idx + 0] = a * q_a[idx + 0] + b * q_b[idx + 0] + cc * dt * rhs0
+    q_out[idx + 1] = a * q_a[idx + 1] + b * q_b[idx + 1] + cc * dt * rhs1
+    q_out[idx + 2] = a * q_a[idx + 2] + b * q_b[idx + 2] + cc * dt * rhs2
+    q_out[idx + 3] = a * q_a[idx + 3] + b * q_b[idx + 3] + cc * dt * rhs3
+    q_out[idx + 4] = a * q_a[idx + 4] + b * q_b[idx + 4] + cc * dt * rhs4
+    q_out[idx + 5] = a * q_a[idx + 5] + b * q_b[idx + 5] + cc * dt * rhs5
+
+
+def launch_mhd_vol_lift_2d[NP: Int, NFP: Int](
+    mut ctx: DeviceContext,
+    q_in:              UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    q_a:               UnsafePointer[Float32, MutAnyOrigin],
+    q_b:               UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    gamma:             Float32,
+    min_density:       Float32,
+    min_pressure:      Float32,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_elements * NP
+    comptime _kernel = mhd_vol_lift_combine_rk_kernel_2d[NP, NFP]
+    ctx.enqueue_function[_kernel, _kernel](
+        q_in, elem_invJ, D_ref, fstar,
+        elem_inv_2A, elem_faces, elem_face_side, elem_canon_to_ref,
+        face_length, Lift_ref, q_a, q_b,
+        num_elements, gamma, min_density, min_pressure,
+        a, b, cc, dt, q_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
+
+
+# ----------------------------------------------------------------------
 # IdealMHD2D face flux (Rusanov / local Lax-Friedrichs, 6 components).
 # ----------------------------------------------------------------------
 # Wave-speed bound uses the fast-magnetosonic speed cf, as on the CPU.
@@ -2421,12 +2582,11 @@ def mhd_rk_stage_2d[P: Int](
     gamma: Float32, min_density: Float32, min_pressure: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
+    # Two launches per stage (down from three).
+    _ = vol_scratch
+    _ = rhs_scratch
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
-    launch_mhd_volume_rhs_2d[NP](
-        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
-        mesh.num_elements, gamma, min_density, min_pressure, vol_scratch,
-    )
     launch_mhd_face_flux_2d[NP, NFP](
         ctx, q_in,
         mesh.d_face_elem.unsafe_ptr(),
@@ -2437,17 +2597,17 @@ def mhd_rk_stage_2d[P: Int](
         gamma, min_density, min_pressure,
         fstar_scratch,
     )
-    _ = rhs_scratch    # unused on the fused path
-    launch_lift_combine_rk_2d[NP, NFP, 6](
-        ctx, vol_scratch, fstar_scratch,
+    launch_mhd_vol_lift_2d[NP, NFP](
+        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_elem_face_side.unsafe_ptr(),
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
-        Lift_ref,
-        q_a, q_b,
-        mesh.num_elements, a, b, cc, dt, q_out,
+        Lift_ref, q_a, q_b,
+        mesh.num_elements, gamma, min_density, min_pressure,
+        a, b, cc, dt, q_out,
     )
 
 
@@ -2562,6 +2722,180 @@ def mhd_glm_volume_rhs_kernel_2d[NP: Int](
     vol_out[out + 4] = acc4
     vol_out[out + 5] = acc5
     vol_out[out + 6] = acc6
+
+
+# ----------------------------------------------------------------------
+# Fused IdealMHD-GLM volume + lift + RK update (2D, NC=7).
+# ----------------------------------------------------------------------
+# Same fusion pattern with the GLM divergence-cleaning flux additions:
+# Fx_Bx += psi, Fy_By += psi, F_psi = c_h^2 * B.
+# ----------------------------------------------------------------------
+
+def mhd_glm_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
+    q_in:              UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    q_a:               UnsafePointer[Float32, MutAnyOrigin],
+    q_b:               UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    gamma:             Float32,
+    min_density:       Float32,
+    min_pressure:      Float32,
+    c_h:               Float32,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_elements * NP
+    if tid >= total:
+        return
+    var elem = tid // NP
+    var i    = tid %  NP
+
+    # ---- Volume RHS contribution (NC=7, GLM flux additions).
+    var iJ00 = elem_invJ[elem * 4 + 0]
+    var iJ01 = elem_invJ[elem * 4 + 1]
+    var iJ10 = elem_invJ[elem * 4 + 2]
+    var iJ11 = elem_invJ[elem * 4 + 3]
+    var acc0: Float32 = 0.0
+    var acc1: Float32 = 0.0
+    var acc2: Float32 = 0.0
+    var acc3: Float32 = 0.0
+    var acc4: Float32 = 0.0
+    var acc5: Float32 = 0.0
+    var acc6: Float32 = 0.0
+    var ch2 = c_h * c_h
+    for j in range(NP):
+        var base = (elem * NP + j) * 7
+        var rho = q_in[base + 0]
+        if rho < min_density:
+            rho = min_density
+        var mx = q_in[base + 1]
+        var my = q_in[base + 2]
+        var Bx = q_in[base + 3]
+        var By = q_in[base + 4]
+        var E  = q_in[base + 5]
+        var psi = q_in[base + 6]
+        var u = mx / rho
+        var v = my / rho
+        var BB = Bx * Bx + By * By
+        var ke = Float32(0.5) * (mx * mx + my * my) / rho
+        var mp = Float32(0.5) * BB
+        var p = (gamma - Float32(1.0)) * (E - ke - mp)
+        if p < min_pressure:
+            p = min_pressure
+        var pstar = p + Float32(0.5) * BB
+        var Fx0 = mx
+        var Fx1 = mx * u + pstar - Bx * Bx
+        var Fx2 = mx * v         - Bx * By
+        var Fx3 = psi
+        var Fx4 = u * By - v * Bx
+        var Fx5 = (E + pstar) * u - Bx * (u * Bx + v * By)
+        var Fx6 = ch2 * Bx
+        var Fy0 = my
+        var Fy1 = my * u         - By * Bx
+        var Fy2 = my * v + pstar - By * By
+        var Fy3 = v * Bx - u * By
+        var Fy4 = psi
+        var Fy5 = (E + pstar) * v - By * (u * Bx + v * By)
+        var Fy6 = ch2 * By
+        var D_r = D_ref[0 * NP * NP + i * NP + j]
+        var D_s = D_ref[1 * NP * NP + i * NP + j]
+        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (iJ10 * Fx0 + iJ11 * Fy0) * D_s
+        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (iJ10 * Fx1 + iJ11 * Fy1) * D_s
+        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (iJ10 * Fx2 + iJ11 * Fy2) * D_s
+        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (iJ10 * Fx3 + iJ11 * Fy3) * D_s
+        acc4 += (iJ00 * Fx4 + iJ01 * Fy4) * D_r + (iJ10 * Fx4 + iJ11 * Fy4) * D_s
+        acc5 += (iJ00 * Fx5 + iJ01 * Fy5) * D_r + (iJ10 * Fx5 + iJ11 * Fy5) * D_s
+        acc6 += (iJ00 * Fx6 + iJ01 * Fy6) * D_r + (iJ10 * Fx6 + iJ11 * Fy6) * D_s
+
+    # ---- Lift contribution (NC=7).
+    var inv_2A = elem_inv_2A[elem]
+    var face0: Float32 = 0.0
+    var face1: Float32 = 0.0
+    var face2: Float32 = 0.0
+    var face3: Float32 = 0.0
+    var face4: Float32 = 0.0
+    var face5: Float32 = 0.0
+    var face6: Float32 = 0.0
+    for lf in range(3):
+        var fid = Int(elem_faces[elem * 3 + lf])
+        var side = Int(elem_face_side[elem * 3 + lf])
+        var sign: Float32 = Float32(1.0) if side == 0 else Float32(-1.0)
+        var flen = face_length[fid]
+        for m in range(NFP):
+            var r = Int(
+                elem_canon_to_ref[(elem * 3 + lf) * NFP + m]
+            )
+            var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
+            var sLf = sign * flen * Lim
+            var fbase = (fid * NFP + m) * 7
+            face0 += sLf * fstar[fbase + 0]
+            face1 += sLf * fstar[fbase + 1]
+            face2 += sLf * fstar[fbase + 2]
+            face3 += sLf * fstar[fbase + 3]
+            face4 += sLf * fstar[fbase + 4]
+            face5 += sLf * fstar[fbase + 5]
+            face6 += sLf * fstar[fbase + 6]
+
+    # ---- Combine + RK update.
+    var idx = (elem * NP + i) * 7
+    var rhs0 = acc0 - inv_2A * face0
+    var rhs1 = acc1 - inv_2A * face1
+    var rhs2 = acc2 - inv_2A * face2
+    var rhs3 = acc3 - inv_2A * face3
+    var rhs4 = acc4 - inv_2A * face4
+    var rhs5 = acc5 - inv_2A * face5
+    var rhs6 = acc6 - inv_2A * face6
+    q_out[idx + 0] = a * q_a[idx + 0] + b * q_b[idx + 0] + cc * dt * rhs0
+    q_out[idx + 1] = a * q_a[idx + 1] + b * q_b[idx + 1] + cc * dt * rhs1
+    q_out[idx + 2] = a * q_a[idx + 2] + b * q_b[idx + 2] + cc * dt * rhs2
+    q_out[idx + 3] = a * q_a[idx + 3] + b * q_b[idx + 3] + cc * dt * rhs3
+    q_out[idx + 4] = a * q_a[idx + 4] + b * q_b[idx + 4] + cc * dt * rhs4
+    q_out[idx + 5] = a * q_a[idx + 5] + b * q_b[idx + 5] + cc * dt * rhs5
+    q_out[idx + 6] = a * q_a[idx + 6] + b * q_b[idx + 6] + cc * dt * rhs6
+
+
+def launch_mhd_glm_vol_lift_2d[NP: Int, NFP: Int](
+    mut ctx: DeviceContext,
+    q_in:              UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    q_a:               UnsafePointer[Float32, MutAnyOrigin],
+    q_b:               UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    gamma:             Float32,
+    min_density:       Float32,
+    min_pressure:      Float32,
+    c_h:               Float32,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_elements * NP
+    comptime _kernel = mhd_glm_vol_lift_combine_rk_kernel_2d[NP, NFP]
+    ctx.enqueue_function[_kernel, _kernel](
+        q_in, elem_invJ, D_ref, fstar,
+        elem_inv_2A, elem_faces, elem_face_side, elem_canon_to_ref,
+        face_length, Lift_ref, q_a, q_b,
+        num_elements, gamma, min_density, min_pressure, c_h,
+        a, b, cc, dt, q_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
 
 
 def launch_mhd_glm_volume_rhs_2d[NP: Int](
@@ -2833,13 +3167,11 @@ def mhd_glm_rk_stage_2d[P: Int](
     c_h: Float32, alpha_d: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
+    # Two flux launches per stage (down from three) plus psi damping.
+    _ = vol_scratch
+    _ = rhs_scratch
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
-    launch_mhd_glm_volume_rhs_2d[NP](
-        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
-        mesh.num_elements, gamma, min_density, min_pressure, c_h,
-        vol_scratch,
-    )
     launch_mhd_glm_face_flux_2d[NP, NFP](
         ctx, q_in,
         mesh.d_face_elem.unsafe_ptr(),
@@ -2850,17 +3182,17 @@ def mhd_glm_rk_stage_2d[P: Int](
         gamma, min_density, min_pressure, c_h,
         fstar_scratch,
     )
-    _ = rhs_scratch    # unused on the fused path
-    launch_lift_combine_rk_2d[NP, NFP, 7](
-        ctx, vol_scratch, fstar_scratch,
+    launch_mhd_glm_vol_lift_2d[NP, NFP](
+        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_elem_face_side.unsafe_ptr(),
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
-        Lift_ref,
-        q_a, q_b,
-        mesh.num_elements, a, b, cc, dt, q_out,
+        Lift_ref, q_a, q_b,
+        mesh.num_elements, gamma, min_density, min_pressure, c_h,
+        a, b, cc, dt, q_out,
     )
     # Operator-splitting psi damping: q_out[psi] *= exp(-alpha_d*dt).
     launch_mhd_glm_psi_damp_2d[NP](
