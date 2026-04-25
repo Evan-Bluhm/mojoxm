@@ -54,7 +54,11 @@ comptime BETA = 5.0
 comptime CX0 = 5.0
 comptime CY0 = 5.0
 
-comptime L2_MAX_REL: Float64 = 0.10
+# Measured ~6.8%% (Rusanov dissipation floor for the vortex at P=2,
+# N=32).  8%% is ~1.2x the empirical floor and catches any flux
+# regression beyond a small constant; old 10%% gate only caught
+# catastrophic blow-ups.
+comptime L2_MAX_REL: Float64 = 0.08
 
 
 def _periodic_delta(a: Float64, b: Float64, L: Float64) -> Float64:

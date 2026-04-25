@@ -46,7 +46,9 @@ comptime SIGMA: Float32 = 0.12
 comptime CX: Float32 = 0.5
 comptime CY: Float32 = 0.5
 
-comptime L2_MAX_REL_AT_32: Float64 = 0.01
+# Measured ~7.2e-4 at N=32 on current code; 1.5e-3 is ~2x margin.
+# (Old gate at 1e-2 was 14x looser -- only caught catastrophic regressions.)
+comptime L2_MAX_REL_AT_32: Float64 = 1.5e-3
 comptime RATE_MIN:         Float64 = 2.0
 
 
