@@ -82,6 +82,7 @@ def main() raises:
     var re = ReferenceElement[P]()
     var D_ref = to_float32(re.D_ref)
     var Lift_ref = to_float32(re.Lift_ref)
+    var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh[P](
         ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ,
@@ -93,7 +94,7 @@ def main() raises:
     )
     var physics = Advection(Float32(0.0), Float32(0.0), Float32(0.0))
     var solver = Solver[Advection, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^,
+        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
     )
 
     # Fill q with FILL_VALUE on every owned (element, node).

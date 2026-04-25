@@ -133,7 +133,7 @@ def main() raises:
     )
     var physics = ShallowWater(GRAVITY, H_MIN)
     var solver = Solver[ShallowWater](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^,
+        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[drop_ic_kernel, drop_ic_kernel](

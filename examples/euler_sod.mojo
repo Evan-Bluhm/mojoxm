@@ -189,7 +189,7 @@ def main() raises:
     )
 
     var solver = Solver[Euler](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^,
+        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
     )
     # Shock stabilization: Barth-Jespersen slope limiter after every
     # RK stage.  Damps each element's nodal deviations by the tightest

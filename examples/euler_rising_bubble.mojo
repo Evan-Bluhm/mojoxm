@@ -171,7 +171,7 @@ def main() raises:
     )
 
     var solver = Solver[Euler](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^,
+        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[bubble_ic_kernel, bubble_ic_kernel](

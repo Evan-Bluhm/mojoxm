@@ -205,6 +205,7 @@ def main() raises:
     var re = ReferenceElement[2]()
     var D_ref = to_float32(re.D_ref)
     var Lift_ref = to_float32(re.Lift_ref)
+    var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh(
         ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ,
@@ -216,7 +217,7 @@ def main() raises:
     )
     var physics = Advection(VX, VY, VZ)
     var solver = Solver[Advection](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^,
+        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
     )
 
     test_uniform_field(solver, nvtx)

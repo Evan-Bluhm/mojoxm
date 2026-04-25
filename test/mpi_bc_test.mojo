@@ -178,6 +178,7 @@ def main() raises:
     var re = ReferenceElement()
     var D_ref    = to_float32(re.D_ref)
     var Lift_ref = to_float32(re.Lift_ref)
+    var node_weights = to_float32(re.node_weights)
 
     # Outflow on all 6 domain faces.  At np=1 the Mesh applies BC
     # overlays on every external face; at np>1 the Mesh filter keeps
@@ -199,7 +200,7 @@ def main() raises:
     )
     var physics = Advection(VX, VY, VZ)
     var solver = Solver[Advection](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^,
+        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
     )
 
     var inv_two_sigma2 = Float32(1.0) / (

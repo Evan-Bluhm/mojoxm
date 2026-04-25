@@ -530,6 +530,15 @@ struct ReferenceElement[P: Int = 2](Copyable, Movable):
     # Element-local node index for each face-local node.  Flattened as
     # [N_F * N_FP], same layout as the P=2 `ref_face_node` table.
     var face_to_elem: List[Int32]
+    # Mass-matrix-weighted nodal quadrature weights for computing the
+    # exact cell mean of a P=P Lagrange expansion: cell_mean =
+    # sum_i node_weights[i] * q_i.  Defined so sum_i w_i = 1 (partition
+    # of unity over the reference tet of volume 1/6).  At P=2 these are
+    # -1/20 at the 4 vertex nodes and 1/5 at the 6 edge-midpoint nodes
+    # (sum: -4/20 + 6/5 = 1).  The unweighted 1/N_P average that DG
+    # codes often use is wrong beyond P=1 and destroys conservation of
+    # the slope limiter (the vertex weights flip sign at P=2).
+    var node_weights: List[Float64]
 
     def __init__(out self) raises:
         comptime Pval = Self.P
@@ -647,6 +656,16 @@ struct ReferenceElement[P: Int = 2](Copyable, Movable):
                         )
                     self.Lift_ref[f * N_P_P * N_FP_P + i * N_FP_P + m] = sum
 
+        # 9. Node weights = integral of each basis function over the
+        # reference tet, normalised by reference volume 1/6 so they sum
+        # to 1.  Used by the BJ limiter to form the exact cell mean of
+        # a P=P Lagrange expansion (the naive unweighted nodal average
+        # is wrong at P>=2 and breaks limiter conservation).
+        self.node_weights = List[Float64]()
+        var v_ref = 1.0 / 6.0
+        for i in range(N_P_P):
+            self.node_weights.append(integrate_ref_tet(tet_phi[i]) / v_ref)
+
 
 # ----------------------------------------------------------------------
 # Back-compat helpers -- existing drivers still call this name-shape.
@@ -663,6 +682,7 @@ def to_float32(src: List[Float64]) raises -> List[Float32]:
 struct ReferenceOperators(Movable):
     var D_ref: List[Float32]
     var Lift_ref: List[Float32]
+    var node_weights: List[Float32]
 
 
 def build_reference_operators(
@@ -677,6 +697,7 @@ def build_reference_operators(
     var out = ReferenceOperators(
         D_ref=to_float32(re.D_ref),
         Lift_ref=to_float32(re.Lift_ref),
+        node_weights=to_float32(re.node_weights),
     )
     nvtx.pop_range()
     return out^

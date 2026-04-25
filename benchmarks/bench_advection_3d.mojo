@@ -100,7 +100,7 @@ def _run(N: Int) raises -> Float64:
     )
     var physics = Advection(VX, VY, VZ)
     var solver = Solver[Advection](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^,
+        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
     )
 
     # Initial condition: Gaussian centered at (0.5, 0.5, 0.5).

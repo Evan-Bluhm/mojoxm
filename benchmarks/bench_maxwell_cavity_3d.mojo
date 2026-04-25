@@ -120,7 +120,7 @@ def main() raises:
         Float32(0.0), Float32(0.0), Float32(0.0),
     )
     var solver = Solver[Maxwell](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^,
+        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[cavity_ic_kernel, cavity_ic_kernel](

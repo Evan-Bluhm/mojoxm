@@ -149,7 +149,7 @@ def main() raises:
         MIN_DENSITY, MIN_PRESSURE,
     )
     var solver = Solver[FiveMomentTwoFluid](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^,
+        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[langmuir_ic_kernel, langmuir_ic_kernel](

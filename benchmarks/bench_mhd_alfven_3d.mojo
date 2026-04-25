@@ -130,7 +130,7 @@ def main() raises:
         GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D,
     )
     var solver = Solver[IdealMHD](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^,
+        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[alfven_ic_kernel, alfven_ic_kernel](

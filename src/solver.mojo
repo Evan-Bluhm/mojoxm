@@ -409,6 +409,7 @@ def rk_stage_kernel[
 
 def compute_cell_averages_kernel[NP: Int, NC: Int](
     q:            UnsafePointer[Float32, MutAnyOrigin],
+    node_weights: UnsafePointer[Float32, MutAnyOrigin],
     num_local:    Int,
     cell_avg_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
@@ -417,12 +418,15 @@ def compute_cell_averages_kernel[NP: Int, NC: Int](
         return
     var base_q = elem * NP * NC
     var base_avg = elem * NC
-    var inv_np = Float32(1.0) / Float32(NP)
+    # Mass-matrix-weighted nodal quadrature for the exact P=P Lagrange
+    # cell mean.  node_weights[] is normalised so sum == 1 over the
+    # reference element; weights can be negative (e.g. -1/20 at P=2
+    # tet vertex nodes), so the naive unweighted average is wrong.
     for c in range(NC):
         var s: Float32 = 0.0
         for nn in range(NP):
-            s += q[base_q + nn * NC + c]
-        cell_avg_out[base_avg + c] = s * inv_np
+            s += node_weights[nn] * q[base_q + nn * NC + c]
+        cell_avg_out[base_avg + c] = s
 
 
 def bj_limiter_kernel[NP: Int, NC: Int](
@@ -552,6 +556,8 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
     # Reference DG operators (uploaded once).
     var d_D_ref:    DeviceBuffer[dtype]
     var d_Lift_ref: DeviceBuffer[dtype]
+    # Nodal cell-mean weights (length NP, sum=1) for the BJ limiter.
+    var d_node_weights: DeviceBuffer[dtype]
 
     # Cell-level Barth-Jespersen slope-limiter toggle.  False (default)
     # disables the limiter entirely -- it is a no-op add to the kernel
@@ -580,6 +586,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         var physics: Self.PhysT,
         D_ref: List[Float32],
         Lift_ref: List[Float32],
+        node_weights: List[Float32],
     ) raises:
         self.ctx = ctx^
         self.mesh = mesh^
@@ -613,6 +620,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
 
         self.d_D_ref = _upload_f32(self.ctx, D_ref)
         self.d_Lift_ref = _upload_f32(self.ctx, Lift_ref)
+        self.d_node_weights = _upload_f32(self.ctx, node_weights)
         self.ctx.synchronize()
 
     # --- Download helpers --------------------------------------------
@@ -756,7 +764,10 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         # Pass 1: cell averages over every local element.
         comptime _avg_kernel = compute_cell_averages_kernel[Self.NP, Self.NC]
         self.ctx.enqueue_function[_avg_kernel, _avg_kernel](
-            q_ptr, num_local, self.d_cell_avg.unsafe_ptr(),
+            q_ptr,
+            self.d_node_weights.unsafe_ptr(),
+            num_local,
+            self.d_cell_avg.unsafe_ptr(),
             grid_dim=ceildiv(num_local, 256),
             block_dim=256,
         )
