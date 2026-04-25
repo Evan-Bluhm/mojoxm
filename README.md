@@ -130,25 +130,28 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  18 analytic-solution gates tying schemes to closed-form reference
+  26 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
-  physics, plus shocked-flow gates wherever a stable scheme exists.
-  * **2D smooth (8):** `bench_advection_translation_2d` (rate gate
-    >= 2.0), `bench_euler_vortex_2d`, `bench_euler_smooth_wave_2d`,
-    `bench_mhd_alfven_2d`, `bench_mhd_alfven_glm_2d` (smoke test of
-    new GLM kernels with c_h=0 -- bit-for-bit reduction to plain
-    MHD), `bench_mhd_glm_psi_transport_2d` (validates c_h>0
-    psi/Bx wave coupling), `bench_shallow_water_wave_2d`,
-    `bench_euler_channel_steady_2d`.
-  * **2D shocks (2):** `bench_euler_sod_2d`,
-    `bench_euler_sod_limited_2d` (HLLC + BJ limiter, shock
-    position within 0.2 cells of exact Rankine-Hugoniot).
-  * **3D smooth (5):** `bench_advection_3d` (rate gate >= 2.0),
-    `bench_euler_smooth_wave_3d` (rate gate >= 2.0 between
-    N=12->16), `bench_mhd_alfven_3d`, `bench_maxwell_cavity_3d`
-    (3.5e-5 rel L2 = Float32 floor), `bench_shallow_water_wave_3d`,
-    `bench_two_fluid_langmuir_3d` (Langmuir return to 0.057%% of
-    IC after 29k SSPRK3 stages).
+  physics, plus shocked-flow gates wherever a stable scheme exists,
+  and P=3 rate gates for advection (2D and 3D) and Euler (2D and 3D).
+  * **2D smooth (11):** `bench_advection_translation_2d` (rate gate
+    >= 2.0) + `_p3` (rate ~3.92, P+1=4), `bench_advection_outflow_2d`
+    (BC_OUTFLOW drainage gate), `bench_euler_vortex_2d`,
+    `bench_euler_smooth_wave_2d` + `_p3`, `bench_mhd_alfven_2d`,
+    `bench_mhd_alfven_glm_2d` (smoke test of GLM kernels with c_h=0),
+    `bench_mhd_glm_psi_transport_2d` (c_h>0 psi/Bx wave coupling),
+    `bench_mhd_glm_psi_damp_2d` (alpha_d>0 decay matches A0/e),
+    `bench_shallow_water_wave_2d`, `bench_euler_channel_steady_2d`.
+  * **2D shocks (3):** `bench_euler_sod_2d`,
+    `bench_euler_sod_limited_2d` (HLLC + BJ limiter, shock position
+    within 0.2 cells of exact Rankine-Hugoniot),
+    `bench_shallow_water_dam_break_2d` (closed-pool conservation
+    invariants).
+  * **3D smooth (8):** `bench_advection_3d` + `_p3` (rate ~3.7),
+    `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
+    `bench_euler_smooth_wave_3d` + `_p3`, `bench_mhd_alfven_3d`,
+    `bench_maxwell_cavity_3d`, `bench_shallow_water_wave_3d`,
+    `bench_two_fluid_langmuir_3d`.
   * **3D shocks (2):** `bench_euler_sod_3d` (BJ-limited, bounds +
     mass conservation), `bench_mhd_brio_wu_3d` (canonical 1D
     MHD Riemann embedded in 3D, GLM + BJ limiter).
