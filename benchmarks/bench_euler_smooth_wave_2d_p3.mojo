@@ -48,7 +48,10 @@ comptime AMPLITUDE = 0.1
 comptime T_FINAL = 1.0
 comptime CFL = 0.10
 
-comptime L2_MAX_REL_AT_16: Float64 = 5.0e-4
+# Measured ~5e-5 across N = 8, 12, 16 (Float32 floor).  1.5e-4 is
+# ~3x the empirical floor, catches any HLLC P=3 regression that
+# meaningfully degrades smooth-flow accuracy.
+comptime L2_MAX_REL_AT_16: Float64 = 1.5e-4
 
 
 def _run(N: Int) raises -> Float64:
