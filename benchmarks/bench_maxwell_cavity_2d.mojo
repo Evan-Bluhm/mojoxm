@@ -49,7 +49,10 @@ comptime CFL = 0.2
 # at LX = LY = 1.  Period 2 pi / omega = sqrt(2) / c.
 comptime T_FINAL: Float64 = 1.41421356237  # sqrt(2)
 
-comptime L2_MAX_REL: Float64 = 1.0e-3
+# Measured 2.8e-4 on current code (NX=NY=16, P=2, 566 SSPRK3 steps).
+# 5e-4 leaves ~2x headroom and catches any Maxwell flux / PEC bug
+# beyond a small constant.
+comptime L2_MAX_REL: Float64 = 5.0e-4
 
 
 def main() raises:
