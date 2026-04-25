@@ -120,6 +120,31 @@ Nine reference drivers under `examples/`:
   diagnostics (vortex / Alfven one-period L2, channel steady state,
   Sod boundary-plateau deviations).
 
+- **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
+  12 analytic-solution gates that tie schemes to closed-form
+  reference states.  Seven 2D benchmarks
+  (`bench_advection_translation_2d`, `bench_euler_vortex_2d`,
+  `bench_euler_smooth_wave_2d`, `bench_euler_sod_2d`,
+  `bench_euler_sod_limited_2d`, `bench_euler_channel_steady_2d`,
+  `bench_mhd_alfven_2d`) and five 3D (`bench_advection_3d`,
+  `bench_euler_smooth_wave_3d`, `bench_mhd_alfven_3d`,
+  `bench_maxwell_cavity_3d`, `bench_two_fluid_langmuir_3d`).
+  Every core physics has at least one 2D and one 3D analytic gate.
+  Tight tolerances where the problem admits them
+  (Sod shock position within 0.2 cells of exact Rankine-Hugoniot;
+  Mach-2 channel steady state to 1.2e-7 = Float32 epsilon;
+  Langmuir return to 0.057%% of IC after 29k SSPRK3 stages;
+  Maxwell cavity standing wave to 3.5e-5 rel L2 after 1600 stages).
+
+- **Profiling**: `make profile-bench-<name>` runs a benchmark under
+  `nsys profile --stats=true` and saves a per-kernel time summary
+  to `benchmarks/profile_reports/<name>.kern.txt` for diff-ability
+  across runs.  Baseline reports live in git.  Key finding: the 2D
+  pipeline is launch-bound (~75 %% of wall time in
+  `cuLaunchKernelEx`, 12 kernel launches per SSPRK3 step) whereas
+  the 3D stack's `rk_stage_kernel` is a single fused kernel that
+  spends > 99 %% of GPU time in one kernel.
+
 ## Numerical scheme
 
 - **P2 Lagrange DG** on tetrahedra (10 nodes per element: 4 vertices +
