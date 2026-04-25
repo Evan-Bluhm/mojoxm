@@ -102,7 +102,8 @@ TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test \
 # threshold; failure = regression.  Complement the tests (which cover
 # self-consistency invariants) with end-to-end analytic correctness.
 BENCH_DRIVERS = bench_advection_translation_2d \
-                bench_advection_translation_2d_p3 bench_euler_vortex_2d \
+                bench_advection_translation_2d_p3 \
+                bench_advection_outflow_2d bench_euler_vortex_2d \
                 bench_mhd_alfven_2d bench_mhd_alfven_glm_2d \
                 bench_mhd_glm_psi_transport_2d bench_mhd_glm_psi_damp_2d \
                 bench_euler_sod_2d \
@@ -250,6 +251,8 @@ bench-advection-translation-2d: bench_advection_translation_2d
 	./bench_advection_translation_2d
 bench-advection-translation-2d-p3: bench_advection_translation_2d_p3
 	./bench_advection_translation_2d_p3
+bench-advection-outflow-2d: bench_advection_outflow_2d
+	./bench_advection_outflow_2d
 bench-euler-vortex-2d: bench_euler_vortex_2d
 	./bench_euler_vortex_2d
 bench-mhd-alfven-2d: bench_mhd_alfven_2d
@@ -295,7 +298,7 @@ bench-shallow-water-wave-3d: bench_shallow_water_wave_3d
 bench-mhd-brio-wu-3d: bench_mhd_brio_wu_3d
 	./bench_mhd_brio_wu_3d
 
-bench-all: bench-advection-translation-2d bench-advection-translation-2d-p3 bench-euler-vortex-2d bench-mhd-alfven-2d bench-mhd-alfven-glm-2d bench-mhd-glm-psi-transport-2d bench-mhd-glm-psi-damp-2d bench-euler-sod-2d bench-euler-sod-limited-2d bench-euler-smooth-wave-2d bench-euler-smooth-wave-2d-p3 bench-euler-channel-steady-2d bench-shallow-water-wave-2d bench-shallow-water-dam-break-2d bench-advection-3d bench-advection-3d-p3 bench-mhd-alfven-3d bench-maxwell-cavity-3d bench-two-fluid-langmuir-3d bench-euler-smooth-wave-3d bench-euler-smooth-wave-3d-p3 bench-euler-sod-3d bench-shallow-water-wave-3d bench-mhd-brio-wu-3d
+bench-all: bench-advection-translation-2d bench-advection-translation-2d-p3 bench-advection-outflow-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-mhd-alfven-glm-2d bench-mhd-glm-psi-transport-2d bench-mhd-glm-psi-damp-2d bench-euler-sod-2d bench-euler-sod-limited-2d bench-euler-smooth-wave-2d bench-euler-smooth-wave-2d-p3 bench-euler-channel-steady-2d bench-shallow-water-wave-2d bench-shallow-water-dam-break-2d bench-advection-3d bench-advection-3d-p3 bench-mhd-alfven-3d bench-maxwell-cavity-3d bench-two-fluid-langmuir-3d bench-euler-smooth-wave-3d bench-euler-smooth-wave-3d-p3 bench-euler-sod-3d bench-shallow-water-wave-3d bench-mhd-brio-wu-3d
 	@echo '=== ALL BENCHMARKS PASSED ==='
 
 # Profiling: run a benchmark under nsys with --stats=true and capture
@@ -316,6 +319,8 @@ profile-bench-advection-translation-2d: bench_advection_translation_2d
 	@bin=bench_advection_translation_2d; $(PROFILE_BIN)
 profile-bench-advection-translation-2d-p3: bench_advection_translation_2d_p3
 	@bin=bench_advection_translation_2d_p3; $(PROFILE_BIN)
+profile-bench-advection-outflow-2d: bench_advection_outflow_2d
+	@bin=bench_advection_outflow_2d; $(PROFILE_BIN)
 profile-bench-euler-vortex-2d: bench_euler_vortex_2d
 	@bin=bench_euler_vortex_2d; $(PROFILE_BIN)
 profile-bench-mhd-alfven-2d: bench_mhd_alfven_2d
@@ -361,7 +366,7 @@ profile-bench-shallow-water-wave-3d: bench_shallow_water_wave_3d
 profile-bench-mhd-brio-wu-3d: bench_mhd_brio_wu_3d
 	@bin=bench_mhd_brio_wu_3d; $(PROFILE_BIN)
 
-profile-bench-all: profile-bench-advection-translation-2d profile-bench-advection-translation-2d-p3 profile-bench-euler-vortex-2d profile-bench-mhd-alfven-2d profile-bench-mhd-alfven-glm-2d profile-bench-mhd-glm-psi-transport-2d profile-bench-mhd-glm-psi-damp-2d profile-bench-euler-sod-2d profile-bench-euler-sod-limited-2d profile-bench-euler-smooth-wave-2d profile-bench-euler-smooth-wave-2d-p3 profile-bench-euler-channel-steady-2d profile-bench-shallow-water-wave-2d profile-bench-shallow-water-dam-break-2d profile-bench-advection-3d profile-bench-advection-3d-p3 profile-bench-mhd-alfven-3d profile-bench-maxwell-cavity-3d profile-bench-two-fluid-langmuir-3d profile-bench-euler-smooth-wave-3d profile-bench-euler-smooth-wave-3d-p3 profile-bench-euler-sod-3d profile-bench-shallow-water-wave-3d profile-bench-mhd-brio-wu-3d
+profile-bench-all: profile-bench-advection-translation-2d profile-bench-advection-translation-2d-p3 profile-bench-advection-outflow-2d profile-bench-euler-vortex-2d profile-bench-mhd-alfven-2d profile-bench-mhd-alfven-glm-2d profile-bench-mhd-glm-psi-transport-2d profile-bench-mhd-glm-psi-damp-2d profile-bench-euler-sod-2d profile-bench-euler-sod-limited-2d profile-bench-euler-smooth-wave-2d profile-bench-euler-smooth-wave-2d-p3 profile-bench-euler-channel-steady-2d profile-bench-shallow-water-wave-2d profile-bench-shallow-water-dam-break-2d profile-bench-advection-3d profile-bench-advection-3d-p3 profile-bench-mhd-alfven-3d profile-bench-maxwell-cavity-3d profile-bench-two-fluid-langmuir-3d profile-bench-euler-smooth-wave-3d profile-bench-euler-smooth-wave-3d-p3 profile-bench-euler-sod-3d profile-bench-shallow-water-wave-3d profile-bench-mhd-brio-wu-3d
 	@echo '=== All profile reports written to benchmarks/profile_reports/ ==='
 
 test-klone:
