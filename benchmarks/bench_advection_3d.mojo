@@ -46,8 +46,16 @@ comptime CFL = Float32(0.2)
 comptime GAUSS_SIGMA: Float32 = 0.12
 comptime IC_BLOCK = 256
 
-comptime L2_MAX_REL_AT_16: Float64 = 0.05
-comptime RATE_MIN:         Float64 = 1.5
+# Measured rel L2 at N=16 is ~9.5e-3 on current code; threshold
+# 2e-2 is ~2x looser and catches any regression that worsens the
+# Gaussian transport dissipation by more than a modest amount.
+comptime L2_MAX_REL_AT_16: Float64 = 0.02
+# Observed rates on current code are ~2.6 and ~2.58 -- approaching
+# the P+1=3 theoretical rate but pre-asymptotic at this resolution
+# range.  Gate at 2.0: catches a 1st-order regression and most
+# 2nd-order regressions without false-firing on the pre-asymptotic
+# wobble (e8/e12 was 2.62, so 2.0 leaves ~0.6 of headroom).
+comptime RATE_MIN:         Float64 = 2.0
 
 
 def gaussian_ic_kernel(
