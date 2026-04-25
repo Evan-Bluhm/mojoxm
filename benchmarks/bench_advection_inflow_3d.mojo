@@ -54,8 +54,12 @@ comptime NY = 12
 comptime NZ = 12
 comptime IC_BLOCK = 256
 
-comptime Q_TOL: Float32 = Float32(5.0e-3)
-comptime MEAN_TOL: Float64 = 1.0e-3
+# Measured max |q-1| ~9.5e-6, mean error ~1e-6 (essentially Float32
+# noise after a 1.5-period sweep).  1e-4 / 1e-5 leave ~10x headroom
+# while catching any meaningful regression in the inflow / outflow
+# coupling.
+comptime Q_TOL: Float32 = Float32(1.0e-4)
+comptime MEAN_TOL: Float64 = 1.0e-5
 
 
 def main() raises:
