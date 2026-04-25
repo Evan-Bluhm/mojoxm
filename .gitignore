@@ -51,6 +51,8 @@ limiter_3d_test
 mhd_3d_test
 euler_3d_test
 maxwell_3d_test
+sw_3d_test
+two_fluid_3d_test
 
 # benchmark binaries (built from benchmarks/)
 bench_advection_translation_2d
