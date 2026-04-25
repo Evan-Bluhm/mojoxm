@@ -56,6 +56,7 @@ bench_euler_sod_2d
 bench_euler_smooth_wave_2d
 bench_euler_sod_limited_2d
 bench_euler_channel_steady_2d
+bench_shallow_water_wave_2d
 bench_advection_3d
 bench_mhd_alfven_3d
 bench_maxwell_cavity_3d
