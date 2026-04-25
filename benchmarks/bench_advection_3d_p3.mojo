@@ -54,7 +54,9 @@ comptime CFL = Float32(0.1)
 comptime GAUSS_SIGMA: Float32 = 0.12
 comptime IC_BLOCK = 256
 
-comptime L2_MAX_REL_AT_12: Float64 = 5.0e-3
+# Measured ~2.4e-3 at N=12; 3e-3 is ~1.25x margin (sharp regression
+# detector, unlikely to false-fire on Float32 wobble).
+comptime L2_MAX_REL_AT_12: Float64 = 3.0e-3
 comptime RATE_MIN: Float64 = 2.5
 
 

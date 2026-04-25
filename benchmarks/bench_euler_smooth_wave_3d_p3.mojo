@@ -60,7 +60,10 @@ comptime CFL = Float32(0.1)
 comptime IC_BLOCK = 256
 comptime PI_F: Float32 = 3.14159265358979323846
 
-comptime L2_MAX_REL_AT_12: Float64 = 5.0e-4
+# Measured ~5.5e-5 at N=12 (Float32 floor); 2e-4 is ~3.6x margin and
+# catches any HLLEC P=3 regression that meaningfully degrades
+# accuracy without false-firing on the floor wobble.
+comptime L2_MAX_REL_AT_12: Float64 = 2.0e-4
 comptime RATE_MIN: Float64 = 2.5
 
 
