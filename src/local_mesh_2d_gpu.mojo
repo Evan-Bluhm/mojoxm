@@ -282,6 +282,116 @@ def launch_advection_volume_rhs_2d[NP: Int](
 
 
 # ----------------------------------------------------------------------
+# Fused advection volume + lift + RK update (2D, NC=1).
+# ----------------------------------------------------------------------
+# Per-(elem, node) thread.  Combines what was three separate launches
+# into two: the face-flux kernel still runs first (its data layout is
+# per-face, not per-node, so different parallelism), but the volume
+# RHS computation is no longer materialised to global memory -- it's
+# computed locally and immediately fed into the lift + RK update step.
+#
+# Saves: one kernel launch per RK stage (~10us per launch * 7000+
+# instances on the P=3 advection benchmark) and the global-memory
+# round-trip of vol_c.
+#
+# Invariant: the face-flux kernel must complete before this kernel
+# starts (same stream serialisation as before).
+# ----------------------------------------------------------------------
+
+def advection_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
+    q_in:              UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    q_a:               UnsafePointer[Float32, MutAnyOrigin],
+    q_b:               UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    vx: Float32, vy: Float32,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_elements * NP
+    if tid >= total:
+        return
+    var elem = tid // NP
+    var i    = tid %  NP
+
+    # ---- Volume RHS contribution (computed locally, no global write).
+    var iJ00 = elem_invJ[elem * 4 + 0]
+    var iJ01 = elem_invJ[elem * 4 + 1]
+    var iJ10 = elem_invJ[elem * 4 + 2]
+    var iJ11 = elem_invJ[elem * 4 + 3]
+    var vol_c: Float32 = 0.0
+    for j in range(NP):
+        var qj = q_in[elem * NP + j]
+        var fx = vx * qj
+        var fy = vy * qj
+        var fr0 = iJ00 * fx + iJ01 * fy
+        var fr1 = iJ10 * fx + iJ11 * fy
+        var D_r = D_ref[0 * NP * NP + i * NP + j]
+        var D_s = D_ref[1 * NP * NP + i * NP + j]
+        vol_c += fr0 * D_r + fr1 * D_s
+
+    # ---- Lift contribution (NC=1 -> fstar indexed without c).
+    var inv_2A = elem_inv_2A[elem]
+    var face_c: Float32 = 0.0
+    for lf in range(3):
+        var fid = Int(elem_faces[elem * 3 + lf])
+        var side = Int(elem_face_side[elem * 3 + lf])
+        var sign: Float32 = Float32(1.0) if side == 0 else Float32(-1.0)
+        var flen = face_length[fid]
+        for m in range(NFP):
+            var r = Int(
+                elem_canon_to_ref[(elem * 3 + lf) * NFP + m]
+            )
+            var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
+            face_c += sign * flen * Lim * fstar[fid * NFP + m]
+
+    # ---- Combine + RK update.
+    var idx = elem * NP + i
+    var rhs_val = vol_c - inv_2A * face_c
+    q_out[idx] = a * q_a[idx] + b * q_b[idx] + cc * dt * rhs_val
+
+
+def launch_advection_vol_lift_2d[NP: Int, NFP: Int](
+    mut ctx: DeviceContext,
+    q_in:              UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
+    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    q_a:               UnsafePointer[Float32, MutAnyOrigin],
+    q_b:               UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    vx: Float32, vy: Float32,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_elements * NP
+    comptime _kernel = advection_vol_lift_combine_rk_kernel_2d[NP, NFP]
+    ctx.enqueue_function[_kernel, _kernel](
+        q_in, elem_invJ, D_ref, fstar,
+        elem_inv_2A, elem_faces, elem_face_side, elem_canon_to_ref,
+        face_length, Lift_ref, q_a, q_b,
+        num_elements, vx, vy, a, b, cc, dt, q_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
+
+
+# ----------------------------------------------------------------------
 # Advection face-flux kernel (2D, scalar).
 # ----------------------------------------------------------------------
 # Computes upwind fstar at every face-local slot:
@@ -513,16 +623,15 @@ def advection_rk_stage_2d[P: Int](
     vx: Float32, vy: Float32, inflow_q: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
-    # Three launches per stage: volume, face flux, fused lift+RK update.
-    # rhs_scratch is unused on the fused path (kept in the signature for
-    # backward compatibility with drivers that allocated it).
+    # Two launches per stage (down from three): face flux, then a fused
+    # vol+lift+RK kernel that computes the volume RHS locally without
+    # round-tripping through global vol_scratch.  vol_scratch and
+    # rhs_scratch are unused on the fused path (kept in the signature
+    # for backward compatibility with drivers that allocated them).
+    _ = vol_scratch
     _ = rhs_scratch
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
-    launch_advection_volume_rhs_2d[NP](
-        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
-        mesh.num_elements, vx, vy, vol_scratch,
-    )
     launch_advection_face_flux_2d[NP, NFP](
         ctx, q_in,
         mesh.d_face_elem.unsafe_ptr(),
@@ -531,16 +640,16 @@ def advection_rk_stage_2d[P: Int](
         mesh.d_face_bc_type.unsafe_ptr(),
         mesh.num_faces, vx, vy, inflow_q, fstar_scratch,
     )
-    launch_lift_combine_rk_2d[NP, NFP, 1](
-        ctx, vol_scratch, fstar_scratch,
+    launch_advection_vol_lift_2d[NP, NFP](
+        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_elem_face_side.unsafe_ptr(),
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
-        Lift_ref,
-        q_a, q_b,
-        mesh.num_elements, a, b, cc, dt, q_out,
+        Lift_ref, q_a, q_b,
+        mesh.num_elements, vx, vy, a, b, cc, dt, q_out,
     )
 
 
