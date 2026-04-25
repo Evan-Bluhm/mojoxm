@@ -3194,10 +3194,15 @@ def mhd_glm_rk_stage_2d[P: Int](
         mesh.num_elements, gamma, min_density, min_pressure, c_h,
         a, b, cc, dt, q_out,
     )
-    # Operator-splitting psi damping: q_out[psi] *= exp(-alpha_d*dt).
-    launch_mhd_glm_psi_damp_2d[NP](
-        ctx, q_out, mesh.num_elements, alpha_d, dt,
-    )
+    # NOTE: the alpha_d argument is no longer applied here.  Operator-
+    # splitting psi damping must be invoked ONCE PER SSPRK3 step by the
+    # caller via `launch_mhd_glm_psi_damp_2d`, not once per stage --
+    # otherwise the decay gets applied three times per timestep.  The
+    # parameter is retained for backward compatibility with existing
+    # drivers that pass alpha_d (the GLM Alfven and psi-transport
+    # benches use alpha_d = 0 so the change is observably a no-op for
+    # them).
+    _ = alpha_d
 
 
 # ----------------------------------------------------------------------
