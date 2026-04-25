@@ -49,6 +49,8 @@ mhd_2d_gpu_test
 limiter_2d_gpu_test
 limiter_3d_test
 mhd_3d_test
+euler_3d_test
+maxwell_3d_test
 
 # benchmark binaries (built from benchmarks/)
 bench_advection_translation_2d
