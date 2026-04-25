@@ -513,6 +513,10 @@ def advection_rk_stage_2d[P: Int](
     vx: Float32, vy: Float32, inflow_q: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
+    # Three launches per stage: volume, face flux, fused lift+RK update.
+    # rhs_scratch is unused on the fused path (kept in the signature for
+    # backward compatibility with drivers that allocated it).
+    _ = rhs_scratch
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_advection_volume_rhs_2d[NP](
@@ -527,7 +531,7 @@ def advection_rk_stage_2d[P: Int](
         mesh.d_face_bc_type.unsafe_ptr(),
         mesh.num_faces, vx, vy, inflow_q, fstar_scratch,
     )
-    launch_advection_lift_combine_2d[NP, NFP](
+    launch_lift_combine_rk_2d[NP, NFP, 1](
         ctx, vol_scratch, fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
@@ -535,10 +539,7 @@ def advection_rk_stage_2d[P: Int](
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
         Lift_ref,
-        mesh.num_elements, rhs_scratch,
-    )
-    launch_rk_update_2d[NP, 1](
-        ctx, q_a, q_b, rhs_scratch,
+        q_a, q_b,
         mesh.num_elements, a, b, cc, dt, q_out,
     )
 
@@ -610,6 +611,89 @@ def launch_lift_combine_2d[NP: Int, NFP: Int, NC: Int](
         vol_c, fstar, elem_inv_2A, elem_faces, elem_face_side,
         elem_canon_to_ref, face_length, Lift_ref,
         num_elements, rhs_out,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
+
+
+# ----------------------------------------------------------------------
+# Fused lift-combine + RK update.
+# ----------------------------------------------------------------------
+# Same per-(elem, i, c) thread mapping as `lift_combine_kernel_2d`,
+# but instead of writing rhs to scratch and launching a separate
+# `rk_update_kernel_2d`, this kernel inlines the SSPRK3 weighted
+# combination on-thread:
+#   q_out[idx] = a*q_a[idx] + b*q_b[idx] + cc*dt*rhs_val
+# Each fused launch replaces two prior launches per RK stage,
+# cutting the 4-launch-per-stage 2D pipeline to 3 launches per stage.
+# Identical numerics to the unfused chain to Float32 precision.
+# ----------------------------------------------------------------------
+
+def lift_combine_rk_kernel_2d[NP: Int, NFP: Int, NC: Int](
+    vol_c:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    q_a:               UnsafePointer[Float32, MutAnyOrigin],
+    q_b:               UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+):
+    var tid = Int(global_idx.x)
+    var total = num_elements * NP * NC
+    if tid >= total:
+        return
+    var elem = tid // (NP * NC)
+    var rem  = tid %  (NP * NC)
+    var i    = rem // NC
+    var c    = rem %  NC
+
+    var inv_2A = elem_inv_2A[elem]
+    var face_c: Float32 = 0.0
+    for lf in range(3):
+        var fid = Int(elem_faces[elem * 3 + lf])
+        var side = Int(elem_face_side[elem * 3 + lf])
+        var sign: Float32 = Float32(1.0) if side == 0 else Float32(-1.0)
+        var flen = face_length[fid]
+        for m in range(NFP):
+            var r = Int(
+                elem_canon_to_ref[(elem * 3 + lf) * NFP + m]
+            )
+            var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
+            face_c += sign * flen * Lim * fstar[(fid * NFP + m) * NC + c]
+
+    var idx = (elem * NP + i) * NC + c
+    var rhs_val = vol_c[idx] - inv_2A * face_c
+    q_out[idx] = a * q_a[idx] + b * q_b[idx] + cc * dt * rhs_val
+
+
+def launch_lift_combine_rk_2d[NP: Int, NFP: Int, NC: Int](
+    mut ctx: DeviceContext,
+    vol_c:             UnsafePointer[Float32, MutAnyOrigin],
+    fstar:             UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
+    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
+    face_length:       UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    q_a:               UnsafePointer[Float32, MutAnyOrigin],
+    q_b:               UnsafePointer[Float32, MutAnyOrigin],
+    num_elements:      Int,
+    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+) raises:
+    var total = num_elements * NP * NC
+    comptime _kernel = lift_combine_rk_kernel_2d[NP, NFP, NC]
+    ctx.enqueue_function[_kernel, _kernel](
+        vol_c, fstar, elem_inv_2A, elem_faces, elem_face_side,
+        elem_canon_to_ref, face_length, Lift_ref,
+        q_a, q_b, num_elements, a, b, cc, dt, q_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
@@ -1120,7 +1204,8 @@ def euler_rk_stage_2d[P: Int](
         inflow_rho, inflow_rhou, inflow_rhov, inflow_E,
         fstar_scratch,
     )
-    launch_lift_combine_2d[NP, NFP, 4](
+    _ = rhs_scratch    # unused on the fused path
+    launch_lift_combine_rk_2d[NP, NFP, 4](
         ctx, vol_scratch, fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
@@ -1128,10 +1213,7 @@ def euler_rk_stage_2d[P: Int](
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
         Lift_ref,
-        mesh.num_elements, rhs_scratch,
-    )
-    launch_rk_update_2d[NP, 4](
-        ctx, q_a, q_b, rhs_scratch,
+        q_a, q_b,
         mesh.num_elements, a, b, cc, dt, q_out,
     )
 
@@ -1176,7 +1258,8 @@ def euler_rk_stage_hllc_2d[P: Int](
         inflow_rho, inflow_rhou, inflow_rhov, inflow_E,
         fstar_scratch,
     )
-    launch_lift_combine_2d[NP, NFP, 4](
+    _ = rhs_scratch    # unused on the fused path
+    launch_lift_combine_rk_2d[NP, NFP, 4](
         ctx, vol_scratch, fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
@@ -1184,10 +1267,7 @@ def euler_rk_stage_hllc_2d[P: Int](
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
         Lift_ref,
-        mesh.num_elements, rhs_scratch,
-    )
-    launch_rk_update_2d[NP, 4](
-        ctx, q_a, q_b, rhs_scratch,
+        q_a, q_b,
         mesh.num_elements, a, b, cc, dt, q_out,
     )
 
@@ -1590,7 +1670,8 @@ def sw_rk_stage_2d[P: Int](
         g, min_h, inflow_h, inflow_hu, inflow_hv,
         fstar_scratch,
     )
-    launch_lift_combine_2d[NP, NFP, 3](
+    _ = rhs_scratch    # unused on the fused path
+    launch_lift_combine_rk_2d[NP, NFP, 3](
         ctx, vol_scratch, fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
@@ -1598,10 +1679,7 @@ def sw_rk_stage_2d[P: Int](
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
         Lift_ref,
-        mesh.num_elements, rhs_scratch,
-    )
-    launch_rk_update_2d[NP, 3](
-        ctx, q_a, q_b, rhs_scratch,
+        q_a, q_b,
         mesh.num_elements, a, b, cc, dt, q_out,
     )
 
@@ -1643,7 +1721,8 @@ def sw_rk_stage_hll_2d[P: Int](
         g, min_h, inflow_h, inflow_hu, inflow_hv,
         fstar_scratch,
     )
-    launch_lift_combine_2d[NP, NFP, 3](
+    _ = rhs_scratch    # unused on the fused path
+    launch_lift_combine_rk_2d[NP, NFP, 3](
         ctx, vol_scratch, fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
@@ -1651,10 +1730,7 @@ def sw_rk_stage_hll_2d[P: Int](
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
         Lift_ref,
-        mesh.num_elements, rhs_scratch,
-    )
-    launch_rk_update_2d[NP, 3](
-        ctx, q_a, q_b, rhs_scratch,
+        q_a, q_b,
         mesh.num_elements, a, b, cc, dt, q_out,
     )
 
@@ -1985,7 +2061,8 @@ def mhd_rk_stage_2d[P: Int](
         gamma, min_density, min_pressure,
         fstar_scratch,
     )
-    launch_lift_combine_2d[NP, NFP, 6](
+    _ = rhs_scratch    # unused on the fused path
+    launch_lift_combine_rk_2d[NP, NFP, 6](
         ctx, vol_scratch, fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
@@ -1993,10 +2070,7 @@ def mhd_rk_stage_2d[P: Int](
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
         Lift_ref,
-        mesh.num_elements, rhs_scratch,
-    )
-    launch_rk_update_2d[NP, 6](
-        ctx, q_a, q_b, rhs_scratch,
+        q_a, q_b,
         mesh.num_elements, a, b, cc, dt, q_out,
     )
 
