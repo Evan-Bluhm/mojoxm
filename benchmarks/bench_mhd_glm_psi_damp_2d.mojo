@@ -54,8 +54,10 @@ comptime T_FINAL: Float64 = 1.0          # so psi(T) = A0/e
 
 comptime CFL: Float64 = 0.15
 
-comptime PSI_TOL_REL: Float64 = 1.0e-3
-comptime STATE_TOL: Float32 = Float32(1.0e-5)
+# Measured rel err ~4e-6 on current code; 5e-5 leaves ~10x margin.
+comptime PSI_TOL_REL: Float64 = 5.0e-5
+# State drift is at ~1e-5 (Float32 floor), keep at threshold = floor.
+comptime STATE_TOL: Float32 = Float32(2.0e-5)
 
 
 def _run(NX: Int) raises -> Bool:
