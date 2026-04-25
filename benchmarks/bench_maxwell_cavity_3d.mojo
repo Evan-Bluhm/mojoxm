@@ -57,7 +57,10 @@ comptime CFL = Float32(0.2)
 comptime IC_BLOCK = 256
 comptime PI_F: Float32 = 3.14159265358979323846
 
-comptime L2_MAX_REL: Float64 = 1.0e-3
+# Measured ~3.5e-5 (Float32 roundoff floor at NX=16 NY=32 over 1600
+# SSPRK3 steps).  1e-4 is ~3x looser, catches any Maxwell dispersion
+# / PEC reflection bug without false-firing on the roundoff wobble.
+comptime L2_MAX_REL: Float64 = 1.0e-4
 
 
 def cavity_ic_kernel(

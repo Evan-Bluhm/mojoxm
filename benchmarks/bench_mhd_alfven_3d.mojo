@@ -56,7 +56,8 @@ comptime CFL     = Float32(0.2)
 comptime IC_BLOCK = 256
 comptime PI_F    = Float32(3.14159265358979323846)
 
-comptime L2_MAX_REL: Float64 = 0.01
+# Measured ~3.6e-3; same nonlinear-floor framing as the 2D version.
+comptime L2_MAX_REL: Float64 = 5.0e-3
 
 
 def alfven_ic_kernel(

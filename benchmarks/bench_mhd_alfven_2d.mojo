@@ -54,7 +54,10 @@ comptime AMPLITUDE = 0.1
 comptime T_FINAL   = 1.0   # one wave period exactly (L / c_A = 1)
 comptime CFL       = 0.15
 
-comptime L2_MAX_REL: Float64 = 0.01
+# Measured ~3.6e-3 (nonlinear O(A^2) corrections are the error floor
+# at A=0.1, not scheme dissipation).  5e-3 is a ~1.4x gate around
+# the actual value, catching any regression in the MHD Rusanov flux.
+comptime L2_MAX_REL: Float64 = 5.0e-3
 
 
 def _run(NX: Int) raises -> Float64:

@@ -51,7 +51,10 @@ comptime CFL: Float64 = 0.15
 # T = L / c with c = sqrt(gH) = 1 for our values -> one wave period.
 comptime T_FINAL: Float64 = LX / 1.0
 
-comptime L2_MAX_REL: Float64 = 1.0e-3
+# Measured ~1.7e-4 across N = 32, 48, 64 (nonlinear O((A/H)^2)
+# correction at A=0.01 is the error floor, not scheme dissipation).
+# 3e-4 is ~1.7x the actual error, catches any SW flux regression.
+comptime L2_MAX_REL: Float64 = 3.0e-4
 # 1e-4 is realistic for float32 mass summation over N*N*2 cells and
 # ~200 RK steps; conservation bugs would change this by orders of
 # magnitude.

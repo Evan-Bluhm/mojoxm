@@ -63,7 +63,9 @@ comptime PI_F: Float32 = 3.14159265358979323846
 # One wave period: T = Lx / c where c = sqrt(g H).
 comptime T_FINAL: Float32 = Float32(LX / 1.0)   # c = sqrt(1*1) = 1
 
-comptime L2_MAX_REL: Float64 = 1.0e-3
+# Measured ~1.7e-4 across N = 16, 24, 32 (nonlinear O((A/H)^2) floor
+# at A=0.01).  3e-4 is ~1.7x actual, catches SW flux regressions.
+comptime L2_MAX_REL: Float64 = 3.0e-4
 # 1e-4 is tight but realistic for float32 mass summation over a 32x32x2
 # mesh and ~200 RK steps: per-element roundoff is O(1e-7) and builds
 # up additively; any real conservation bug would move this by orders

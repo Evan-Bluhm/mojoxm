@@ -68,7 +68,10 @@ comptime AMPLITUDE = 0.1       # rho varies from 0.9 to 1.1; still
 comptime T_FINAL = 1.0        # one advection period LX / U0
 comptime CFL = 0.15
 
-comptime L2_MAX_REL: Float64 = 5.0e-4
+# Measured: N=16 ~7e-5, N=32 ~6e-5, N=64 ~1.1e-4 (non-monotone --
+# Float32 roundoff floor over ~200 SSPRK3 steps).  2e-4 is ~2x the
+# worst observed, catches regressions in HLLC Euler on smooth flow.
+comptime L2_MAX_REL: Float64 = 2.0e-4
 
 
 def _run(N: Int) raises -> Float64:
