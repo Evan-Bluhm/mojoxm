@@ -20,19 +20,22 @@
 #
 # Pass criteria (P=2, HLLEC flux, periodic, single-rank):
 #   * rel L2(state) at N=8, 12, 16 all < 1e-3
+#   * Observed convergence rate between N=12 and N=16 >= 2.0
 #   * no NaN / Inf
 #
-# Same framing as the 2D entropy-wave gate: on a smooth linearised
-# problem HLLEC is so accurate that scheme error sits below Float32
-# roundoff over any practical refinement sweep.  Convergence-rate
-# doesn't apply; the tight absolute threshold catches any Euler bug
-# that would pollute the scheme even slightly.
+# Rate check: expected 3rd-order convergence at P=2 on a smooth
+# problem.  Empirically rates run ~2.4 (N=8->12) and ~2.6 (N=12->16)
+# because the wave is only marginally resolved at N=8 so the first
+# pair is pre-asymptotic; the tighter N=12->16 pair is the better
+# asymptotic rate estimate.  Tol >= 2.0 catches order regressions
+# (e.g. a broken mass matrix / differentiation operator collapsing
+# the scheme to 1st-order) without false-flagging roundoff wobble.
 # ======================================================================
 
 from std.sys import has_accelerator
 from std.gpu import global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
-from std.math import sqrt, ceildiv, sin, isnan, isinf
+from std.math import sqrt, ceildiv, sin, log, isnan, isinf
 
 from src import mpi
 from src.partition import build_partition
@@ -213,6 +216,19 @@ def main() raises:
         raise Error(
             "bench_euler_smooth_wave_3d FAILED: N=16 rel L2 "
             + String(err16) + " exceeds " + String(L2_MAX_REL)
+        )
+
+    # Convergence rate between the two highest resolutions.  log is
+    # natural log, but the ratio log(e_N/e_2N) / log(2N/N) is the same
+    # with any base.
+    var rate_12_16 = log(err12 / err16) / log(16.0 / 12.0)
+    print("  rate (N=12 -> 16) =", rate_12_16,
+          "  (expected >= 2.0 at P=2)")
+    if rate_12_16 < 2.0:
+        raise Error(
+            String("bench_euler_smooth_wave_3d FAILED: convergence ")
+            + "rate " + String(rate_12_16)
+            + " between N=12 and N=16 is below 2.0"
         )
 
     print("=== bench_euler_smooth_wave_3d PASSED ===")
