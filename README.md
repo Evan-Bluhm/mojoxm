@@ -143,7 +143,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  61 analytic-solution gates tying schemes to closed-form reference
+  62 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D), and
@@ -237,9 +237,13 @@ Nine reference drivers under `examples/`:
     17-component rest state preserved under BC_OUTFLOW / BC_WALL
     on all 6 faces),
     `bench_two_fluid_langmuir_3d`.
-  * **3D shocks (2):** `bench_euler_sod_3d` (BJ-limited, bounds +
-    mass conservation), `bench_mhd_brio_wu_3d` (canonical 1D
-    MHD Riemann embedded in 3D, GLM + BJ limiter).
+  * **3D shocks (3):** `bench_euler_sod_3d` + `_p3` (BJ-limited,
+    bounds + mass conservation; the P=3 / NP=20 variant is the
+    first analytic-Riemann gate on the higher-order 3D limiter
+    path -- existing `limiter_3d_test_p3` only checks the cell-mean
+    invariant on a constant state),
+    `bench_mhd_brio_wu_3d` (canonical 1D MHD Riemann embedded in
+    3D, GLM + BJ limiter).
 
   Tight tolerances where the problem admits them, with each gate's
   threshold sized to ~1.4-3x the empirical error floor (catches any
@@ -276,7 +280,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 61 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 62 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
