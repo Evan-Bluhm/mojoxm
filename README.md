@@ -137,7 +137,7 @@ Nine reference drivers under `examples/`:
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D), and
   P=4 / P=5 rate gates for advection in both 2D (NP=15, NP=21) and
   3D (NP=35, NP=56).
-  * **2D smooth (13):** `bench_advection_translation_2d` (rate >= 2.0)
+  * **2D smooth (14):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
     `bench_euler_vortex_2d`, `bench_euler_smooth_wave_2d` + `_p3`,
@@ -151,7 +151,7 @@ Nine reference drivers under `examples/`:
     `bench_shallow_water_dam_break_2d` (closed-pool conservation
     invariants), `bench_maxwell_cavity_2d` (TM(1,1) standing wave in
     PEC cavity, period sqrt(2), rel L2 ~3e-4).
-  * **3D smooth (11):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (12):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
