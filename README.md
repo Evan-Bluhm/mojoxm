@@ -127,7 +127,7 @@ Nine reference drivers under `examples/`:
     constant-state at P=1/2/3), `euler_2d_gpu_test` /
     `sw_2d_gpu_test` / `mhd_2d_gpu_test` / `mhd_glm_2d_gpu_test` /
     `maxwell_2d_gpu_test` (constant-state per physics, including the
-    NC=7 GLM-MHD path), `limiter_2d_gpu_test` (smooth passthrough +
+    NC=7 GLM-MHD path), `limiter_2d_gpu_test` + `_p3` (smooth passthrough +
     within-cell spike monotonicity).
   * 3D pipeline -- `euler_3d_test` / `maxwell_3d_test` /
     `sw_3d_test` / `mhd_3d_test` / `two_fluid_3d_test` (constant-
