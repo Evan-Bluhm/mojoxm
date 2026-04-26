@@ -148,7 +148,6 @@ def main() raises:
             d_q1.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
             gamma_f, min_rho, min_p,
-            Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
             Float32(1.0), Float32(0.0), Float32(1.0), dt,
             gx_f, gy_f,
         )
@@ -160,7 +159,6 @@ def main() raises:
             d_q2.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
             gamma_f, min_rho, min_p,
-            Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
             Float32(0.75), Float32(0.25), Float32(0.25), dt,
             gx_f, gy_f,
         )
@@ -172,7 +170,6 @@ def main() raises:
             d_q.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
             gamma_f, min_rho, min_p,
-            Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
             Float32(1.0 / 3.0), Float32(2.0 / 3.0),
             Float32(2.0 / 3.0), dt,
             gx_f, gy_f,

@@ -556,16 +556,19 @@ def euler_rk_stage_2d[P: Int](
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
     gamma: Float32, min_density: Float32, min_pressure: Float32,
-    inflow_rho: Float32, inflow_rhou: Float32,
-    inflow_rhov: Float32, inflow_E: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
     gx: Float32 = Float32(0.0),
     gy: Float32 = Float32(0.0),
+    inflow_rho: Float32 = Float32(0.0),
+    inflow_rhou: Float32 = Float32(0.0),
+    inflow_rhov: Float32 = Float32(0.0),
+    inflow_E: Float32 = Float32(0.0),
 ) raises:
     # Two launches per stage: face flux, then a fused vol+lift+RK
-    # kernel that computes the volume RHS in-register.  Gravity
-    # defaults to zero so callers without a gravity vector are
-    # source-compatible.
+    # kernel that computes the volume RHS in-register.  All non-core
+    # source / BC parameters default to zero so callers without
+    # gravity / inflow are source-compatible.  Set them via kwargs
+    # (`gx=...`, `inflow_rho=...`) at the relevant call sites.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_euler_face_flux_2d[NP, NFP](
@@ -611,15 +614,17 @@ def euler_rk_stage_hllc_2d[P: Int](
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
     gamma: Float32, min_density: Float32, min_pressure: Float32,
-    inflow_rho: Float32, inflow_rhou: Float32,
-    inflow_rhov: Float32, inflow_E: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
     gx: Float32 = Float32(0.0),
     gy: Float32 = Float32(0.0),
+    inflow_rho: Float32 = Float32(0.0),
+    inflow_rhou: Float32 = Float32(0.0),
+    inflow_rhov: Float32 = Float32(0.0),
+    inflow_E: Float32 = Float32(0.0),
 ) raises:
     # HLLC variant of the face flux + the same fused vol+lift+RK kernel
-    # as the Rusanov path.  See `euler_rk_stage_2d` for the gravity
-    # convention; gx, gy are forwarded unchanged.
+    # as the Rusanov path.  See `euler_rk_stage_2d` for the source-
+    # term / inflow defaults; gx / gy / inflow_* are forwarded unchanged.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_euler_face_flux_hllc_2d[NP, NFP](
