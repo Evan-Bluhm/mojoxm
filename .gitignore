@@ -88,6 +88,7 @@ bench_advection_outflow_3d
 bench_advection_inflow_3d
 bench_mhd_alfven_3d
 bench_mhd_alfven_3d_p3
+bench_mhd_glm_psi_damp_3d
 bench_maxwell_cavity_3d
 bench_maxwell_plane_wave_3d
 bench_maxwell_uniform_j_3d
