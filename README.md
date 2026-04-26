@@ -132,7 +132,7 @@ Nine reference drivers under `examples/`:
   * 3D pipeline -- `euler_3d_test` / `maxwell_3d_test` /
     `sw_3d_test` / `mhd_3d_test` / `two_fluid_3d_test` (constant-
     state preservation per physics through Solver[PhysT, P]),
-    `limiter_3d_test` (BJ slope-limiter cell-mean conservation
+    `limiter_3d_test` + `_p3` (BJ slope-limiter cell-mean conservation
     invariant, drift = 0 exactly), `p3_smoke_test` (Mesh[3] +
     Solver[Advection, 3] round-trip).
   * MPI -- `mpi_advection_test` / `mpi_bc_test` (np=1 vs np=4

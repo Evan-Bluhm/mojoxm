@@ -51,6 +51,7 @@ maxwell_2d_gpu_test
 limiter_2d_gpu_test
 limiter_2d_gpu_test_p3
 limiter_3d_test
+limiter_3d_test_p3
 mhd_3d_test
 euler_3d_test
 maxwell_3d_test
