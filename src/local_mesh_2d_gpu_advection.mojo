@@ -9,10 +9,9 @@
 # State: scalar q.  Single Rusanov-style upwind flux (no flux variants
 # here -- advection's a single hyperbolic eigenvalue).
 #
-# Generic helpers `lift_combine_kernel_2d`, `lift_combine_rk_kernel_2d`,
-# `rk_update_kernel_2d` (used by the legacy 3-launch advection path
-# and by tests that exercise individual stages) remain in the parent
-# `src/local_mesh_2d_gpu.mojo` since they are not advection-specific.
+# `rk_update_kernel_2d` (used by `local_mesh_2d_gpu_test` to verify
+# the SSPRK3 weighted combine in isolation) remains in the parent
+# `src/local_mesh_2d_gpu.mojo` since it is not advection-specific.
 # ======================================================================
 
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
@@ -284,93 +283,13 @@ def launch_advection_face_flux_2d[NP: Int, NFP: Int](
         block_dim=256,
     )
 
-
 # ----------------------------------------------------------------------
-# Lift-combine kernel: finishes the DG rhs.
+# Full advection RK-stage orchestration (2 launches per stage).
 # ----------------------------------------------------------------------
-# Given the volume-integral output `vol_c[elem, i]` and the per-face
-# numerical flux `fstar[fid, m]`, write the complete rhs into
-# `rhs[elem, i] = vol_c[elem, i] - inv_2A[elem] * face_c[elem, i]`,
-# where
-#
-#   face_c[elem, i] = sum_{lf=0..2} sum_{m=0..P} sign(side)
-#                       * face_length[fid(elem, lf)]
-#                       * Lift_ref[lf, i, r(elem, lf, m)]
-#                       * fstar[fid(elem, lf), m]
-#
-# `r = elem_canon_to_ref[(elem * 3 + lf) * NFP + m]` remaps the
-# canonical face-local slot to the ref-edge slot the Lift_ref entry
-# indexes.  One thread per (elem, i) = num_elements * NP threads.
-# ----------------------------------------------------------------------
-
-def advection_lift_combine_kernel_2d[NP: Int, NFP: Int](
-    vol_c:             UnsafePointer[Float32, MutAnyOrigin],
-    fstar:             UnsafePointer[Float32, MutAnyOrigin],
-    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
-    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
-    face_length:       UnsafePointer[Float32, MutAnyOrigin],
-    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
-    num_elements:      Int,
-    rhs_out:           UnsafePointer[Float32, MutAnyOrigin],
-):
-    var tid = Int(global_idx.x)
-    var total = num_elements * NP
-    if tid >= total:
-        return
-    var elem = tid // NP
-    var i    = tid %  NP
-
-    var inv_2A = elem_inv_2A[elem]
-    var face_c: Float32 = 0.0
-    for lf in range(3):
-        var fid = Int(elem_faces[elem * 3 + lf])
-        var side = Int(elem_face_side[elem * 3 + lf])
-        var sign: Float32 = Float32(1.0) if side == 0 else Float32(-1.0)
-        var flen = face_length[fid]
-        for m in range(NFP):
-            var r = Int(
-                elem_canon_to_ref[(elem * 3 + lf) * NFP + m]
-            )
-            var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
-            face_c += sign * flen * Lim * fstar[fid * NFP + m]
-
-    rhs_out[elem * NP + i] = vol_c[elem * NP + i] - inv_2A * face_c
-
-
-def launch_advection_lift_combine_2d[NP: Int, NFP: Int](
-    mut ctx: DeviceContext,
-    vol_c:             UnsafePointer[Float32, MutAnyOrigin],
-    fstar:             UnsafePointer[Float32, MutAnyOrigin],
-    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
-    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
-    face_length:       UnsafePointer[Float32, MutAnyOrigin],
-    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
-    num_elements:      Int,
-    rhs_out:           UnsafePointer[Float32, MutAnyOrigin],
-) raises:
-    var total = num_elements * NP
-    comptime _kernel = advection_lift_combine_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel, _kernel](
-        vol_c, fstar, elem_inv_2A, elem_faces, elem_face_side,
-        elem_canon_to_ref, face_length, Lift_ref,
-        num_elements, rhs_out,
-        grid_dim=ceildiv(total, 256),
-        block_dim=256,
-    )
-
-
-# ----------------------------------------------------------------------
-# Full advection RK-stage orchestration (3 rhs kernels + 1 update).
-# ----------------------------------------------------------------------
-# Wraps the volume / face-flux / lift-combine / rk-update chain so a
-# driver only has to provide the per-stage (a, b, cc) weights, the dt,
-# and the q_in / q_a / q_b / q_out buffers.  Uses the caller-supplied
-# scratch buffers for vol_c, fstar, and rhs so the orchestration is
-# allocation-free on the hot path.
+# Wraps `launch_advection_face_flux_2d` + `launch_advection_vol_lift_2d`
+# (the fused per-element vol+lift+RK kernel).  Driver only has to
+# provide the per-stage (a, b, cc) weights, the dt, and the
+# q_in / q_a / q_b / q_out buffers.
 #
 # Signature mirrors what the eventual Solver2D struct will expose
 # internally.  Calling it three times with the SSPRK3 weights
