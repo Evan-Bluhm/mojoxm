@@ -21,11 +21,13 @@
 # file focused on the shared infrastructure:
 #
 #   src/local_mesh_2d_gpu_advection.mojo  -- scalar advection (NC=1)
-#   src/local_mesh_2d_gpu_euler.mojo      -- Euler (NC=4): Rusanov + HLLC
+#   src/local_mesh_2d_gpu_euler.mojo      -- Euler (NC=4): Rusanov + HLLC,
+#                                            gravity (gx, gy) source
 #   src/local_mesh_2d_gpu_sw.mojo         -- Shallow Water (NC=3): Rusanov + HLL
 #   src/local_mesh_2d_gpu_mhd.mojo        -- IdealMHD (NC=6, no GLM)
 #   src/local_mesh_2d_gpu_mhd_glm.mojo    -- IdealMHD + Dedner GLM (NC=7)
-#   src/local_mesh_2d_gpu_maxwell.mojo    -- Maxwell (NC=6 EM)
+#   src/local_mesh_2d_gpu_maxwell.mojo    -- Maxwell (NC=6 EM): full BC menu,
+#                                            J / M source
 #   src/local_mesh_2d_gpu_limiter.mojo    -- Barth-Jespersen slope limiter
 #
 # Buffer layout (mirrors the host mesh exactly; no reshuffling):
