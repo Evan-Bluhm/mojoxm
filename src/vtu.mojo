@@ -27,8 +27,6 @@
 
 from std.pathlib import Path
 from std.memory import memcpy, memset, alloc
-from std.os import FileDescriptor, open
-from src.nvtx import NvtxContext
 from src.async_writer import WriteSegment
 
 # At P=2 each tet has 10 nodes laid out as 4 vertices + 6 edge midpoints,
@@ -125,8 +123,6 @@ struct VtuWriter(Movable):
     var off_conn: Int
     var off_offsets: Int
     var off_types: Int
-
-    var _last_size: Int
 
     def __init__[
         mut: Bool, //, origin: Origin[mut=mut]
@@ -225,23 +221,6 @@ struct VtuWriter(Movable):
         hdr += '<AppendedData encoding="raw">\n_'
         self.xml_header = hdr^
         self.xml_tail = String('\n</AppendedData>\n</VTKFile>\n')
-        self._last_size = 0
-
-    def write_frame(mut self, path: String, q: List[Float32],
-                   mut nvtx: NvtxContext) raises:
-        """Synchronous write -- deprecated, kept for compatibility.
-        Prefer `build_segments()` + AsyncWriter.submit() on the hot path."""
-        nvtx.push_range("vtu_serialize")
-        var buf_ptr = self._serialize(q)
-        var buf_len = self._last_size
-        nvtx.pop_range()
-
-        nvtx.push_range("vtu_file_write")
-        var p = Path(path)
-        var span = Span(ptr=buf_ptr, length=buf_len)
-        p.write_bytes(span)
-        nvtx.pop_range()
-        buf_ptr.free()
 
     # Build a scatter-gather list of six segments:
     #   1. xml_header         (owned by VtuWriter, not freed)
@@ -310,60 +289,6 @@ struct VtuWriter(Movable):
 
         var segs = [hdr_seg, density_seg, pre_seg, pts_seg, post_seg, tail_seg]
         return segs^
-
-    def last_size(self) -> Int:
-        return self._last_size
-
-    def _serialize(
-        mut self, q: List[Float32]
-    ) raises -> UnsafePointer[UInt8, MutAnyOrigin]:
-        var total_points = self.total_points
-        var density_bytes = total_points * 4
-        var total_size = (
-            self.xml_header.byte_length()
-            + 4 + density_bytes
-            + self.static_pre.len
-            + self.pts_byte_len
-            + self.static_post.len
-            + self.xml_tail.byte_length()
-        )
-        var out_ptr = alloc[UInt8](total_size)
-        var cursor = 0
-
-        var hn = self.xml_header.byte_length()
-        memcpy(dest=out_ptr + cursor,
-               src=self.xml_header.unsafe_ptr().bitcast[UInt8](), count=hn)
-        cursor += hn
-
-        out_ptr[cursor + 0] = UInt8(UInt32(density_bytes) & 0xFF)
-        out_ptr[cursor + 1] = UInt8((UInt32(density_bytes) >> 8) & 0xFF)
-        out_ptr[cursor + 2] = UInt8((UInt32(density_bytes) >> 16) & 0xFF)
-        out_ptr[cursor + 3] = UInt8((UInt32(density_bytes) >> 24) & 0xFF)
-        cursor += 4
-
-        memcpy(dest=out_ptr + cursor,
-               src=q.unsafe_ptr().bitcast[UInt8](), count=density_bytes)
-        cursor += density_bytes
-
-        memcpy(dest=out_ptr + cursor,
-               src=self.static_pre.ptr, count=self.static_pre.len)
-        cursor += self.static_pre.len
-
-        memcpy(dest=out_ptr + cursor,
-               src=self.pts_ptr, count=self.pts_byte_len)
-        cursor += self.pts_byte_len
-
-        memcpy(dest=out_ptr + cursor,
-               src=self.static_post.ptr, count=self.static_post.len)
-        cursor += self.static_post.len
-
-        var tn = self.xml_tail.byte_length()
-        memcpy(dest=out_ptr + cursor,
-               src=self.xml_tail.unsafe_ptr().bitcast[UInt8](), count=tn)
-        cursor += tn
-
-        self._last_size = cursor
-        return rebind[UnsafePointer[UInt8, MutAnyOrigin]](out_ptr)
 
 
 # ----------------------------------------------------------------------
