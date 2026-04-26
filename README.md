@@ -143,7 +143,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  72 analytic-solution gates tying schemes to closed-form reference
+  73 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D), and
@@ -207,7 +207,7 @@ Nine reference drivers under `examples/`:
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (32):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (33):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -239,11 +239,12 @@ Nine reference drivers under `examples/`:
     `bench_maxwell_plane_wave_3d` + `_p3` (TM plane wave on triply-
     periodic cube; the P=3 variant brings 3D Maxwell into NP=20
     parity with advection / Euler / SW / MHD),
-    `bench_maxwell_uniform_j_3d` + `_p3` + `_m` (uniform-J / uniform-M
-    source-term gates: Ex / Bz grow linearly under the source while
-    flux divergences stay zero on uniform fields; both match analytic
-    to ~Float32 epsilon.  J arm has full 4-corner P/dimension parity
-    at NP=6/10/10/20 across the 2D and 3D variants),
+    `bench_maxwell_uniform_j_3d` + `_p3` + `_m` + `_m_p3` (uniform-J /
+    uniform-M source-term gates: Ex / Bz grow linearly under the
+    source while flux divergences stay zero on uniform fields; both
+    match analytic to ~Float32 epsilon.  Both J and M arms have full
+    4-corner P/dimension parity at NP=6/10/10/20 across the 2D and
+    3D variants),
     `bench_maxwell_outflow_3d` (uniform-state preservation under
     BC_OUTFLOW on all six faces; the third dispatch arm in
     `Maxwell.boundary_flux` that the cavity / plane-wave gates
@@ -301,7 +302,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 72 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 73 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
