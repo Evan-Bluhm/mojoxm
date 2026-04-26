@@ -120,8 +120,9 @@ def _run(NX: Int) raises -> Bool:
     var alpha_d_f = Float32(ALPHA_D)
 
     for _ in range(num_steps):
-        # SSPRK3 stages.  alpha_d on rk_stage is now ignored (post-fix);
-        # damping is applied once below.
+        # SSPRK3 stages, then operator-split psi damping ONCE per
+        # step via launch_mhd_glm_psi_damp_2d.  Putting damp inside
+        # rk_stage would apply it three times per step.
         mhd_glm_rk_stage_2d[P](
             ctx, gpu_mesh,
             gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),

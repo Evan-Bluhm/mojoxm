@@ -377,14 +377,14 @@ HaloExchange):
 | `src/reference_2d.mojo`                       |   299 | 2D reference triangle: equispaced Lagrange, `D_ref`, `Lift_ref`, edge node maps |
 | `src/reference_2d_gpu.mojo`                   |    64 | Float32 device mirror of `ReferenceElement2D`                                   |
 | `src/local_mesh_2d.mojo`                      |   400 | Periodic Kuhn-2-tri (per cube halved on diagonal) mesh + BC overlay             |
-| `src/local_mesh_2d_gpu.mojo`                  |   318 | `LocalMesh2DGpu[P]` upload + generic NC-templated helpers (cell_avg, cell_mean, rk_update) |
-| `src/local_mesh_2d_gpu_advection.mojo`        |   343 | 2D scalar advection (NC=1)                                                      |
-| `src/local_mesh_2d_gpu_euler.mojo`            |   634 | 2D Euler (NC=4): Rusanov + HLLC                                                 |
-| `src/local_mesh_2d_gpu_sw.mojo`               |   521 | 2D Shallow Water (NC=3): Rusanov + HLL                                          |
-| `src/local_mesh_2d_gpu_mhd.mojo`              |   412 | 2D plain ideal MHD (NC=6, no GLM)                                               |
-| `src/local_mesh_2d_gpu_mhd_glm.mojo`          |   491 | 2D MHD + Dedner GLM divB cleaning (NC=7)                                        |
-| `src/local_mesh_2d_gpu_maxwell.mojo`          |   314 | 2D Maxwell (NC=6 EM): Rusanov, PEC reflection                                   |
-| `src/local_mesh_2d_gpu_limiter.mojo`          |   158 | 2D Barth-Jespersen slope limiter (Venkat-smoothed)                              |
+| `src/local_mesh_2d_gpu.mojo`                  |   269 | `LocalMesh2DGpu[P]` upload + generic NC-templated helpers (cell_avg, cell_mean, rk_update) |
+| `src/local_mesh_2d_gpu_advection.mojo`        |   337 | 2D scalar advection (NC=1)                                                      |
+| `src/local_mesh_2d_gpu_euler.mojo`            |   649 | 2D Euler (NC=4): Rusanov + HLLC, gravity (gx,gy) source                         |
+| `src/local_mesh_2d_gpu_sw.mojo`               |   514 | 2D Shallow Water (NC=3): Rusanov + HLL                                          |
+| `src/local_mesh_2d_gpu_mhd.mojo`              |   408 | 2D plain ideal MHD (NC=6, no GLM)                                               |
+| `src/local_mesh_2d_gpu_mhd_glm.mojo`          |   482 | 2D MHD + Dedner GLM divB cleaning (NC=7)                                        |
+| `src/local_mesh_2d_gpu_maxwell.mojo`          |   372 | 2D Maxwell (NC=6 EM): Rusanov + PEC reflection + J/M source                     |
+| `src/local_mesh_2d_gpu_limiter.mojo`          |   164 | 2D Barth-Jespersen slope limiter (Venkat-smoothed)                              |
 
 Example drivers exercise various combinations of physics, BC kind,
 and diagnostics; see the list at the top of this README.
