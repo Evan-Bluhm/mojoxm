@@ -548,21 +548,27 @@ round-off expectations.
 ### 2D limiter pipeline cost split (`bench_euler_sod_limited_2d_p3`)
 
 Per-kernel breakdown on the limited Sod path at P=3 / NP=10 (per
-nsys, ~5300 SSPRK3 steps × 3 launches per stage):
+nsys, ~5300 SSPRK3 steps × 3 launches per stage), after the
+compute_theta + apply split (commit `cdc3210`):
 
-| kernel               | % of GPU time |
-|----------------------|---------------|
-| `bj_limit_kernel_2d` | 50.6%         |
-| `vol+lift+rk` (Euler)| 32.6%         |
-| `face_flux` (HLLC)   | 11.0%         |
-| `cell_mean_kernel_2d`|  5.8%         |
+| kernel                     | % of GPU time |
+|----------------------------|---------------|
+| `vol+lift+rk` (Euler)      | 36.9%         |
+| `bj_limit_compute_theta_2d`| 34.8%         |
+| `face_flux` (HLLC)         | 12.5%         |
+| `bj_limit_apply_2d`        |  9.2%         |
+| `cell_mean_kernel_2d`      |  6.6%         |
 
-The BJ limiter is the dominant cost at higher P -- more than the
-physics kernels combined.  Possible further optimization paths
-(documented in `project_2d_limiter_perf.md` memory): fuse cell_mean
-into the rk_stage kernel, two-pass shock-only-rewrite design,
-cooperative shared-memory reduction.  See the `benchmarks/profile_reports/`
-baselines for per-kernel measurements on every benchmark.
+The BJ limiter pipeline still totals 44% of GPU time, but the
+apply-pass uncoalesced pattern that previously dominated has been
+neutralized -- adjacent threads now share `elem` and stride-1 writes
+to `q[]`.  The same split was mirrored to 3D in commit `0435ad6`,
+dropping 3D limiter share from 20.8% to 14.2% on shocked Sod 3D P=3.
+Possible further optimization paths (documented in
+`project_2d_limiter_perf.md` memory): pre-pack density into elem-major
+scratch for coalesced compute_theta reads; fuse cell_mean into the
+rk_stage kernel.  See the `benchmarks/profile_reports/` baselines for
+per-kernel measurements on every benchmark.
 
 ## Build & run
 
