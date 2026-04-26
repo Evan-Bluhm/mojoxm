@@ -200,16 +200,22 @@ def cell_mean_kernel_2d[NP: Int, NC: Int](
     num_elements: Int,
     cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
 ):
-    var elem = Int(global_idx.x)
-    if elem >= num_elements:
+    # One thread per (element, component) pair (NC-fold parallelism
+    # vs the original 1-thread-per-element design).  Adjacent threads
+    # in a warp now access q[base_q + nn*NC + c] at consecutive c
+    # values for the same (elem, nn) -- stride-1 inside a warp,
+    # giving full coalescing on the q reads.
+    var tid = Int(global_idx.x)
+    var total = num_elements * NC
+    if tid >= total:
         return
+    var elem = tid // NC
+    var c = tid % NC
     var base_q = elem * NP * NC
-    var base_mean = elem * NC
-    for c in range(NC):
-        var s: Float32 = 0.0
-        for nn in range(NP):
-            s += q[base_q + nn * NC + c] * node_weights[nn]
-        cell_mean[base_mean + c] = s
+    var s: Float32 = 0.0
+    for nn in range(NP):
+        s += q[base_q + nn * NC + c] * node_weights[nn]
+    cell_mean[elem * NC + c] = s
 
 
 def launch_cell_mean_2d[NP: Int, NC: Int](
@@ -222,7 +228,7 @@ def launch_cell_mean_2d[NP: Int, NC: Int](
     comptime _kernel = cell_mean_kernel_2d[NP, NC]
     ctx.enqueue_function[_kernel, _kernel](
         q, node_weights, num_elements, cell_mean,
-        grid_dim=ceildiv(num_elements, 256),
+        grid_dim=ceildiv(num_elements * NC, 256),
         block_dim=256,
     )
 
