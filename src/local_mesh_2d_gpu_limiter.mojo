@@ -36,10 +36,10 @@ from std.math import ceildiv
 # two):
 #   1. Caller first runs `cell_mean_kernel_2d[NP, NC]` (mass-matrix-
 #      weighted, in `src/local_mesh_2d_gpu.mojo`) into a num_elements*NC
-#      Float32 scratch buffer.  The unweighted `cell_avg_kernel_2d`
+#      Float32 scratch buffer.  An unweighted nodal-arithmetic mean
 #      gives a wrong cell mean at P>=2 -- see the docstring on
 #      `bj_limit_full_2d` below and `bench_euler_sod_limited_2d` for
-#      the regression bug it caused.
+#      the regression bug that motivated the mass-weighted formulation.
 #   2. `bj_limit_compute_theta_kernel_2d[NP, NC]` -- one thread per
 #      element, reads own cell_mean[NC] + 3 neighbour means on
 #      component 0, then loops NP nodes to compute Venkat theta on
@@ -187,8 +187,8 @@ def launch_bj_limit_apply_2d[NP: Int, NC: Int](
 # then the BJ compute_theta + apply kernels on top of a caller-supplied
 # scratch buffer.  Drivers call this between RK stages to enforce
 # monotonicity on shocked problems.  `node_weights` is
-# `ReferenceElement2DGpu.d_node_weights`; using the unweighted
-# `cell_avg_kernel_2d` here would systematically drift shock speeds at
+# `ReferenceElement2DGpu.d_node_weights`; using an unweighted nodal
+# arithmetic mean here would systematically drift shock speeds at
 # P>=2 because Lagrange-P>=2 node weights aren't uniform (at P=2 the
 # 3 vertex weights are 0, the 3 midpoint weights are 1/3).
 #

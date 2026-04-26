@@ -9,12 +9,12 @@
 # limited path: any regression in the limiter or its mean-computation
 # would show up as shock displacement here.
 #
-# Before the mass-matrix-weighted cell mean landed (commit pre-#34
-# fix), this benchmark would have failed with a ~10-cell shock
-# displacement -- the old `cell_avg_kernel_2d` computed an unweighted
-# nodal average, which at P=2 is not the true cell mean (3 vertex
-# weights are 0, 3 midpoint weights are 1/3).  Post-fix, the limiter
-# is strictly cell-mean-preserving and the shock lands within 2 cells
+# Before the mass-matrix-weighted cell mean landed, this benchmark
+# would have failed with a ~10-cell shock displacement -- the BJ
+# limiter was using an unweighted nodal average, which at P=2 is
+# not the true cell mean (3 vertex weights are 0, 3 midpoint weights
+# are 1/3).  Post-fix (`cell_mean_kernel_2d`), the limiter is
+# strictly cell-mean-preserving and the shock lands within 2 cells
 # of analytic.
 #
 # Pass criteria (P=2, NX=256, NY=16, HLLC + BJ limiter, T=0.20):

@@ -5,7 +5,8 @@
 # Verifies that the 2D GPU foundation works end-to-end at P=1/2/3:
 #   (a) LocalMesh2DGpu upload is lossless for Int32 tables and within
 #       Float32 round-trip precision for geometry tables.
-#   (b) cell_avg_kernel_2d matches an inline Float32 host computation.
+#   (b) cell_mean_kernel_2d (mass-matrix-weighted nodal quadrature)
+#       matches an inline Float32 host computation.
 #   (c) D_ref / Lift_ref upload via ReferenceElement2DGpu round-trips
 #       cleanly.
 #   (d) advection_volume_rhs_kernel_2d + advection_face_flux_kernel_2d
@@ -30,7 +31,7 @@ from std.math import sin, cos, isnan, isinf
 from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import (
-    LocalMesh2DGpu, launch_cell_avg_2d, launch_rk_update_2d,
+    LocalMesh2DGpu, launch_cell_mean_2d, launch_rk_update_2d,
 )
 from src.local_mesh_2d_gpu_advection import (
     launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
@@ -101,7 +102,13 @@ def check[P: Int]() raises:
             raise Error("periodic mesh has non-zero face_bc_type")
     print("    face_bc_type all zeros (periodic mesh OK)")
 
-    # cell_avg kernel on a synthetic scalar (NC=1).
+    # Reference-element upload round-trip.  Done before cell_mean test
+    # because that kernel needs node_weights from re_gpu.
+    var re_host = ReferenceElement2D[P]()
+    var re_gpu = ReferenceElement2DGpu[P](ctx, re_host)
+
+    # cell_mean kernel on a synthetic scalar (NC=1).  Mass-matrix-weighted
+    # nodal quadrature: sum_i q_i * w_i where w_i = node_weights[i].
     comptime NC = 1
     var n_total = gpu.num_elements * NP_p * NC
     var host_q = List[Float32]()
@@ -114,38 +121,34 @@ def check[P: Int]() raises:
     for k in range(n_total):
         hptr_q[k] = host_q[k]
     ctx.enqueue_copy(d_q, hbuf_q)
-    var d_avg = ctx.enqueue_create_buffer[DType.float32](
+    var d_mean = ctx.enqueue_create_buffer[DType.float32](
         gpu.num_elements * NC
     )
-    launch_cell_avg_2d[NP_p, NC](
-        ctx, d_q.unsafe_ptr(), gpu.num_elements, d_avg.unsafe_ptr(),
+    launch_cell_mean_2d[NP_p, NC](
+        ctx, d_q.unsafe_ptr(),
+        re_gpu.d_node_weights.unsafe_ptr(),
+        gpu.num_elements, d_mean.unsafe_ptr(),
     )
-    var hbuf_avg = ctx.enqueue_create_host_buffer[DType.float32](
+    var hbuf_mean = ctx.enqueue_create_host_buffer[DType.float32](
         gpu.num_elements * NC
     )
-    ctx.enqueue_copy(hbuf_avg, d_avg)
+    ctx.enqueue_copy(hbuf_mean, d_mean)
     ctx.synchronize()
-    var hptr_avg = hbuf_avg.unsafe_ptr()
-    var max_avg_err: Float32 = 0.0
-    var inv_np = Float32(1.0) / Float32(NP_p)
+    var hptr_mean = hbuf_mean.unsafe_ptr()
+    var max_mean_err: Float32 = 0.0
     for elem in range(gpu.num_elements):
         var s: Float32 = 0.0
         for nn in range(NP_p):
-            s += host_q[elem * NP_p + nn]
-        var cpu_avg = s * inv_np
-        var diff = cpu_avg - hptr_avg[elem]
+            s += host_q[elem * NP_p + nn] * Float32(re_host.node_weights[nn])
+        var diff = s - hptr_mean[elem]
         var adiff = _abs32(diff)
-        if adiff > max_avg_err:
-            max_avg_err = adiff
-    print("    cell_avg GPU vs CPU max err =", max_avg_err)
-    if max_avg_err > Float32(1.0e-4):
+        if adiff > max_mean_err:
+            max_mean_err = adiff
+    print("    cell_mean GPU vs CPU max err =", max_mean_err)
+    if max_mean_err > Float32(1.0e-4):
         raise Error(
-            "cell_avg_kernel_2d mismatch: " + String(max_avg_err)
+            "cell_mean_kernel_2d mismatch: " + String(max_mean_err)
         )
-
-    # Reference-element upload round-trip.
-    var re_host = ReferenceElement2D[P]()
-    var re_gpu = ReferenceElement2DGpu[P](ctx, re_host)
 
     var d_ref_len = 2 * NP_p * NP_p
     var hbuf_dref = ctx.enqueue_create_host_buffer[DType.float32](d_ref_len)

@@ -13,7 +13,6 @@
 #     bc_type, etc.) transfer directly.
 #
 #   * Generic NC-templated kernels usable by every physics path:
-#     `cell_avg_kernel_2d`        -- unweighted nodal-mean reduction
 #     `cell_mean_kernel_2d`       -- mass-matrix-weighted true cell mean
 #     `rk_update_kernel_2d`       -- q_out = a*q_a + b*q_b + cc*dt*rhs
 #
@@ -131,71 +130,23 @@ struct LocalMesh2DGpu[P: Int = 2](Movable):
 
 
 # ----------------------------------------------------------------------
-# First real GPU kernel on the 2D mesh: per-element cell averages.
+# Cell mean kernel (mass-matrix-weighted nodal quadrature).
 # ----------------------------------------------------------------------
-# Simple reduction -- one thread per element, loops over NP nodes and
-# NC components, writes the mean to `cell_avg_out[elem * NC + c]`.
-# Useful in its own right (cell averages feed the BJ slope limiter's
-# neighbour comparison) and serves as the "hello GPU" for the 2D mesh:
-# tests can round-trip an arbitrary q through the device and confirm
-# the kernel reads the right stride layout.
-# ----------------------------------------------------------------------
-
-def cell_avg_kernel_2d[NP: Int, NC: Int](
-    q:            UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-    cell_avg:     UnsafePointer[Float32, MutAnyOrigin],
-):
-    # One thread per (element, component) pair.  See the longer comment
-    # on `cell_mean_kernel_2d` below for the rationale (NC-fold
-    # parallelism + stride-1 coalesced q reads inside a warp).
-    var tid = Int(global_idx.x)
-    var total = num_elements * NC
-    if tid >= total:
-        return
-    var elem = tid // NC
-    var c = tid % NC
-    var base_q = elem * NP * NC
-    var inv_np = Float32(1.0) / Float32(NP)
-    var s: Float32 = 0.0
-    for nn in range(NP):
-        s += q[base_q + nn * NC + c]
-    cell_avg[elem * NC + c] = s * inv_np
-
-
-def launch_cell_avg_2d[NP: Int, NC: Int](
-    mut ctx: DeviceContext,
-    q:        UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-    cell_avg: UnsafePointer[Float32, MutAnyOrigin],
-) raises:
-    """Convenience launcher: 256 threads/block, one (elem, c) per thread."""
-    comptime _kernel = cell_avg_kernel_2d[NP, NC]
-    ctx.enqueue_function[_kernel, _kernel](
-        q, num_elements, cell_avg,
-        grid_dim=ceildiv(num_elements * NC, 256),
-        block_dim=256,
-    )
-
-
-# ----------------------------------------------------------------------
-# Cell mean kernel (mass-matrix-weighted average).
-# ----------------------------------------------------------------------
-# Unlike `cell_avg_kernel_2d` (unweighted nodal arithmetic mean),
-# this computes the true DG cell mean
+# Computes the true DG cell mean
 #
 #   cell_mean[elem, c] = sum_i q[elem, i, c] * w_i
 #
 # where w_i = int phi_i dr ds / A_ref = 2 int phi_i dr ds are the
 # mass-matrix quadrature weights (uploaded as `d_node_weights` in
-# ReferenceElement2DGpu).  For P=1 Lagrange all w_i = 1/3 and the two
-# kernels coincide.  For P>=2 they differ: at P=2 the 3 vertex
-# weights are zero and the 3 edge-midpoint weights are 1/3 each, so
-# an unweighted "average" over all 6 nodes is not the cell mean.
+# ReferenceElement2DGpu).  For P=1 Lagrange all w_i = 1/3.  For P>=2
+# the weights are non-uniform (e.g. at P=2 the 3 vertex weights are 0
+# and the 3 edge-midpoint weights are 1/3 each), so a naive unweighted
+# nodal average is NOT the cell mean.
 #
-# The BJ slope limiter needs this properly-weighted mean; using the
-# unweighted kernel at P>=2 produced a systematic shock-speed drift
-# (e.g. ~10 cells on the Sod shock tube at NX=256 / P=2).
+# The BJ slope limiter needs this properly-weighted mean; using an
+# unweighted reduction at P>=2 produces a systematic shock-speed drift
+# (e.g. ~10 cells on the Sod shock tube at NX=256 / P=2 -- caught by
+# `bench_euler_sod_limited_2d`).
 # ----------------------------------------------------------------------
 
 def cell_mean_kernel_2d[NP: Int, NC: Int](
