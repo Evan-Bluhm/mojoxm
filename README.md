@@ -818,11 +818,12 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
   via `make test`/`test-bc`.
 - **2D MHD shocked-Riemann problems are unsupported.** The
   `mhd_glm_*` kernels in `src/local_mesh_2d_gpu_mhd_glm.mojo` add
-  GLM as an opt-in NC=7 path (gated by 4 benches: alfven-via-GLM at
-  P=2 and P=3, psi transport, psi damp), but shocked 2D MHD
-  (Brio-Wu, OT vortex, ...) requires HLLD or constrained-transport
-  divB handling that we don't yet have -- GLM alone is insufficient.
-  Smooth 2D MHD problems work today; sharp 2D MHD shocks need HLLD.
+  GLM as an opt-in NC=7 path (gated by 6 benches: alfven-via-GLM,
+  psi-transport, psi-damp -- each with NP=6 (P=2) and NP=10 (P=3)
+  variants), but shocked 2D MHD (Brio-Wu, OT vortex, ...) requires
+  HLLD or constrained-transport divB handling that we don't yet
+  have -- GLM alone is insufficient.  Smooth 2D MHD problems work
+  today; sharp 2D MHD shocks need HLLD.
 - **2D pipeline still uses 2 kernel launches per RK stage** vs 1 in
   the 3D `rk_stage_kernel`.  The vol+lift+RK fusion in commits
   f7bff49..fa4257a brought 2D from 3 launches/stage down to 2
