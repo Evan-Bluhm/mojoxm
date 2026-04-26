@@ -39,7 +39,7 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 4
-comptime NP = num_tet_nodes(P)   # 20 at P=3
+comptime NP = num_tet_nodes(P)   # 35 at P=4
 
 comptime LX = 1.0
 comptime LY = 1.0
@@ -96,9 +96,9 @@ def _run(N: Int) raises -> Float64:
     var nvtx = NvtxContext()
     var ctx = DeviceContext()
 
-    # Build reference operators directly at P=3.  Cannot use the
+    # Build reference operators directly at P=4.  Cannot use the
     # P=2-defaulting build_reference_operators() in src.reference
-    # because Solver[Advection, P=3] needs NP=20 D_ref / Lift_ref /
+    # because Solver[Advection, P=4] needs NP=35 D_ref / Lift_ref /
     # node_weights.
     var re = ReferenceElement[P]()
     var D_ref = to_float32(re.D_ref)
@@ -147,7 +147,7 @@ def _run(N: Int) raises -> Float64:
     for k in range(n_owned_dof):
         host_ic.append(ic_ptr[k])
 
-    # CFL: tighter at higher P (factor 2P+1 = 7 at P=3).
+    # CFL: tighter at higher P (factor 2P+1 = 9 at P=4).
     var h = Float32(LX) / Float32(N)
     var v = sqrt(VX * VX + VY * VY + VZ * VZ)
     var dt_est = CFL * h / (v * Float32(2 * P + 1))
@@ -192,7 +192,7 @@ def main() raises:
         print("bench_advection_3d_p4: runs at np=1 only")
         return
 
-    print("bench_advection_3d_p4 (P=3 Gaussian one-period advection)")
+    print("bench_advection_3d_p4 (P=4 Gaussian one-period advection)")
     print("  P=", P, "  NP=", NP, "  refinement sweep N=6, 8, 12")
 
     var err6 = _run(6)

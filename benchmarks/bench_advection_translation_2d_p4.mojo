@@ -8,10 +8,10 @@
 # advection_rk_stage_2d[4].  NP = 15 (P=4 triangle) operators must
 # produce the design-rate P+1 = 5 convergence on smooth flow.
 #
-# This is the highest-order analytic-rate gate in the suite -- it
-# pushes both Lagrange basis construction (Vandermonde inverse) and
+# Pushes both Lagrange basis construction (Vandermonde inverse) and
 # the kernel-side comptime template instantiation past the P=2 / P=3
-# values that earlier benches exercise.
+# values that earlier benches exercise.  Pairs with the P=5 variant
+# (NP=21) for top-of-stack coverage in 2D.
 #
 # Pass criteria (P=4, SSPRK3, sweep N = 8, 12, 16):
 #   * rel L2 at N=16 < 5e-4 (Gaussian well-resolved at P=4)
@@ -162,7 +162,7 @@ def main() raises:
         print("bench_advection_translation_2d_p4: runs at np=1 only")
         return
 
-    print("bench_advection_translation_2d_p4 (P=3 Gaussian advection)")
+    print("bench_advection_translation_2d_p4 (P=4 Gaussian advection)")
     print("  P=", P, "  NP=", num_tri_nodes_2d(P),
           "  refinement sweep N=8, 12, 16")
 
