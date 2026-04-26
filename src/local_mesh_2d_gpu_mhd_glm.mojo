@@ -33,96 +33,6 @@ from std.gpu.host import DeviceContext
 from std.math import ceildiv, sqrt, exp
 
 
-
-def mhd_glm_volume_rhs_kernel_2d[NP: Int](
-    q:            UnsafePointer[Float32, MutAnyOrigin],
-    elem_invJ:    UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:        UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-    gamma:        Float32,
-    min_density:  Float32,
-    min_pressure: Float32,
-    c_h:          Float32,
-    vol_out:      UnsafePointer[Float32, MutAnyOrigin],
-):
-    var tid = Int(global_idx.x)
-    var total = num_elements * NP
-    if tid >= total:
-        return
-    var elem = tid // NP
-    var i    = tid %  NP
-
-    var iJ00 = elem_invJ[elem * 4 + 0]
-    var iJ01 = elem_invJ[elem * 4 + 1]
-    var iJ10 = elem_invJ[elem * 4 + 2]
-    var iJ11 = elem_invJ[elem * 4 + 3]
-
-    var acc0: Float32 = 0.0
-    var acc1: Float32 = 0.0
-    var acc2: Float32 = 0.0
-    var acc3: Float32 = 0.0
-    var acc4: Float32 = 0.0
-    var acc5: Float32 = 0.0
-    var acc6: Float32 = 0.0
-    var ch2 = c_h * c_h
-
-    for j in range(NP):
-        var base = (elem * NP + j) * 7
-        var rho = q[base + 0]
-        if rho < min_density:
-            rho = min_density
-        var mx = q[base + 1]
-        var my = q[base + 2]
-        var Bx = q[base + 3]
-        var By = q[base + 4]
-        var E  = q[base + 5]
-        var psi = q[base + 6]
-        var u = mx / rho
-        var v = my / rho
-        var BB = Bx * Bx + By * By
-        var ke = Float32(0.5) * (mx * mx + my * my) / rho
-        var mp = Float32(0.5) * BB
-        var p = (gamma - Float32(1.0)) * (E - ke - mp)
-        if p < min_pressure:
-            p = min_pressure
-        var pstar = p + Float32(0.5) * BB
-
-        var Fx0 = mx
-        var Fx1 = mx * u + pstar - Bx * Bx
-        var Fx2 = mx * v         - Bx * By
-        var Fx3 = psi
-        var Fx4 = u * By - v * Bx
-        var Fx5 = (E + pstar) * u - Bx * (u * Bx + v * By)
-        var Fx6 = ch2 * Bx
-        var Fy0 = my
-        var Fy1 = my * u         - By * Bx
-        var Fy2 = my * v + pstar - By * By
-        var Fy3 = v * Bx - u * By
-        var Fy4 = psi
-        var Fy5 = (E + pstar) * v - By * (u * Bx + v * By)
-        var Fy6 = ch2 * By
-
-        var D_r = D_ref[0 * NP * NP + i * NP + j]
-        var D_s = D_ref[1 * NP * NP + i * NP + j]
-
-        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (iJ10 * Fx0 + iJ11 * Fy0) * D_s
-        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (iJ10 * Fx1 + iJ11 * Fy1) * D_s
-        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (iJ10 * Fx2 + iJ11 * Fy2) * D_s
-        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (iJ10 * Fx3 + iJ11 * Fy3) * D_s
-        acc4 += (iJ00 * Fx4 + iJ01 * Fy4) * D_r + (iJ10 * Fx4 + iJ11 * Fy4) * D_s
-        acc5 += (iJ00 * Fx5 + iJ01 * Fy5) * D_r + (iJ10 * Fx5 + iJ11 * Fy5) * D_s
-        acc6 += (iJ00 * Fx6 + iJ01 * Fy6) * D_r + (iJ10 * Fx6 + iJ11 * Fy6) * D_s
-
-    var out = (elem * NP + i) * 7
-    vol_out[out + 0] = acc0
-    vol_out[out + 1] = acc1
-    vol_out[out + 2] = acc2
-    vol_out[out + 3] = acc3
-    vol_out[out + 4] = acc4
-    vol_out[out + 5] = acc5
-    vol_out[out + 6] = acc6
-
-
 # ----------------------------------------------------------------------
 # Fused IdealMHD-GLM volume + lift + RK update (2D, NC=7).
 # ----------------------------------------------------------------------
@@ -295,29 +205,6 @@ def launch_mhd_glm_vol_lift_2d[NP: Int, NFP: Int](
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
-
-
-def launch_mhd_glm_volume_rhs_2d[NP: Int](
-    mut ctx: DeviceContext,
-    q:            UnsafePointer[Float32, MutAnyOrigin],
-    elem_invJ:    UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:        UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-    gamma:        Float32,
-    min_density:  Float32,
-    min_pressure: Float32,
-    c_h:          Float32,
-    vol_out:      UnsafePointer[Float32, MutAnyOrigin],
-) raises:
-    var total = num_elements * NP
-    comptime _kernel = mhd_glm_volume_rhs_kernel_2d[NP]
-    ctx.enqueue_function[_kernel, _kernel](
-        q, elem_invJ, D_ref, num_elements,
-        gamma, min_density, min_pressure, c_h, vol_out,
-        grid_dim=ceildiv(total, 256),
-        block_dim=256,
-    )
-
 
 def mhd_glm_face_flux_kernel_2d[NP: Int, NFP: Int](
     q:              UnsafePointer[Float32, MutAnyOrigin],
