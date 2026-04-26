@@ -36,12 +36,18 @@ from std.math import ceildiv
 # where the solution is smooth.
 #
 # Two-pass structure:
-#   1. Caller first runs `cell_avg_kernel_2d[NP, NC]` into `d_cell_avg`
-#      (num_elements * NC Float32).
+#   1. Caller first runs `cell_mean_kernel_2d[NP, NC]` (mass-matrix-
+#      weighted, in `src/local_mesh_2d_gpu.mojo`) into a num_elements*NC
+#      Float32 scratch buffer.  The unweighted `cell_avg_kernel_2d`
+#      gives a wrong cell mean at P>=2 -- see the comment on line 135
+#      below and `bench_euler_sod_limited_2d` for the regression bug it
+#      caused.
 #   2. `bj_limit_kernel_2d[NP, NC]` -- one thread per element.  Reads
-#      own cell_avg[NC], peeks at 3 neighbours' component-0 averages to
+#      own cell_mean[NC], peeks at 3 neighbours' component-0 means to
 #      build nbr_min / nbr_max, computes Venkat theta on the own node
 #      deviations (component 0), and scales all NP*NC values in-place.
+# `bj_limit_full_2d` below orchestrates both passes; that's the public
+# entry point.
 #
 # Boundary faces have face_elem[fid*2+1] == face_elem[fid*2+0], so
 # neighbour-lookup self-matches and contributes nothing to the min/max
@@ -50,7 +56,7 @@ from std.math import ceildiv
 
 def bj_limit_kernel_2d[NP: Int, NC: Int](
     q:            UnsafePointer[Float32, MutAnyOrigin],
-    cell_avg:     UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
     elem_faces:   UnsafePointer[Int32,   MutAnyOrigin],
     face_elem:    UnsafePointer[Int32,   MutAnyOrigin],
     num_elements: Int,
@@ -60,9 +66,9 @@ def bj_limit_kernel_2d[NP: Int, NC: Int](
     if elem >= num_elements:
         return
 
-    var own_avg = cell_avg[elem * NC + 0]
-    var nbr_min = own_avg
-    var nbr_max = own_avg
+    var own_mean = cell_mean[elem * NC + 0]
+    var nbr_min = own_mean
+    var nbr_max = own_mean
     for lf in range(3):
         var fid = Int(elem_faces[elem * 3 + lf])
         var e_l = Int(face_elem[fid * 2 + 0])
@@ -70,7 +76,7 @@ def bj_limit_kernel_2d[NP: Int, NC: Int](
         var n = e_r if e_l == elem else e_l
         if n == elem:
             continue   # boundary face: don't constrain
-        var a = cell_avg[n * NC + 0]
+        var a = cell_mean[n * NC + 0]
         if a < nbr_min: nbr_min = a
         if a > nbr_max: nbr_max = a
 
@@ -79,15 +85,15 @@ def bj_limit_kernel_2d[NP: Int, NC: Int](
     var tiny: Float32 = 1.0e-30
     for nn in range(NP):
         var node_val = q[(elem * NP + nn) * NC + 0]
-        var delta = node_val - own_avg
+        var delta = node_val - own_mean
         var d_abs = delta if delta >= Float32(0.0) else -delta
         if d_abs <= tiny:
             continue
         var D: Float32
         if delta > Float32(0.0):
-            D = nbr_max - own_avg
+            D = nbr_max - own_mean
         else:
-            D = own_avg - nbr_min
+            D = own_mean - nbr_min
         if D < Float32(0.0):
             D = Float32(0.0)
         var D2 = D * D
@@ -103,18 +109,18 @@ def bj_limit_kernel_2d[NP: Int, NC: Int](
         return   # smooth cell, leave it alone
 
     # Apply theta uniformly to every node, every component.  Base
-    # per-component mean is the cell_avg buffer we already have.
+    # per-component mean is the cell_mean buffer we already have.
     for nn in range(NP):
         for c in range(NC):
             var offset = (elem * NP + nn) * NC + c
-            var base = cell_avg[elem * NC + c]
+            var base = cell_mean[elem * NC + c]
             q[offset] = base + theta * (q[offset] - base)
 
 
 def launch_bj_limit_2d[NP: Int, NC: Int](
     mut ctx: DeviceContext,
     q:            UnsafePointer[Float32, MutAnyOrigin],
-    cell_avg:     UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
     elem_faces:   UnsafePointer[Int32,   MutAnyOrigin],
     face_elem:    UnsafePointer[Int32,   MutAnyOrigin],
     num_elements: Int,
@@ -122,7 +128,7 @@ def launch_bj_limit_2d[NP: Int, NC: Int](
 ) raises:
     comptime _kernel = bj_limit_kernel_2d[NP, NC]
     ctx.enqueue_function[_kernel, _kernel](
-        q, cell_avg, elem_faces, face_elem, num_elements, venkat_eps2,
+        q, cell_mean, elem_faces, face_elem, num_elements, venkat_eps2,
         grid_dim=ceildiv(num_elements, 256),
         block_dim=256,
     )
