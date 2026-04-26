@@ -146,17 +146,21 @@ def cell_avg_kernel_2d[NP: Int, NC: Int](
     num_elements: Int,
     cell_avg:     UnsafePointer[Float32, MutAnyOrigin],
 ):
-    var elem = Int(global_idx.x)
-    if elem >= num_elements:
+    # One thread per (element, component) pair.  See the longer comment
+    # on `cell_mean_kernel_2d` below for the rationale (NC-fold
+    # parallelism + stride-1 coalesced q reads inside a warp).
+    var tid = Int(global_idx.x)
+    var total = num_elements * NC
+    if tid >= total:
         return
+    var elem = tid // NC
+    var c = tid % NC
     var base_q = elem * NP * NC
-    var base_avg = elem * NC
     var inv_np = Float32(1.0) / Float32(NP)
-    for c in range(NC):
-        var s: Float32 = 0.0
-        for nn in range(NP):
-            s += q[base_q + nn * NC + c]
-        cell_avg[base_avg + c] = s * inv_np
+    var s: Float32 = 0.0
+    for nn in range(NP):
+        s += q[base_q + nn * NC + c]
+    cell_avg[elem * NC + c] = s * inv_np
 
 
 def launch_cell_avg_2d[NP: Int, NC: Int](
@@ -165,11 +169,11 @@ def launch_cell_avg_2d[NP: Int, NC: Int](
     num_elements: Int,
     cell_avg: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
-    """Convenience launcher: 256 threads/block, one element per thread."""
+    """Convenience launcher: 256 threads/block, one (elem, c) per thread."""
     comptime _kernel = cell_avg_kernel_2d[NP, NC]
     ctx.enqueue_function[_kernel, _kernel](
         q, num_elements, cell_avg,
-        grid_dim=ceildiv(num_elements, 256),
+        grid_dim=ceildiv(num_elements * NC, 256),
         block_dim=256,
     )
 
