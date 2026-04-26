@@ -15,10 +15,10 @@
 # The IC is tanh-smoothed over 4 cells (~1.5%% of the domain) so P=2
 # nodes don't straddle a discontinuity at t=0; HLLC is well-behaved
 # on that profile without a slope limiter, and the physics matches
-# the Riemann solution within one cell.  Deliberately NOT using the
-# BJ-on-means limiter here -- it's not strictly mean-conservative at
-# P>=2 and displaces the shock by ~10 cells (see task #34).  The
-# shock is the tightest test of conservation, so we want it.
+# the Riemann solution within one cell.  The BJ-limited variant
+# `bench_euler_sod_limited_2d` exercises the same setup with the
+# Venkat-smoothed Barth-Jespersen limiter on top (used to compare
+# the limiter against the unlimited reference).
 #
 # Pass criteria (P=2, NX=256, NY=16, HLLC, T=0.20):
 #   * Left plateau at x=0.10 matches rho_L = 1.0 to within 2%%

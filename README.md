@@ -286,7 +286,7 @@ Nine reference drivers under `examples/`:
   to `benchmarks/profile_reports/<name>.kern.txt` for diff-ability
   across runs.  Baseline reports live in git for every benchmark.
 
-- **2D kernel fusion (task #36 phase 2):** Each 2D physics path now
+- **2D kernel fusion (phase 2):** Each 2D physics path now
   runs its flux pipeline in **2 kernel launches per SSPRK3 stage**
   (down from 3): the per-face flux kernel writes `fstar` to global,
   then a single per-(elem, node) fused vol+lift+RK kernel computes
