@@ -60,6 +60,7 @@ two_fluid_3d_test
 bench_advection_translation_2d
 bench_advection_translation_2d_p3
 bench_advection_translation_2d_p4
+bench_advection_translation_2d_p5
 bench_advection_outflow_2d
 bench_euler_vortex_2d
 bench_mhd_alfven_2d
