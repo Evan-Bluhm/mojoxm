@@ -197,7 +197,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 22 benchmarks remain
+  per stage **3 -> 2 (-33%%)**.  All 32 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
@@ -206,16 +206,20 @@ Nine reference drivers under `examples/`:
 
 ## Numerical scheme
 
-- **P2 Lagrange DG** on tetrahedra (10 nodes per element: 4 vertices +
-  6 edge midpoints). Node ordering matches `VTK_QUADRATIC_TETRA` (cell
-  type 24) so ParaView opens the output with no re-indexing.
+- **Lagrange DG at arbitrary P (validated P=1..5)** on tetrahedra.
+  Node count is `(P+1)(P+2)(P+3)/6` (10 at P=2, 20 at P=3, 35 at P=4,
+  56 at P=5); operators are constructed at compile time via Vandermonde
+  inverse + analytic Dirichlet-formula integration in
+  `src/reference.mojo`.  P=2 emits `VTK_QUADRATIC_TETRA` (cell type 24)
+  for direct ParaView compatibility; P>=3 emits `VTK_LAGRANGE_TETRAHEDRON`
+  (cell type 71).
 - **Kuhn 6-tet decomposition** of a Cartesian cell grid. Each cube
   owns 12 uniquely numbered faces (6 interior diagonal + 6 external on
   its +x/+y/+z boundaries). Face IDs are `owner_cell * 12 + face_type`,
   giving a Dict-free mesh build.
 - **Canonical face-node ordering by owner-cell cube-corner index**
   (ascending). Because Kuhn tets are translation-invariant, this makes
-  the `(tet, local_face, side) → element-local P2 node` mapping a set
+  the `(tet, local_face, side) → element-local node` mapping a set
   of small precomputed tables — no per-cell orientation bookkeeping
   and no special cases for periodic-wrap cells.
 - **Multi-component conserved state**: `q[(e*N_P + i)*NC + c]` where
