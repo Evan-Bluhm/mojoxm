@@ -106,6 +106,7 @@ bench_maxwell_outflow_3d
 bench_maxwell_inflow_3d
 bench_two_fluid_langmuir_3d
 bench_two_fluid_outflow_3d
+bench_two_fluid_walls_3d
 bench_euler_smooth_wave_3d
 bench_euler_smooth_wave_3d_p3
 bench_euler_flux_coverage_3d
