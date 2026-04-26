@@ -446,16 +446,12 @@ def mhd_glm_rk_stage_2d[P: Int](
     q_a:      UnsafePointer[Float32, MutAnyOrigin],
     q_b:      UnsafePointer[Float32, MutAnyOrigin],
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
-    vol_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    rhs_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     gamma: Float32, min_density: Float32, min_pressure: Float32,
     c_h: Float32, alpha_d: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
-    # Two flux launches per stage (down from three) plus psi damping.
-    _ = vol_scratch
-    _ = rhs_scratch
+    # Two flux launches per stage: face flux + fused vol+lift+RK.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_mhd_glm_face_flux_2d[NP, NFP](

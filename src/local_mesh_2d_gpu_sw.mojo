@@ -435,16 +435,12 @@ def sw_rk_stage_2d[P: Int](
     q_a:      UnsafePointer[Float32, MutAnyOrigin],
     q_b:      UnsafePointer[Float32, MutAnyOrigin],
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
-    vol_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    rhs_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     g: Float32, min_h: Float32,
     inflow_h: Float32, inflow_hu: Float32, inflow_hv: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
-    # Two launches per stage (down from three).
-    _ = vol_scratch
-    _ = rhs_scratch
+    # Two launches per stage: face flux + fused vol+lift+RK.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_sw_face_flux_2d[NP, NFP](
@@ -485,16 +481,13 @@ def sw_rk_stage_hll_2d[P: Int](
     q_a:      UnsafePointer[Float32, MutAnyOrigin],
     q_b:      UnsafePointer[Float32, MutAnyOrigin],
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
-    vol_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    rhs_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     g: Float32, min_h: Float32,
     inflow_h: Float32, inflow_hu: Float32, inflow_hv: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
-    # Two launches per stage (down from three), HLL flux variant.
-    _ = vol_scratch
-    _ = rhs_scratch
+    # HLL flux variant of the face flux + the same fused vol+lift+RK
+    # kernel as the Rusanov path.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_sw_face_flux_hll_2d[NP, NFP](

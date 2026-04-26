@@ -86,8 +86,6 @@ def main() raises:
     var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_vol = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_rhs = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
         gpu.num_faces * NFP_e * NC
     )
@@ -109,7 +107,7 @@ def main() raises:
         d_q.unsafe_ptr(),
         d_q.unsafe_ptr(), d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        d_fstar.unsafe_ptr(),
         gsw, min_h,
         Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(1.0), Float32(0.0), Float32(1.0), dt,
@@ -120,7 +118,7 @@ def main() raises:
         d_q1.unsafe_ptr(),
         d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        d_fstar.unsafe_ptr(),
         gsw, min_h,
         Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(0.75), Float32(0.25), Float32(0.25), dt,
@@ -131,7 +129,7 @@ def main() raises:
         d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        d_fstar.unsafe_ptr(),
         gsw, min_h,
         Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(1.0 / 3.0), Float32(2.0 / 3.0),
@@ -154,7 +152,7 @@ def main() raises:
         d_q.unsafe_ptr(),
         d_q.unsafe_ptr(), d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        d_fstar.unsafe_ptr(),
         gsw, min_h,
         Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(1.0), Float32(0.0), Float32(1.0), dt,
@@ -165,7 +163,7 @@ def main() raises:
         d_q1.unsafe_ptr(),
         d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        d_fstar.unsafe_ptr(),
         gsw, min_h,
         Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(0.75), Float32(0.25), Float32(0.25), dt,
@@ -176,7 +174,7 @@ def main() raises:
         d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+        d_fstar.unsafe_ptr(),
         gsw, min_h,
         Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(1.0 / 3.0), Float32(2.0 / 3.0),
