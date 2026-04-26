@@ -225,24 +225,13 @@ def launch_cell_mean_2d[NP: Int, NC: Int](
     )
 
 
-# ======================================================================
-# 2D scalar advection (NC=1) moved to
-# src/local_mesh_2d_gpu_advection.mojo.  Import advection_rk_stage_2d
-# (and the underlying kernels if needed) directly from that module.
-# The generic NC-templated helpers below (`rk_update_kernel_2d`,
-# `lift_combine_kernel_2d`, `lift_combine_rk_kernel_2d`) remain here:
-# they are reused by the legacy advection 3-launch path and by tests
-# that exercise individual stages.
-# ======================================================================
-
-
 # ----------------------------------------------------------------------
 # RK-update combiner: q_out = a * q_a + b * q_b + cc * dt * rhs.
 # ----------------------------------------------------------------------
-# Matches the SSPRK3 weighted combination pattern used in the 3D
-# Solver's rk_stage_kernel (separated here since the 2D pipeline
-# doesn't yet fuse rhs + update into a single shared-memory kernel).
-# One thread per nodal DOF; stateless, just arithmetic.
+# The fused per-physics `*_vol_lift_combine_rk_kernel_2d` paths perform
+# this update inline, so this kernel is currently only exercised by
+# `test/local_mesh_2d_gpu_test.mojo`, which builds an SSPRK3 stage out
+# of the individual primitives to gate them in isolation.
 # ----------------------------------------------------------------------
 
 def rk_update_kernel_2d[NP: Int, NC: Int](
@@ -277,42 +266,4 @@ def launch_rk_update_2d[NP: Int, NC: Int](
         block_dim=256,
     )
 
-
-# ======================================================================
-# 2D Euler (NC=4) moved to src/local_mesh_2d_gpu_euler.mojo.  Import
-# euler_rk_stage_2d (Rusanov) or euler_rk_stage_hllc_2d (HLLC) from
-# that module.
-# ======================================================================
-
-# ======================================================================
-# 2D Shallow Water (NC=3) moved to src/local_mesh_2d_gpu_sw.mojo.
-# Import sw_rk_stage_2d (Rusanov) or sw_rk_stage_hll_2d (HLL) from
-# that module.
-# ======================================================================
-
-# ======================================================================
-# Plain ideal 2D MHD (NC=6, no GLM) moved to
-# src/local_mesh_2d_gpu_mhd.mojo.  Import mhd_rk_stage_2d (and the
-# underlying kernels if needed) from that module.  For divergence
-# cleaning use the parallel NC=7 GLM stack in
-# src/local_mesh_2d_gpu_mhd_glm.mojo.
-# ======================================================================
-
-# ======================================================================
-# Maxwell 2D physics moved to src/local_mesh_2d_gpu_maxwell.mojo.
-# Import maxwell_rk_stage_2d (and the underlying kernels if needed)
-# directly from that module.
-# ======================================================================
-
-# ======================================================================
-# GLM-enabled 2D MHD (Dedner div-cleaning) moved to
-# src/local_mesh_2d_gpu_mhd_glm.mojo.  Import mhd_glm_rk_stage_2d /
-# launch_mhd_glm_psi_damp_2d from that module.
-# ======================================================================
-
-# ======================================================================
-# Barth-Jespersen slope limiter moved to
-# src/local_mesh_2d_gpu_limiter.mojo.  Import bj_limit_full_2d (and
-# the underlying kernels if needed) directly from that module.
-# ======================================================================
 
