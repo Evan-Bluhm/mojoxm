@@ -79,6 +79,7 @@ bench_shallow_water_wave_2d_rusanov
 bench_shallow_water_dam_break_2d
 bench_maxwell_cavity_2d
 bench_maxwell_plane_wave_2d
+bench_maxwell_te_plane_wave_2d
 bench_advection_3d
 bench_advection_3d_p3
 bench_advection_3d_p4
