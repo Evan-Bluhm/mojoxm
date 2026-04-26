@@ -39,9 +39,9 @@ from std.math import ceildiv
 #   1. Caller first runs `cell_mean_kernel_2d[NP, NC]` (mass-matrix-
 #      weighted, in `src/local_mesh_2d_gpu.mojo`) into a num_elements*NC
 #      Float32 scratch buffer.  The unweighted `cell_avg_kernel_2d`
-#      gives a wrong cell mean at P>=2 -- see the comment on line 135
-#      below and `bench_euler_sod_limited_2d` for the regression bug it
-#      caused.
+#      gives a wrong cell mean at P>=2 -- see the docstring on
+#      `bj_limit_full_2d` below and `bench_euler_sod_limited_2d` for
+#      the regression bug it caused.
 #   2. `bj_limit_kernel_2d[NP, NC]` -- one thread per element.  Reads
 #      own cell_mean[NC], peeks at 3 neighbours' component-0 means to
 #      build nbr_min / nbr_max, computes Venkat theta on the own node
