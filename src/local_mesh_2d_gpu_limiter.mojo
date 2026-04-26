@@ -108,13 +108,18 @@ def bj_limit_kernel_2d[NP: Int, NC: Int](
     if not (theta < Float32(1.0)):
         return   # smooth cell, leave it alone
 
-    # Apply theta uniformly to every node, every component.  Base
-    # per-component mean is the cell_mean buffer we already have.
+    # Apply theta uniformly to every node, every component.  Hoist
+    # the per-component mean reads into a register array so we
+    # don't re-read cell_mean[elem*NC+c] inside the per-node loop
+    # (NP*NC reads -> NC reads).  Same pattern as the 3D
+    # `bj_limiter_kernel` in src/solver.mojo.
+    var bases = InlineArray[Float32, NC](fill=Float32(0.0))
+    for c in range(NC):
+        bases[c] = cell_mean[elem * NC + c]
     for nn in range(NP):
         for c in range(NC):
             var offset = (elem * NP + nn) * NC + c
-            var base = cell_mean[elem * NC + c]
-            q[offset] = base + theta * (q[offset] - base)
+            q[offset] = bases[c] + theta * (q[offset] - bases[c])
 
 
 def launch_bj_limit_2d[NP: Int, NC: Int](
