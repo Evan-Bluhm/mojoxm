@@ -2,10 +2,10 @@
 # mpi_advection_test -- 50-step MPI correctness driver
 # ======================================================================
 #
-# Runs mpi_advection_gaussian for exactly 50 SSPRK3 steps and dumps
-# every rank's owned q field (plus each element's global-mesh id) to
-# a per-rank binary file.  scripts/test_mpi_correctness.sh builds
-# this driver, runs it at np=1 and np=4, and diffs the two dumps to
+# Runs scalar advection for exactly 50 SSPRK3 steps and dumps every
+# rank's owned q field (plus each element's global-mesh id) to a
+# per-rank binary file.  test/test_mpi_correctness.sh builds this
+# driver, runs it at np=1 and np=4, and diffs the two dumps to
 # confirm identical physics across rank counts.
 #
 # Output (per rank):

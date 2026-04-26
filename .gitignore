@@ -37,7 +37,6 @@ mpi_hello
 mpi_partition
 mpi_patch_mesh
 mpi_halo_pingpong
-mpi_advection_gaussian
 mpi_advection_test
 mpi_bc_test
 diagnostics_test
