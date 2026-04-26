@@ -35,7 +35,8 @@ from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
 from src import mpi
 from src.local_mesh_2d import LocalMesh2D
-from src.local_mesh_2d_gpu import LocalMesh2DGpu, sw_rk_stage_hll_2d
+from src.local_mesh_2d_gpu import LocalMesh2DGpu
+from src.local_mesh_2d_gpu_sw import sw_rk_stage_hll_2d
 from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
