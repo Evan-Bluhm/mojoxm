@@ -139,7 +139,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  55 analytic-solution gates tying schemes to closed-form reference
+  56 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D), and
@@ -179,7 +179,7 @@ Nine reference drivers under `examples/`:
     BC_OUTFLOW on all four faces; the third dispatch arm in
     `maxwell_face_flux_kernel_2d` that the cavity / plane-wave
     gates didn't exercise).
-  * **3D smooth (26):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (27):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -202,6 +202,9 @@ Nine reference drivers under `examples/`:
     `bench_mhd_glm_psi_damp_3d` (3D GLM psi-damping via the
     source_term hook in rk_stage_kernel; analytic decay match to
     Float32 epsilon),
+    `bench_mhd_glm_psi_transport_3d` (3D GLM psi/Bx linear-wave
+    coupling via the regular flux kernel; rel L2 ~4e-5 over one
+    period at c_h=1),
     `bench_maxwell_cavity_3d`,
     `bench_maxwell_plane_wave_3d` + `_p3` (TM plane wave on triply-
     periodic cube; the P=3 variant brings 3D Maxwell into NP=20
@@ -260,7 +263,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 55 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 56 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
