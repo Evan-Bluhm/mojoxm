@@ -356,23 +356,23 @@ under `src/`; problem-specific drivers live under `examples/`.
 
 | file                                | lines | role                                                                                   |
 |-------------------------------------|-------|----------------------------------------------------------------------------------------|
-| `src/reference.mojo`                |   729 | Reference element: arbitrary-order equispaced Lagrange (Vandermonde inverse + analytic integration), `D_ref`, `Lift_ref`, `face_to_elem` table |
-| `src/local_mesh.mojo`               |  1189 | Raw periodic Kuhn-tet mesh builder + BC overlay kernels, **GPU-resident**              |
-| `src/mesh.mojo`                     |   872 | Patch-aware `Mesh`: `LocalMesh` + partition / ghost ring / permutation + BC filtering  |
-| `src/boundary.mojo`                 |    52 | `BoundaryConditions` + `BC_WALL` / `BC_OUTFLOW` constants                              |
+| `src/reference.mojo`                |   744 | Reference element: arbitrary-order equispaced Lagrange (Vandermonde inverse + analytic integration), `D_ref`, `Lift_ref`, `face_to_elem` table |
+| `src/local_mesh.mojo`               |  1406 | Raw periodic Kuhn-tet mesh builder + BC overlay kernels, **GPU-resident**              |
+| `src/mesh.mojo`                     |   875 | Patch-aware `Mesh`: `LocalMesh` + partition / ghost ring / permutation + BC filtering  |
+| `src/boundary.mojo`                 |    83 | `BoundaryConditions` + BC_WALL / BC_OUTFLOW / BC_INFLOW constants + 2D variant         |
 | `src/partition.mojo`                |   192 | `(PX, PY, PZ)` factorisation of nprocs, minimising ghost-exchange surface              |
 | `src/halo_exchange.mojo`            |   476 | MPI pack / Isend / Irecv / unpack + per-direction BC skip flag                         |
-| `src/solver.mojo`                   |   667 | `Physics` trait, cooperative `rk_stage_kernel`, `Solver[PhysT]`, SSPRK3 stepper, per-NC shared-memory budget |
-| `src/advection.mojo`                |   102 | `Advection`: scalar upwind flux + wall / outflow BC                                    |
-| `src/euler.mojo`                    |   746 | `Euler`: 5-moment, 4 Riemann solvers, entropy fix, face rotation, gravity source       |
-| `src/maxwell.mojo`                  |   213 | `Maxwell`: vacuum E+B, Rusanov, PEC / outflow BC, uniform J / M source                 |
-| `src/shallow_water.mojo`            |   167 | `ShallowWater`: 2D shallow water embedded in 3D                                        |
-| `src/mhd.mojo`                      |   326 | `IdealMHD`: single-fluid MHD + Dedner GLM div(B) cleaning                              |
-| `src/two_fluid.mojo`                |   440 | `FiveMomentTwoFluid`: electron + ion + Maxwell + GLM, 17 components                    |
-| `src/vtu.mojo`                      |   372 | Zero-copy binary-appended VTU writer (one scalar field per frame)                      |
-| `src/async_writer.mojo`             |   167 | pthread-based `writev()` scatter-gather file writer                                    |
-| `src/frame_writer.mojo`             |   173 | Per-rank frame output: `FrameWriter[PhysT]`, auto rank-subdir + `mkdir -p` at init     |
-| `src/diagnostics.mojo`              |   ~250| `DiagnosticsWriter[PhysT]`: domain-integrated linear / squared / max-abs per-frame with allreduce |
+| `src/solver.mojo`                   |   954 | `Physics` trait, cooperative `rk_stage_kernel`, `Solver[PhysT, P]`, SSPRK3 stepper, BJ limiter pipeline |
+| `src/advection.mojo`                |   145 | `Advection`: scalar upwind flux + wall / outflow / inflow BC                           |
+| `src/euler.mojo`                    |   841 | `Euler`: 5-moment, 4 Riemann solvers, entropy fix, face rotation, gravity source       |
+| `src/maxwell.mojo`                  |   255 | `Maxwell`: vacuum E+B, Rusanov, full BC menu, uniform J / M source                     |
+| `src/shallow_water.mojo`            |   194 | `ShallowWater`: 2D shallow water embedded in 3D                                        |
+| `src/mhd.mojo`                      |   388 | `IdealMHD`: single-fluid MHD + Dedner GLM div(B) cleaning                              |
+| `src/two_fluid.mojo`                |   552 | `FiveMomentTwoFluid`: electron + ion + Maxwell + GLM, 17 components                    |
+| `src/vtu.mojo`                      |   312 | Zero-copy binary-appended VTU writer (one scalar field per frame)                      |
+| `src/async_writer.mojo`             |   174 | pthread-based `writev()` scatter-gather file writer                                    |
+| `src/frame_writer.mojo`             |   177 | Per-rank frame output: `FrameWriter[PhysT, P]`, auto rank-subdir + `mkdir -p` at init  |
+| `src/diagnostics.mojo`              |   197 | `DiagnosticsWriter[PhysT, P]`: domain-integrated linear / squared / max-abs per-frame with allreduce |
 | `src/time_integrator.mojo`          |   177 | `run_ssprk3_loop` and `run_ssprk3_loop_with_diagnostics`                               |
 | `src/nvtx.mojo`                     |    84 | Runtime-loaded NVTX shim for Nsight Systems timelines                                  |
 | `src/mpi.mojo` + `src/mpi_shim.c`   |   ~300| Mojo / C-shim bindings for OpenMPI (init, point-to-point, allreduce, request handling) |
