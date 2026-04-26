@@ -100,10 +100,7 @@ def main() raises:
             d_fstar.unsafe_ptr(),
             C_LIGHT,
             Float32(1.0), Float32(0.0), Float32(1.0), dt,
-            Float32(0.0), Float32(0.0), Float32(0.0),
-            Float32(0.0), Float32(0.0), Float32(0.0),
-            JX, Float32(0.0), Float32(0.0),
-            Float32(0.0), Float32(0.0), Float32(0.0),
+            Jx=JX,
         )
         maxwell_rk_stage_2d[P](
             ctx, gpu_mesh,
@@ -114,10 +111,7 @@ def main() raises:
             d_fstar.unsafe_ptr(),
             C_LIGHT,
             Float32(0.75), Float32(0.25), Float32(0.25), dt,
-            Float32(0.0), Float32(0.0), Float32(0.0),
-            Float32(0.0), Float32(0.0), Float32(0.0),
-            JX, Float32(0.0), Float32(0.0),
-            Float32(0.0), Float32(0.0), Float32(0.0),
+            Jx=JX,
         )
         maxwell_rk_stage_2d[P](
             ctx, gpu_mesh,
@@ -129,10 +123,7 @@ def main() raises:
             C_LIGHT,
             Float32(1.0 / 3.0), Float32(2.0 / 3.0),
             Float32(2.0 / 3.0), dt,
-            Float32(0.0), Float32(0.0), Float32(0.0),
-            Float32(0.0), Float32(0.0), Float32(0.0),
-            JX, Float32(0.0), Float32(0.0),
-            Float32(0.0), Float32(0.0), Float32(0.0),
+            Jx=JX,
         )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
