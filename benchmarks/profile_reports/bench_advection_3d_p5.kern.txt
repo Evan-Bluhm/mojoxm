@@ -1,0 +1,10 @@
+[6/8] Executing 'cuda_gpu_kern_sum' stats report
+
+ Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                             Name                            
+ --------  ---------------  ---------  --------  --------  --------  --------  -----------  -----------------------------------------------------------
+    100.0       2712626513      14868  182447.3  107713.0     37536    758018     120523.9  src_solver_rk_stage_kernel_I6A6A6A6AcB6A6A_e406eddad11334cb
+      0.0           227744          3   75914.7   76064.0     73088     78592       2755.0  src_local_mesh_build_elements_6A6A6A6A_8e7b91389545e444    
+      0.0            60864          3   20288.0   15744.0     15552     29568       8037.3  src_local_mesh_build_faces_ker6A6A6A6A_58ea96ffe859c057    
+      0.0            19712          3    6570.7    4608.0      2112     12992       5699.4  bench_advection_3d_p5_gaussian_6A6A_79e026aeb473e564       
+
+[7/8] Executing 'cuda_gpu_mem_time_sum' stats report
