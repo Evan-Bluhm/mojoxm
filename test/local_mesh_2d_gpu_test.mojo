@@ -30,9 +30,11 @@ from std.math import sin, cos, isnan, isinf
 from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import (
-    LocalMesh2DGpu, launch_cell_avg_2d,
+    LocalMesh2DGpu, launch_cell_avg_2d, launch_rk_update_2d,
+)
+from src.local_mesh_2d_gpu_advection import (
     launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
-    launch_rk_update_2d, advection_rk_stage_2d,
+    advection_rk_stage_2d,
 )
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
