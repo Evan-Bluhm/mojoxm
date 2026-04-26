@@ -101,6 +101,7 @@ bench_euler_smooth_wave_3d
 bench_euler_smooth_wave_3d_p3
 bench_euler_flux_coverage_3d
 bench_euler_hydrostatic_3d
+bench_euler_inflow_3d
 bench_euler_sod_3d
 bench_shallow_water_wave_3d
 bench_shallow_water_wave_3d_p3
