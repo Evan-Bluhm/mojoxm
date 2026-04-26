@@ -545,6 +545,25 @@ wall time is roughly an order of magnitude larger. The mean density
 drifts by ~2·10⁻⁶ over the 280-step run — well within single-precision
 round-off expectations.
 
+### 2D limiter pipeline cost split (`bench_euler_sod_limited_2d_p3`)
+
+Per-kernel breakdown on the limited Sod path at P=3 / NP=10 (per
+nsys, ~5300 SSPRK3 steps × 3 launches per stage):
+
+| kernel               | % of GPU time |
+|----------------------|---------------|
+| `bj_limit_kernel_2d` | 50.6%         |
+| `vol+lift+rk` (Euler)| 32.6%         |
+| `face_flux` (HLLC)   | 11.0%         |
+| `cell_mean_kernel_2d`|  5.8%         |
+
+The BJ limiter is the dominant cost at higher P -- more than the
+physics kernels combined.  Possible further optimization paths
+(documented in `project_2d_limiter_perf.md` memory): fuse cell_mean
+into the rk_stage kernel, two-pass shock-only-rewrite design,
+cooperative shared-memory reduction.  See the `benchmarks/profile_reports/`
+baselines for per-kernel measurements on every benchmark.
+
 ## Build & run
 
 ### Prerequisites
