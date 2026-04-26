@@ -111,9 +111,6 @@ def _run(NX: Int) raises -> Float64:
     var g_f = Float32(GRAVITY)
     var h_min_f = Float32(H_MIN)
     # BC_INFLOW ghosts (unused under periodic BCs but required by signature).
-    var inflow_h = Float32(0.0)
-    var inflow_hu = Float32(0.0)
-    var inflow_hv = Float32(0.0)
 
     for _ in range(num_steps):
         sw_rk_stage_hll_2d[P](
@@ -123,7 +120,7 @@ def _run(NX: Int) raises -> Float64:
             d_q.unsafe_ptr(), d_q.unsafe_ptr(),
             d_q1.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            g_f, h_min_f, inflow_h, inflow_hu, inflow_hv,
+            g_f, h_min_f,
             Float32(1.0), Float32(0.0), Float32(1.0), dt,
         )
         sw_rk_stage_hll_2d[P](
@@ -133,7 +130,7 @@ def _run(NX: Int) raises -> Float64:
             d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
             d_q2.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            g_f, h_min_f, inflow_h, inflow_hu, inflow_hv,
+            g_f, h_min_f,
             Float32(0.75), Float32(0.25), Float32(0.25), dt,
         )
         sw_rk_stage_hll_2d[P](
@@ -143,7 +140,7 @@ def _run(NX: Int) raises -> Float64:
             d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
             d_q.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            g_f, h_min_f, inflow_h, inflow_hu, inflow_hv,
+            g_f, h_min_f,
             Float32(1.0 / 3.0), Float32(2.0 / 3.0),
             Float32(2.0 / 3.0), dt,
         )

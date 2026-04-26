@@ -131,9 +131,6 @@ def main() raises:
 
     var g_f = Float32(G)
     var h_min_f = Float32(H_MIN)
-    var inflow_h = Float32(0.0)
-    var inflow_hu = Float32(0.0)
-    var inflow_hv = Float32(0.0)
     var venkat_eps = Float32(VENKAT_EPS)
 
     for _ in range(num_steps):
@@ -144,7 +141,7 @@ def main() raises:
             d_q.unsafe_ptr(), d_q.unsafe_ptr(),
             d_q1.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            g_f, h_min_f, inflow_h, inflow_hu, inflow_hv,
+            g_f, h_min_f,
             Float32(1.0), Float32(0.0), Float32(1.0), dt,
         )
         bj_limit_full_2d[P, NC](
@@ -159,7 +156,7 @@ def main() raises:
             d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
             d_q2.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            g_f, h_min_f, inflow_h, inflow_hu, inflow_hv,
+            g_f, h_min_f,
             Float32(0.75), Float32(0.25), Float32(0.25), dt,
         )
         bj_limit_full_2d[P, NC](
@@ -174,7 +171,7 @@ def main() raises:
             d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
             d_q.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            g_f, h_min_f, inflow_h, inflow_hu, inflow_hv,
+            g_f, h_min_f,
             Float32(1.0 / 3.0), Float32(2.0 / 3.0),
             Float32(2.0 / 3.0), dt,
         )

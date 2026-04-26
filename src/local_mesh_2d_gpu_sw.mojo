@@ -437,10 +437,14 @@ def sw_rk_stage_2d[P: Int](
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
     g: Float32, min_h: Float32,
-    inflow_h: Float32, inflow_hu: Float32, inflow_hv: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
+    inflow_h: Float32 = Float32(0.0),
+    inflow_hu: Float32 = Float32(0.0),
+    inflow_hv: Float32 = Float32(0.0),
 ) raises:
-    # Two launches per stage: face flux + fused vol+lift+RK.
+    # Two launches per stage: face flux + fused vol+lift+RK.  inflow_*
+    # default to zero; callers using BC_INFLOW pass via kwarg
+    # (`inflow_h=...`).
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_sw_face_flux_2d[NP, NFP](
@@ -483,11 +487,14 @@ def sw_rk_stage_hll_2d[P: Int](
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
     g: Float32, min_h: Float32,
-    inflow_h: Float32, inflow_hu: Float32, inflow_hv: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
+    inflow_h: Float32 = Float32(0.0),
+    inflow_hu: Float32 = Float32(0.0),
+    inflow_hv: Float32 = Float32(0.0),
 ) raises:
     # HLL flux variant of the face flux + the same fused vol+lift+RK
-    # kernel as the Rusanov path.
+    # kernel as the Rusanov path.  See sw_rk_stage_2d for the
+    # inflow_* default convention.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_sw_face_flux_hll_2d[NP, NFP](

@@ -135,8 +135,9 @@ def main() raises:
             d_q.unsafe_ptr(), d_q.unsafe_ptr(),
             d_q1.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            GRAVITY, H_MIN, inflow_h, inflow_hu, inflow_hv,
+            GRAVITY, H_MIN,
             Float32(1.0), Float32(0.0), Float32(1.0), dt,
+            inflow_h=inflow_h, inflow_hu=inflow_hu, inflow_hv=inflow_hv,
         )
         sw_rk_stage_hll_2d[P](
             ctx, gpu_mesh,
@@ -145,8 +146,9 @@ def main() raises:
             d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
             d_q2.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            GRAVITY, H_MIN, inflow_h, inflow_hu, inflow_hv,
+            GRAVITY, H_MIN,
             Float32(0.75), Float32(0.25), Float32(0.25), dt,
+            inflow_h=inflow_h, inflow_hu=inflow_hu, inflow_hv=inflow_hv,
         )
         sw_rk_stage_hll_2d[P](
             ctx, gpu_mesh,
@@ -155,9 +157,10 @@ def main() raises:
             d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
             d_q.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            GRAVITY, H_MIN, inflow_h, inflow_hu, inflow_hv,
+            GRAVITY, H_MIN,
             Float32(1.0 / 3.0), Float32(2.0 / 3.0),
             Float32(2.0 / 3.0), dt,
+            inflow_h=inflow_h, inflow_hu=inflow_hu, inflow_hv=inflow_hv,
         )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)

@@ -109,7 +109,6 @@ def main() raises:
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
         gsw, min_h,
-        Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(1.0), Float32(0.0), Float32(1.0), dt,
     )
     sw_rk_stage_2d[P](
@@ -120,7 +119,6 @@ def main() raises:
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
         gsw, min_h,
-        Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(0.75), Float32(0.25), Float32(0.25), dt,
     )
     sw_rk_stage_2d[P](
@@ -131,7 +129,6 @@ def main() raises:
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
         gsw, min_h,
-        Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(1.0 / 3.0), Float32(2.0 / 3.0),
         Float32(2.0 / 3.0), dt,
     )
@@ -154,7 +151,6 @@ def main() raises:
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
         gsw, min_h,
-        Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(1.0), Float32(0.0), Float32(1.0), dt,
     )
     sw_rk_stage_hll_2d[P](
@@ -165,7 +161,6 @@ def main() raises:
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
         gsw, min_h,
-        Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(0.75), Float32(0.25), Float32(0.25), dt,
     )
     sw_rk_stage_hll_2d[P](
@@ -176,7 +171,6 @@ def main() raises:
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
         gsw, min_h,
-        Float32(0.0), Float32(0.0), Float32(0.0),
         Float32(1.0 / 3.0), Float32(2.0 / 3.0),
         Float32(2.0 / 3.0), dt,
     )
