@@ -16,9 +16,9 @@ ship today:
   entropy fix, and optional uniform gravity source.  5 components.
 - **ShallowWater** — 2D shallow water (h, h·u, h·v) embedded in 3D
   with `F^z = 0`. Rusanov flux, slip-wall BC. 3 components.
-- **Maxwell** — vacuum Maxwell (E, B) with Rusanov flux, PEC / outflow
-  boundary conditions, and an optional uniform current source.
-  6 components.
+- **Maxwell** — vacuum Maxwell (E, B) with Rusanov flux, full BC menu
+  (PEC / outflow / prescribed-inflow), and optional uniform current
+  (J) + magnetization (M) sources.  6 components.
 - **IdealMHD** — single-fluid ideal MHD with Dedner GLM div(B)
   cleaning. 8 conservation components + 1 GLM scalar = 9 total.
 - **FiveMomentTwoFluid** — electron + ion fluids + full Maxwell + GLM.
