@@ -123,7 +123,8 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_maxwell_cavity_3d bench_maxwell_plane_wave_3d bench_two_fluid_langmuir_3d \
                 bench_euler_smooth_wave_3d bench_euler_smooth_wave_3d_p3 \
                 bench_euler_sod_3d \
-                bench_shallow_water_wave_3d bench_mhd_brio_wu_3d
+                bench_shallow_water_wave_3d bench_shallow_water_wave_3d_p3 \
+                bench_mhd_brio_wu_3d
 
 .PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-3d test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-diagnostics test-p3 test-all test-klone bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
@@ -327,10 +328,12 @@ bench-euler-sod-3d: bench_euler_sod_3d
 	./bench_euler_sod_3d
 bench-shallow-water-wave-3d: bench_shallow_water_wave_3d
 	./bench_shallow_water_wave_3d
+bench-shallow-water-wave-3d-p3: bench_shallow_water_wave_3d_p3
+	./bench_shallow_water_wave_3d_p3
 bench-mhd-brio-wu-3d: bench_mhd_brio_wu_3d
 	./bench_mhd_brio_wu_3d
 
-bench-all: bench-advection-translation-2d bench-advection-translation-2d-p3 bench-advection-translation-2d-p4 bench-advection-translation-2d-p5 bench-advection-outflow-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-mhd-alfven-glm-2d bench-mhd-glm-psi-transport-2d bench-mhd-glm-psi-damp-2d bench-euler-sod-2d bench-euler-sod-limited-2d bench-euler-smooth-wave-2d bench-euler-smooth-wave-2d-p3 bench-euler-channel-steady-2d bench-shallow-water-wave-2d bench-shallow-water-wave-2d-p3 bench-shallow-water-dam-break-2d bench-maxwell-cavity-2d bench-maxwell-plane-wave-2d bench-advection-3d bench-advection-3d-p3 bench-advection-3d-p4 bench-advection-3d-p5 bench-advection-outflow-3d bench-advection-inflow-3d bench-mhd-alfven-3d bench-maxwell-cavity-3d bench-maxwell-plane-wave-3d bench-two-fluid-langmuir-3d bench-euler-smooth-wave-3d bench-euler-smooth-wave-3d-p3 bench-euler-sod-3d bench-shallow-water-wave-3d bench-mhd-brio-wu-3d
+bench-all: bench-advection-translation-2d bench-advection-translation-2d-p3 bench-advection-translation-2d-p4 bench-advection-translation-2d-p5 bench-advection-outflow-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-mhd-alfven-glm-2d bench-mhd-glm-psi-transport-2d bench-mhd-glm-psi-damp-2d bench-euler-sod-2d bench-euler-sod-limited-2d bench-euler-smooth-wave-2d bench-euler-smooth-wave-2d-p3 bench-euler-channel-steady-2d bench-shallow-water-wave-2d bench-shallow-water-wave-2d-p3 bench-shallow-water-dam-break-2d bench-maxwell-cavity-2d bench-maxwell-plane-wave-2d bench-advection-3d bench-advection-3d-p3 bench-advection-3d-p4 bench-advection-3d-p5 bench-advection-outflow-3d bench-advection-inflow-3d bench-mhd-alfven-3d bench-maxwell-cavity-3d bench-maxwell-plane-wave-3d bench-two-fluid-langmuir-3d bench-euler-smooth-wave-3d bench-euler-smooth-wave-3d-p3 bench-euler-sod-3d bench-shallow-water-wave-3d bench-shallow-water-wave-3d-p3 bench-mhd-brio-wu-3d
 	@echo '=== ALL BENCHMARKS PASSED ==='
 
 # Profiling: run a benchmark under nsys with --stats=true and capture
@@ -415,10 +418,12 @@ profile-bench-euler-sod-3d: bench_euler_sod_3d
 	@bin=bench_euler_sod_3d; $(PROFILE_BIN)
 profile-bench-shallow-water-wave-3d: bench_shallow_water_wave_3d
 	@bin=bench_shallow_water_wave_3d; $(PROFILE_BIN)
+profile-bench-shallow-water-wave-3d-p3: bench_shallow_water_wave_3d_p3
+	@bin=bench_shallow_water_wave_3d_p3; $(PROFILE_BIN)
 profile-bench-mhd-brio-wu-3d: bench_mhd_brio_wu_3d
 	@bin=bench_mhd_brio_wu_3d; $(PROFILE_BIN)
 
-profile-bench-all: profile-bench-advection-translation-2d profile-bench-advection-translation-2d-p3 profile-bench-advection-translation-2d-p4 profile-bench-advection-translation-2d-p5 profile-bench-advection-outflow-2d profile-bench-euler-vortex-2d profile-bench-mhd-alfven-2d profile-bench-mhd-alfven-glm-2d profile-bench-mhd-glm-psi-transport-2d profile-bench-mhd-glm-psi-damp-2d profile-bench-euler-sod-2d profile-bench-euler-sod-limited-2d profile-bench-euler-smooth-wave-2d profile-bench-euler-smooth-wave-2d-p3 profile-bench-euler-channel-steady-2d profile-bench-shallow-water-wave-2d profile-bench-shallow-water-wave-2d-p3 profile-bench-shallow-water-dam-break-2d profile-bench-maxwell-cavity-2d profile-bench-maxwell-plane-wave-2d profile-bench-advection-3d profile-bench-advection-3d-p3 profile-bench-advection-3d-p4 profile-bench-advection-3d-p5 profile-bench-advection-outflow-3d profile-bench-advection-inflow-3d profile-bench-mhd-alfven-3d profile-bench-maxwell-cavity-3d profile-bench-maxwell-plane-wave-3d profile-bench-two-fluid-langmuir-3d profile-bench-euler-smooth-wave-3d profile-bench-euler-smooth-wave-3d-p3 profile-bench-euler-sod-3d profile-bench-shallow-water-wave-3d profile-bench-mhd-brio-wu-3d
+profile-bench-all: profile-bench-advection-translation-2d profile-bench-advection-translation-2d-p3 profile-bench-advection-translation-2d-p4 profile-bench-advection-translation-2d-p5 profile-bench-advection-outflow-2d profile-bench-euler-vortex-2d profile-bench-mhd-alfven-2d profile-bench-mhd-alfven-glm-2d profile-bench-mhd-glm-psi-transport-2d profile-bench-mhd-glm-psi-damp-2d profile-bench-euler-sod-2d profile-bench-euler-sod-limited-2d profile-bench-euler-smooth-wave-2d profile-bench-euler-smooth-wave-2d-p3 profile-bench-euler-channel-steady-2d profile-bench-shallow-water-wave-2d profile-bench-shallow-water-wave-2d-p3 profile-bench-shallow-water-dam-break-2d profile-bench-maxwell-cavity-2d profile-bench-maxwell-plane-wave-2d profile-bench-advection-3d profile-bench-advection-3d-p3 profile-bench-advection-3d-p4 profile-bench-advection-3d-p5 profile-bench-advection-outflow-3d profile-bench-advection-inflow-3d profile-bench-mhd-alfven-3d profile-bench-maxwell-cavity-3d profile-bench-maxwell-plane-wave-3d profile-bench-two-fluid-langmuir-3d profile-bench-euler-smooth-wave-3d profile-bench-euler-smooth-wave-3d-p3 profile-bench-euler-sod-3d profile-bench-shallow-water-wave-3d profile-bench-shallow-water-wave-3d-p3 profile-bench-mhd-brio-wu-3d
 	@echo '=== All profile reports written to benchmarks/profile_reports/ ==='
 
 test-klone:

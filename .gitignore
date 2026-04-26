@@ -91,6 +91,7 @@ bench_euler_smooth_wave_3d
 bench_euler_smooth_wave_3d_p3
 bench_euler_sod_3d
 bench_shallow_water_wave_3d
+bench_shallow_water_wave_3d_p3
 bench_mhd_brio_wu_3d
 advection_gaussian_2d_gpu
 euler_vortex_2d_gpu
