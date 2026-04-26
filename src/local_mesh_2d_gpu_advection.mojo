@@ -307,19 +307,13 @@ def advection_rk_stage_2d[P: Int](
     q_a:      UnsafePointer[Float32, MutAnyOrigin],
     q_b:      UnsafePointer[Float32, MutAnyOrigin],
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
-    vol_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    rhs_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     vx: Float32, vy: Float32, inflow_q: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
-    # Two launches per stage (down from three): face flux, then a fused
-    # vol+lift+RK kernel that computes the volume RHS locally without
-    # round-tripping through global vol_scratch.  vol_scratch and
-    # rhs_scratch are unused on the fused path (kept in the signature
-    # for backward compatibility with drivers that allocated them).
-    _ = vol_scratch
-    _ = rhs_scratch
+    # Two launches per stage: face flux, then a fused vol+lift+RK kernel
+    # that computes the volume RHS locally without round-tripping
+    # through a global scratch buffer.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_advection_face_flux_2d[NP, NFP](
