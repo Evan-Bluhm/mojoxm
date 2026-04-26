@@ -12,9 +12,8 @@
 #     buffers, and enqueues the upload.  Int32 tables (face topology,
 #     bc_type, etc.) transfer directly.
 #
-#   * Generic NC-templated kernels usable by every physics path:
+#   * Generic NC-templated kernel usable by every physics path:
 #     `cell_mean_kernel_2d`       -- mass-matrix-weighted true cell mean
-#     `rk_update_kernel_2d`       -- q_out = a*q_a + b*q_b + cc*dt*rhs
 #
 # Per-physics kernels live in dedicated sibling modules to keep this
 # file focused on the shared infrastructure:
@@ -184,48 +183,6 @@ def launch_cell_mean_2d[NP: Int, NC: Int](
     ctx.enqueue_function[_kernel, _kernel](
         q, node_weights, num_elements, cell_mean,
         grid_dim=ceildiv(num_elements * NC, 256),
-        block_dim=256,
-    )
-
-
-# ----------------------------------------------------------------------
-# RK-update combiner: q_out = a * q_a + b * q_b + cc * dt * rhs.
-# ----------------------------------------------------------------------
-# The fused per-physics `*_vol_lift_combine_rk_kernel_2d` paths perform
-# this update inline, so this kernel is currently only exercised by
-# `test/local_mesh_2d_gpu_test.mojo`, which builds an SSPRK3 stage out
-# of the individual primitives to gate them in isolation.
-# ----------------------------------------------------------------------
-
-def rk_update_kernel_2d[NP: Int, NC: Int](
-    q_a:     UnsafePointer[Float32, MutAnyOrigin],
-    q_b:     UnsafePointer[Float32, MutAnyOrigin],
-    rhs:     UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
-    q_out:   UnsafePointer[Float32, MutAnyOrigin],
-):
-    var tid = Int(global_idx.x)
-    var total = num_elements * NP * NC
-    if tid >= total:
-        return
-    q_out[tid] = a * q_a[tid] + b * q_b[tid] + cc * dt * rhs[tid]
-
-
-def launch_rk_update_2d[NP: Int, NC: Int](
-    mut ctx: DeviceContext,
-    q_a:     UnsafePointer[Float32, MutAnyOrigin],
-    q_b:     UnsafePointer[Float32, MutAnyOrigin],
-    rhs:     UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
-    q_out:   UnsafePointer[Float32, MutAnyOrigin],
-) raises:
-    var total = num_elements * NP * NC
-    comptime _kernel = rk_update_kernel_2d[NP, NC]
-    ctx.enqueue_function[_kernel, _kernel](
-        q_a, q_b, rhs, num_elements, a, b, cc, dt, q_out,
-        grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
 
