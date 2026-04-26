@@ -12,8 +12,13 @@
 #
 # Public entry point: `bj_limit_full_2d[P, NC](ctx, mesh, q,
 # node_weights, cell_mean_scratch, venkat_eps)`.  Internally chains
-# `launch_cell_mean_2d` (parent module, mass-matrix-weighted mean)
-# with the BJ scaling pass.
+# `launch_cell_mean_2d` (parent module, mass-matrix-weighted mean) +
+# `launch_bj_limit_compute_theta_2d` + `launch_bj_limit_apply_2d`.
+#
+# `cell_mean_scratch` is sized `num_elements * (NC + 1)` Float32: the
+# first `num_elements * NC` slots hold the per-component cell means,
+# the trailing `num_elements` slots hold the per-element theta from
+# the compute pass (read by the apply pass).
 # ======================================================================
 
 from src.local_mesh_2d_gpu import LocalMesh2DGpu, launch_cell_mean_2d
@@ -26,41 +31,53 @@ from std.math import ceildiv
 # ----------------------------------------------------------------------
 # Barth-Jespersen slope limiter (Venkatakrishnan-smoothed), 2D GPU.
 # ----------------------------------------------------------------------
-# Post-stage limiter that scales every nodal deviation from the local
-# mean by the tightest theta keeping the scaled deviation within the
-# (min, max) cell-average range over self + 3 face neighbours, sampled
-# on component 0 (density).  The scaling is then applied uniformly to
-# every NC component so coupled quantities (e.g. mass + momentum) stay
-# consistent.  Venkat smoothing (epsilon>0) avoids over-limiting smooth
-# regions -- epsilon=0 recovers raw BJ, which kills P+1 accuracy even
-# where the solution is smooth.
-#
-# Two-pass structure:
+# Three-pass structure (the cell_mean pass is the caller's
+# `launch_cell_mean_2d` invocation; the limiter contributes the other
+# two):
 #   1. Caller first runs `cell_mean_kernel_2d[NP, NC]` (mass-matrix-
 #      weighted, in `src/local_mesh_2d_gpu.mojo`) into a num_elements*NC
 #      Float32 scratch buffer.  The unweighted `cell_avg_kernel_2d`
 #      gives a wrong cell mean at P>=2 -- see the docstring on
 #      `bj_limit_full_2d` below and `bench_euler_sod_limited_2d` for
 #      the regression bug it caused.
-#   2. `bj_limit_kernel_2d[NP, NC]` -- one thread per element.  Reads
-#      own cell_mean[NC], peeks at 3 neighbours' component-0 means to
-#      build nbr_min / nbr_max, computes Venkat theta on the own node
-#      deviations (component 0), and scales all NP*NC values in-place.
-# `bj_limit_full_2d` below orchestrates both passes; that's the public
-# entry point.
+#   2. `bj_limit_compute_theta_kernel_2d[NP, NC]` -- one thread per
+#      element, reads own cell_mean[NC] + 3 neighbour means on
+#      component 0, then loops NP nodes to compute Venkat theta on
+#      the component-0 deviation.  Writes the per-element theta
+#      into `theta_out[elem]`.
+#   3. `bj_limit_apply_kernel_2d[NP, NC]` -- one thread per
+#      `(elem, nn, c)` triple (NP*NC threads per element, total
+#      `num_elements * NP * NC` threads).  Reads theta[elem]; if
+#      theta >= 1 the cell is smooth so the thread early-exits
+#      (no read/write).  Otherwise applies the uniform scaling
+#      `q[i] = bm + theta * (q[i] - bm)` for its single (nn, c)
+#      slot.  Adjacent threads in a warp share the same elem (and
+#      thus the same theta) for nearly all of the warp, and they
+#      hit consecutive q[] memory addresses -> coalesced access.
+#
+# This split exists because the original kernel did one thread per
+# element and one thread did NP*NC consecutive q-stores at stride 1
+# WITHIN the element but stride-NP*NC ACROSS the warp -- 32 threads
+# in the warp wrote to 32 disjoint NP*NC-float blocks each, which was
+# a worst-case uncoalesced pattern (it accounted for >50% of GPU
+# time on the shocked-Sod P=3 limited gate).  The split moves the
+# apply work into a coalesced kernel with NP*NC = 40x more threads
+# (P=3, NC=4) and keeps the (cheap) theta-reduction pass at the old
+# parallelism.
 #
 # Boundary faces have face_elem[fid*2+1] == face_elem[fid*2+0], so
 # neighbour-lookup self-matches and contributes nothing to the min/max
 # range -- matching the CPU convention for bc-limited cells.
 # ----------------------------------------------------------------------
 
-def bj_limit_kernel_2d[NP: Int, NC: Int](
+def bj_limit_compute_theta_kernel_2d[NP: Int, NC: Int](
     q:            UnsafePointer[Float32, MutAnyOrigin],
     cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
     elem_faces:   UnsafePointer[Int32,   MutAnyOrigin],
     face_elem:    UnsafePointer[Int32,   MutAnyOrigin],
     num_elements: Int,
     venkat_eps2:  Float32,
+    theta_out:    UnsafePointer[Float32, MutAnyOrigin],
 ):
     var elem = Int(global_idx.x)
     if elem >= num_elements:
@@ -105,24 +122,33 @@ def bj_limit_kernel_2d[NP: Int, NC: Int](
         if alpha < theta:
             theta = alpha
 
+    theta_out[elem] = theta
+
+
+def bj_limit_apply_kernel_2d[NP: Int, NC: Int](
+    q:            UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
+    theta_in:     UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+):
+    # One thread per (elem, nn, c) -- coalesced apply pass.
+    var idx = Int(global_idx.x)
+    var total = num_elements * NP * NC
+    if idx >= total:
+        return
+
+    var elem = idx // (NP * NC)
+    var theta = theta_in[elem]
     if not (theta < Float32(1.0)):
-        return   # smooth cell, leave it alone
+        return  # smooth cell: no read/write needed
 
-    # Apply theta uniformly to every node, every component.  Hoist
-    # the per-component mean reads into a register array so we
-    # don't re-read cell_mean[elem*NC+c] inside the per-node loop
-    # (NP*NC reads -> NC reads).  Same pattern as the 3D
-    # `bj_limiter_kernel` in src/solver.mojo.
-    var bases = InlineArray[Float32, NC](fill=Float32(0.0))
-    for c in range(NC):
-        bases[c] = cell_mean[elem * NC + c]
-    for nn in range(NP):
-        for c in range(NC):
-            var offset = (elem * NP + nn) * NC + c
-            q[offset] = bases[c] + theta * (q[offset] - bases[c])
+    var c = idx % NC
+    var bm = cell_mean[elem * NC + c]
+    var v = q[idx]
+    q[idx] = bm + theta * (v - bm)
 
 
-def launch_bj_limit_2d[NP: Int, NC: Int](
+def launch_bj_limit_compute_theta_2d[NP: Int, NC: Int](
     mut ctx: DeviceContext,
     q:            UnsafePointer[Float32, MutAnyOrigin],
     cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
@@ -130,23 +156,47 @@ def launch_bj_limit_2d[NP: Int, NC: Int](
     face_elem:    UnsafePointer[Int32,   MutAnyOrigin],
     num_elements: Int,
     venkat_eps2:  Float32,
+    theta_out:    UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
-    comptime _kernel = bj_limit_kernel_2d[NP, NC]
+    comptime _kernel = bj_limit_compute_theta_kernel_2d[NP, NC]
     ctx.enqueue_function[_kernel, _kernel](
-        q, cell_mean, elem_faces, face_elem, num_elements, venkat_eps2,
+        q, cell_mean, elem_faces, face_elem, num_elements,
+        venkat_eps2, theta_out,
         grid_dim=ceildiv(num_elements, 256),
         block_dim=256,
     )
 
 
-# Convenience two-pass orchestrator: run the mass-weighted cell mean
-# then the BJ limiter on top of a caller-supplied scratch buffer.
-# Drivers call this between RK stages to enforce monotonicity on
-# shocked problems.  `node_weights` is `ReferenceElement2DGpu.d_node_weights`;
-# using the unweighted `cell_avg_kernel_2d` here would systematically
-# drift shock speeds at P>=2 because Lagrange-P>=2 node weights aren't
-# uniform (at P=2 the 3 vertex weights are 0, the 3 midpoint weights
-# are 1/3).
+def launch_bj_limit_apply_2d[NP: Int, NC: Int](
+    mut ctx: DeviceContext,
+    q:            UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
+    theta_in:     UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+) raises:
+    comptime _kernel = bj_limit_apply_kernel_2d[NP, NC]
+    var total = num_elements * NP * NC
+    ctx.enqueue_function[_kernel, _kernel](
+        q, cell_mean, theta_in, num_elements,
+        grid_dim=ceildiv(total, 256),
+        block_dim=256,
+    )
+
+
+# Convenience three-pass orchestrator: run the mass-weighted cell mean
+# then the BJ compute_theta + apply kernels on top of a caller-supplied
+# scratch buffer.  Drivers call this between RK stages to enforce
+# monotonicity on shocked problems.  `node_weights` is
+# `ReferenceElement2DGpu.d_node_weights`; using the unweighted
+# `cell_avg_kernel_2d` here would systematically drift shock speeds at
+# P>=2 because Lagrange-P>=2 node weights aren't uniform (at P=2 the
+# 3 vertex weights are 0, the 3 midpoint weights are 1/3).
+#
+# `cell_mean_scratch` must be `num_elements * (NC + 1)` floats: the
+# first num_elements*NC slots hold the per-component cell means
+# (written by the cell_mean pass, read by both downstream passes),
+# the trailing num_elements slots hold the per-element theta written
+# by compute_theta and read by apply.
 
 def bj_limit_full_2d[P: Int, NC: Int](
     mut ctx: DeviceContext,
@@ -157,13 +207,19 @@ def bj_limit_full_2d[P: Int, NC: Int](
     venkat_eps:    Float32 = Float32(0.1),
 ) raises:
     comptime NP = num_tri_nodes_2d(P)
+    var theta_scratch = cell_mean_scratch + mesh.num_elements * NC
     launch_cell_mean_2d[NP, NC](
         ctx, q, node_weights, mesh.num_elements, cell_mean_scratch,
     )
-    launch_bj_limit_2d[NP, NC](
+    launch_bj_limit_compute_theta_2d[NP, NC](
         ctx, q, cell_mean_scratch,
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_face_elem.unsafe_ptr(),
         mesh.num_elements,
         venkat_eps * venkat_eps,
+        theta_scratch,
+    )
+    launch_bj_limit_apply_2d[NP, NC](
+        ctx, q, cell_mean_scratch, theta_scratch,
+        mesh.num_elements,
     )

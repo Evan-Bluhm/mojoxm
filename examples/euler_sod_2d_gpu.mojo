@@ -118,7 +118,7 @@ def main() raises:
         gpu_mesh.num_faces * NFP_e * NC
     )
     var d_cell_avg = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_elements * NC
+        gpu_mesh.num_elements * (NC + 1)
     )
 
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
