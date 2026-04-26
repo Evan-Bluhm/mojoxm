@@ -90,6 +90,7 @@ bench_maxwell_te_plane_wave_2d
 bench_maxwell_plane_wave_2d_p3
 bench_maxwell_outflow_2d
 bench_maxwell_inflow_2d
+bench_maxwell_uniform_j_2d
 bench_advection_3d
 bench_advection_3d_p3
 bench_advection_3d_p4

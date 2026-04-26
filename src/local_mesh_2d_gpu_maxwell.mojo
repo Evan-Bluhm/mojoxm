@@ -43,6 +43,12 @@ def maxwell_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
     q_b:               UnsafePointer[Float32, MutAnyOrigin],
     num_elements:      Int,
     c:                 Float32,
+    Jx:                Float32,
+    Jy:                Float32,
+    Jz:                Float32,
+    Mx:                Float32,
+    My:                Float32,
+    Mz:                Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
     q_out:             UnsafePointer[Float32, MutAnyOrigin],
 ):
@@ -121,13 +127,16 @@ def maxwell_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
             face4 += sLf * fstar[fbase + 4]
             face5 += sLf * fstar[fbase + 5]
 
+    # Volume + lift, with uniform J / M source per src/maxwell.mojo:
+    #   dE/dt += -c^2 * J,  dB/dt += -M
+    # (matches the 3D Maxwell.source_term path.)
     var idx = (elem * NP + i) * 6
-    var rhs0 = acc0 - inv_2A * face0
-    var rhs1 = acc1 - inv_2A * face1
-    var rhs2 = acc2 - inv_2A * face2
-    var rhs3 = acc3 - inv_2A * face3
-    var rhs4 = acc4 - inv_2A * face4
-    var rhs5 = acc5 - inv_2A * face5
+    var rhs0 = acc0 - inv_2A * face0 - c2 * Jx
+    var rhs1 = acc1 - inv_2A * face1 - c2 * Jy
+    var rhs2 = acc2 - inv_2A * face2 - c2 * Jz
+    var rhs3 = acc3 - inv_2A * face3 - Mx
+    var rhs4 = acc4 - inv_2A * face4 - My
+    var rhs5 = acc5 - inv_2A * face5 - Mz
     q_out[idx + 0] = a * q_a[idx + 0] + b * q_b[idx + 0] + cc * dt * rhs0
     q_out[idx + 1] = a * q_a[idx + 1] + b * q_b[idx + 1] + cc * dt * rhs1
     q_out[idx + 2] = a * q_a[idx + 2] + b * q_b[idx + 2] + cc * dt * rhs2
@@ -152,6 +161,12 @@ def launch_maxwell_vol_lift_2d[NP: Int, NFP: Int](
     q_b:               UnsafePointer[Float32, MutAnyOrigin],
     num_elements:      Int,
     c:                 Float32,
+    Jx:                Float32,
+    Jy:                Float32,
+    Jz:                Float32,
+    Mx:                Float32,
+    My:                Float32,
+    Mz:                Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
     q_out:             UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
@@ -161,7 +176,9 @@ def launch_maxwell_vol_lift_2d[NP: Int, NFP: Int](
         q_in, elem_invJ, D_ref, fstar,
         elem_inv_2A, elem_faces, elem_face_side, elem_canon_to_ref,
         face_length, Lift_ref, q_a, q_b,
-        num_elements, c, a, b, cc, dt, q_out,
+        num_elements, c,
+        Jx, Jy, Jz, Mx, My, Mz,
+        a, b, cc, dt, q_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
@@ -316,9 +333,17 @@ def maxwell_rk_stage_2d[P: Int](
     inflow_Bx: Float32 = Float32(0.0),
     inflow_By: Float32 = Float32(0.0),
     inflow_Bz: Float32 = Float32(0.0),
+    Jx: Float32 = Float32(0.0),
+    Jy: Float32 = Float32(0.0),
+    Jz: Float32 = Float32(0.0),
+    Mx: Float32 = Float32(0.0),
+    My: Float32 = Float32(0.0),
+    Mz: Float32 = Float32(0.0),
 ) raises:
     # Two launches per stage (face flux + fused vol+lift+RK).  Following
-    # the same fusion pattern as the other 2D physics paths.
+    # the same fusion pattern as the other 2D physics paths.  J / M
+    # default to zero so existing callers (vacuum / cavity / plane-wave
+    # benches) are source-compatible without edits.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_maxwell_face_flux_2d[NP, NFP](
@@ -341,5 +366,7 @@ def maxwell_rk_stage_2d[P: Int](
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
         Lift_ref, q_a, q_b,
-        mesh.num_elements, c, a, b, cc, dt, q_out,
+        mesh.num_elements, c,
+        Jx, Jy, Jz, Mx, My, Mz,
+        a, b, cc, dt, q_out,
     )

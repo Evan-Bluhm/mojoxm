@@ -143,13 +143,13 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  65 analytic-solution gates tying schemes to closed-form reference
+  66 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D), and
   P=4 / P=5 rate gates for advection in both 2D (NP=15, NP=21) and
   3D (NP=35, NP=56).
-  * **2D smooth (21):** `bench_advection_translation_2d` (rate >= 2.0)
+  * **2D smooth (22):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
     `bench_advection_inflow_2d` (BC_INFLOW preservation gate with
@@ -190,7 +190,13 @@ Nine reference drivers under `examples/`:
     preservation under BC_OUTFLOW / BC_INFLOW on all four faces;
     closes the BC_INFLOW dispatch arm of
     `maxwell_face_flux_kernel_2d`, which previously fell through
-    to the BC_OUTFLOW branch).
+    to the BC_OUTFLOW branch),
+    `bench_maxwell_uniform_j_2d` (uniform J on a periodic box with
+    q=0 IC: dEx/dt = -c^2*Jx gives an exact linear ramp.  Closes
+    a 2D feature-parity gap -- 3D Maxwell had `Maxwell.source_term`
+    coupling J / M into the RK rhs, but the 2D vol+lift kernel had
+    no source-term plumbing at all.  Now both paths exercise the
+    same physics).
   * **3D smooth (31):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
@@ -284,7 +290,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 65 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 66 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
