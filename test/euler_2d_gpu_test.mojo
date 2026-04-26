@@ -23,8 +23,9 @@ from std.gpu.host import DeviceContext, DeviceBuffer
 from std.math import isnan, isinf
 from src import mpi
 from src.local_mesh_2d import LocalMesh2D
-from src.local_mesh_2d_gpu import (
-    LocalMesh2DGpu, euler_rk_stage_2d, euler_rk_stage_hllc_2d,
+from src.local_mesh_2d_gpu import LocalMesh2DGpu
+from src.local_mesh_2d_gpu_euler import (
+    euler_rk_stage_2d, euler_rk_stage_hllc_2d,
 )
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
