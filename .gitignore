@@ -76,6 +76,7 @@ bench_euler_channel_steady_2d
 bench_shallow_water_wave_2d
 bench_shallow_water_wave_2d_p3
 bench_shallow_water_wave_2d_rusanov
+bench_shallow_water_inflow_2d
 bench_shallow_water_dam_break_2d
 bench_maxwell_cavity_2d
 bench_maxwell_plane_wave_2d
