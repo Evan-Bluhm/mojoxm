@@ -106,7 +106,7 @@ def _run(N: Int) raises -> Float64:
             d_q.unsafe_ptr(), d_q.unsafe_ptr(),
             d_q1.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            VX, VY, Float32(0.0),
+            VX, VY,
             Float32(1.0), Float32(0.0), Float32(1.0), dt,
         )
         advection_rk_stage_2d[P](
@@ -116,7 +116,7 @@ def _run(N: Int) raises -> Float64:
             d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
             d_q2.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            VX, VY, Float32(0.0),
+            VX, VY,
             Float32(0.75), Float32(0.25), Float32(0.25), dt,
         )
         advection_rk_stage_2d[P](
@@ -126,7 +126,7 @@ def _run(N: Int) raises -> Float64:
             d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
             d_q.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            VX, VY, Float32(0.0),
+            VX, VY,
             Float32(1.0 / 3.0), Float32(2.0 / 3.0),
             Float32(2.0 / 3.0), dt,
         )

@@ -319,7 +319,7 @@ def check[P: Int]() raises:
         d_q.unsafe_ptr(), d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        vx, vy, Float32(0.0),
+        vx, vy,
         Float32(1.0), Float32(0.0), Float32(1.0), dt_step,
     )
     advection_rk_stage_2d[P](
@@ -329,7 +329,7 @@ def check[P: Int]() raises:
         d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        vx, vy, Float32(0.0),
+        vx, vy,
         Float32(0.75), Float32(0.25), Float32(0.25), dt_step,
     )
     advection_rk_stage_2d[P](
@@ -339,7 +339,7 @@ def check[P: Int]() raises:
         d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        vx, vy, Float32(0.0),
+        vx, vy,
         Float32(1.0 / 3.0), Float32(2.0 / 3.0),
         Float32(2.0 / 3.0), dt_step,
     )
