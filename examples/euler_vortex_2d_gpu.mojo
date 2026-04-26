@@ -7,10 +7,10 @@
 # periodic domain it must equal the initial condition, so the final L2
 # discrepancy is pure scheme dissipation.
 #
-# Uses the Float32 Euler kernels from `src/local_mesh_2d_gpu.mojo`:
-#   euler_volume_rhs_kernel_2d + euler_face_flux_kernel_2d +
-#   lift_combine_kernel_2d[NC=4] + rk_update_kernel_2d[NC=4],
-# orchestrated by `euler_rk_stage_2d`.  Every NUM_FRAMES-th step
+# Uses the Float32 Euler kernels from `src/local_mesh_2d_gpu_euler.mojo`:
+#   euler_face_flux_kernel_2d + euler_vol_lift_combine_rk_kernel_2d
+# (2 launches per SSPRK3 stage), orchestrated by `euler_rk_stage_2d`.
+# Every NUM_FRAMES-th step
 # downloads the state, extracts density, and writes a VTU frame to
 # `output/frame_euler2d_gpu_NNNNN.vtu` + a `.pvd` collection -- same
 # layout as the CPU driver, so `scripts/animate_2d.py` works unchanged.

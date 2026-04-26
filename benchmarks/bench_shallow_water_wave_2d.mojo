@@ -18,11 +18,11 @@
 #   * mass conservation: total h sum drift < 1e-4 (float32 roundoff)
 #   * no NaN / Inf
 #
-# Covers the 2D SW pipeline (sw_rk_stage_hll_2d / sw_volume_rhs /
-# sw_face_flux / lift_combine_rk) with an exact one-line analytic
-# reference, parallel to bench_euler_smooth_wave_2d for Euler.  The
-# 2D SW stack previously had no analytic benchmark; shallow_water_drop
-# examples are demonstrations, not regression gates.
+# Covers the 2D SW pipeline (sw_rk_stage_hll_2d -> sw_face_flux_hll +
+# sw_vol_lift_combine_rk) with an exact one-line analytic reference,
+# parallel to bench_euler_smooth_wave_2d for Euler.  The 2D SW stack
+# previously had no analytic benchmark; shallow_water_drop examples
+# are demonstrations, not regression gates.
 # ======================================================================
 
 from std.math import sqrt, pi, sin, isnan, isinf
