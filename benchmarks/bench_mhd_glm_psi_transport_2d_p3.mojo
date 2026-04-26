@@ -1,0 +1,214 @@
+# ======================================================================
+# bench_mhd_glm_psi_transport_2d_p3 -- GLM psi/Bx wave at P=3 (NP=10)
+# ======================================================================
+#
+# P=3 counterpart of bench_mhd_glm_psi_transport_2d.  Same linear-
+# wave (psi, Bx) coupling test on a periodic [0,1]^2 box, routed
+# through LocalMesh2D[3] / mhd_glm_rk_stage_2d[3] with NP=10 nodes
+# per triangle.
+#
+# bench_mhd_alfven_glm_2d_p3 already exercises the GLM kernels at
+# P=3 in the c_h=0 branch (smooth Alfven, no transport).  This
+# bench complements it by exercising the c_h>0 transport branch:
+# the dpsi/dt + c_h^2 div(B) and dB/dt - grad(psi) cross-coupling
+# terms at NP=10 -- different code path than the alfven-flux loop.
+#
+# Linearised GLM on a rest state:
+#   d psi/dt + c_h^2 d Bx/dx = 0
+#   d Bx/dt + d psi/dx = 0
+# At T = LX / c_h the wave returns to IC (cos(2 pi) = 1).
+#
+# Pass criteria (P=3, sweep N = 12, 16, 24 with square cells, c_h=1):
+#   * rel L2(state) < 5e-4 at every N (small amplitude A=0.01 keeps
+#     linear theory exact to O(A^2); P=3 dispersion is well below).
+#   * |psi| <= 1.1 * A throughout -- no spurious amplification.
+#   * no NaN / Inf
+# ======================================================================
+
+from std.math import sqrt, pi, sin, isnan, isinf
+from std.sys import has_accelerator
+from std.gpu.host import DeviceContext, DeviceBuffer
+from src import mpi
+from src.local_mesh_2d import LocalMesh2D
+from src.local_mesh_2d_gpu import LocalMesh2DGpu
+from src.local_mesh_2d_gpu_mhd_glm import mhd_glm_rk_stage_2d
+from src.reference_2d import (
+    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+)
+from src.reference_2d_gpu import ReferenceElement2DGpu
+
+
+comptime P = 3
+comptime NY = 4
+comptime LX = 1.0
+
+comptime GAMMA: Float64    = 5.0 / 3.0
+comptime RHO0:  Float64    = 1.0
+comptime P0:    Float64    = 1.0
+comptime AMPLITUDE: Float64 = 0.01
+comptime C_H:   Float64    = 1.0
+comptime ALPHA_D: Float64  = 0.0   # transport-only; no damping
+
+comptime CFL: Float64 = 0.10
+comptime T_FINAL: Float64 = LX / C_H   # one wave period
+
+comptime L2_MAX_REL: Float64 = 5.0e-4
+
+
+def _run(NX: Int) raises -> Float64:
+    comptime NP_p = num_tri_nodes_2d(P)
+    comptime NFP_e = num_edge_nodes(P)
+    comptime NC = 7
+    var ctx = DeviceContext()
+    var LY = Float64(NY) / Float64(NX) * LX
+
+    var host_mesh = LocalMesh2D[P](NX, NY, LX, LY)
+    var host_re = ReferenceElement2D[P]()
+    var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY)
+    var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
+    var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
+
+    var k_wave = 2.0 * pi / LX
+    var n_q = gpu_mesh.num_elements * NP_p * NC
+    var host_q = List[Float32]()
+    var host_ic = List[Float32]()
+
+    var E0 = P0 / (GAMMA - 1.0)
+    for elem in range(gpu_mesh.num_elements):
+        for nn in range(NP_p):
+            var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
+            var psi = AMPLITUDE * sin(k_wave * x)
+            host_q.append(Float32(RHO0));   host_ic.append(Float32(RHO0))
+            host_q.append(Float32(0.0));    host_ic.append(Float32(0.0))
+            host_q.append(Float32(0.0));    host_ic.append(Float32(0.0))
+            host_q.append(Float32(0.0));    host_ic.append(Float32(0.0))
+            host_q.append(Float32(0.0));    host_ic.append(Float32(0.0))
+            host_q.append(Float32(E0));     host_ic.append(Float32(E0))
+            host_q.append(Float32(psi));    host_ic.append(Float32(psi))
+
+    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_vol = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_rhs = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e * NC
+    )
+    var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
+    var hptr_q = hbuf_q.unsafe_ptr()
+    for k in range(n_q):
+        hptr_q[k] = host_q[k]
+    ctx.enqueue_copy(d_q, hbuf_q)
+    ctx.synchronize()
+
+    # CFL: factor 2P+1 = 7 at P=3.
+    var h_cell = LX / Float64(NX)
+    var dt_est = CFL * h_cell / (C_H * Float64(2 * P + 1))
+    var num_steps = Int(T_FINAL / dt_est) + 1
+    var dt = Float32(T_FINAL / Float64(num_steps))
+
+    var gamma_f = Float32(GAMMA)
+    var min_rho = Float32(1.0e-6)
+    var min_p   = Float32(1.0e-6)
+    var c_h_f   = Float32(C_H)
+    var alpha_d_f = Float32(ALPHA_D)
+
+    for _ in range(num_steps):
+        mhd_glm_rk_stage_2d[P](
+            ctx, gpu_mesh,
+            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+            d_q.unsafe_ptr(),
+            d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+            d_q1.unsafe_ptr(),
+            d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+            gamma_f, min_rho, min_p, c_h_f, alpha_d_f,
+            Float32(1.0), Float32(0.0), Float32(1.0), dt,
+        )
+        mhd_glm_rk_stage_2d[P](
+            ctx, gpu_mesh,
+            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+            d_q1.unsafe_ptr(),
+            d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+            d_q2.unsafe_ptr(),
+            d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+            gamma_f, min_rho, min_p, c_h_f, alpha_d_f,
+            Float32(0.75), Float32(0.25), Float32(0.25), dt,
+        )
+        mhd_glm_rk_stage_2d[P](
+            ctx, gpu_mesh,
+            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+            d_q2.unsafe_ptr(),
+            d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+            d_q.unsafe_ptr(),
+            d_vol.unsafe_ptr(), d_fstar.unsafe_ptr(), d_rhs.unsafe_ptr(),
+            gamma_f, min_rho, min_p, c_h_f, alpha_d_f,
+            Float32(1.0 / 3.0), Float32(2.0 / 3.0),
+            Float32(2.0 / 3.0), dt,
+        )
+    ctx.synchronize()
+
+    ctx.enqueue_copy(hbuf_q, d_q)
+    ctx.synchronize()
+
+    var sum_sq: Float64 = 0.0
+    var sum_ic: Float64 = 0.0
+    var psi_max: Float32 = 0.0
+    for k in range(n_q):
+        var v = hptr_q[k]
+        if isnan(v) or isinf(v):
+            raise Error("bench_mhd_glm_psi_transport_2d_p3: non-finite")
+        var err = Float64(v - host_ic[k])
+        sum_sq += err * err
+        var ic = Float64(host_ic[k])
+        sum_ic += ic * ic
+    var n_elem_nodes = gpu_mesh.num_elements * NP_p
+    for i in range(n_elem_nodes):
+        var p = hptr_q[i * NC + 6]
+        var a = p if p >= Float32(0.0) else -p
+        if a > psi_max: psi_max = a
+
+    var amp_bound = Float32(AMPLITUDE) * Float32(1.1)
+    if psi_max > amp_bound:
+        raise Error(
+            String("bench_mhd_glm_psi_transport_2d_p3 FAILED: psi_max ")
+            + String(psi_max) + " exceeds 1.1 * AMPLITUDE "
+            + String(amp_bound)
+        )
+
+    var l2 = sqrt(sum_sq / Float64(n_q))
+    var l2_ic = sqrt(sum_ic / Float64(n_q))
+    return l2 / l2_ic
+
+
+def main() raises:
+    comptime assert has_accelerator(), "Requires GPU"
+    mpi.init()
+    print("bench_mhd_glm_psi_transport_2d_p3 (GLM linear psi/Bx wave, P=3)")
+    print("  P=", P, "  NP=", num_tri_nodes_2d(P),
+          "  c_h=", C_H, "  T=", T_FINAL, "  amplitude=", AMPLITUDE)
+
+    var err12 = _run(12)
+    print("  N=12  rel L2 =", err12)
+    var err16 = _run(16)
+    print("  N=16  rel L2 =", err16)
+    var err24 = _run(24)
+    print("  N=24  rel L2 =", err24)
+
+    if err12 > L2_MAX_REL:
+        raise Error(
+            "bench_mhd_glm_psi_transport_2d_p3 FAILED: NX=12 rel L2 "
+            + String(err12) + " exceeds " + String(L2_MAX_REL)
+        )
+    if err16 > L2_MAX_REL:
+        raise Error(
+            "bench_mhd_glm_psi_transport_2d_p3 FAILED: NX=16 rel L2 "
+            + String(err16) + " exceeds " + String(L2_MAX_REL)
+        )
+    if err24 > L2_MAX_REL:
+        raise Error(
+            "bench_mhd_glm_psi_transport_2d_p3 FAILED: NX=24 rel L2 "
+            + String(err24) + " exceeds " + String(L2_MAX_REL)
+        )
+
+    print("=== bench_mhd_glm_psi_transport_2d_p3 PASSED ===")
+    mpi.finalize()
