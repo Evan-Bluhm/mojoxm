@@ -18,11 +18,13 @@
 #   * no non-finite values
 #
 # Empirically the rel L2 sits at 6.81%% at P=3 / HLLC -- essentially
-# identical to the P=2 / Rusanov + P=2 / HLLC bench's 6.7-6.8%%.  The
-# Shu-Erlebacher vortex at T=10 has a long-horizon dissipation floor
-# that's roughly P- and flux-type-independent -- both Rusanov-alpha
-# and HLLC's contact-restored arithmetic produce essentially the
-# same time-integrated wake.  Higher P doesn't help here.
+# identical to the P=2 / Rusanov + P=2 / HLLC bench's 6.7-6.8%% AND
+# to bench_euler_vortex_3d / _p3's 6.8%% / 6.80%%.  The Shu-Erlebacher
+# vortex at T=10 has a long-horizon dissipation floor that's roughly
+# dimension-, P-, and flux-type-independent.  Likely cause: SSPRK3
+# Float32 round-off accumulation (eps * num_steps * accumulation
+# factor) dominates at this horizon, and higher P shrinks dt by
+# (2P+1) which roughly cancels the per-step spatial improvement.
 #
 # As with the P=2 bench, this is a regression-detector for catastrophic
 # blow-up, not a convergence-rate gate -- the advection rate benches
