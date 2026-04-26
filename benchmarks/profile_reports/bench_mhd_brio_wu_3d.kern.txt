@@ -2,17 +2,17 @@
 
  Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                             Name                            
  --------  ---------------  ---------  --------  --------  --------  --------  -----------  -----------------------------------------------------------
-     74.2       1011182181       3021  334717.7  331425.0    319330    795044      25180.4  src_solver_rk_stage_kernel_I6A6A6A6AcB6A6A_7c3f570523ec7842
-     22.2        302748970       3021  100214.8   99745.0     88160    353922       4872.1  src_solver_bj_limiter_kernel6A6A6A6AcB6A_5b40018572e48988  
-      3.6         48795869       3021   16152.2   16224.0     14848    305441       5290.7  src_solver_compute_cell_averag6A6A6A6A_063243dd86f47919    
-      0.0            38881          1   38881.0   38881.0     38881     38881          0.0  src_local_mesh_build_elements_6A6A6A6A_b4fb09db0125e176    
-      0.0            34464          1   34464.0   34464.0     34464     34464          0.0  bench_mhd_brio_wu_3d_brio_wu_ic6A6A_7661648075d6fa75       
-      0.0            14400          1   14400.0   14400.0     14400     14400          0.0  src_local_mesh_build_faces_ker6A6A6A6A_3680e9f99a1681d1    
-      0.0             4353          1    4353.0    4353.0      4353      4353          0.0  src_local_mesh_apply_minus_z_b6A6A6A6A_c8c28a08f1399a09    
-      0.0             4160          1    4160.0    4160.0      4160      4160          0.0  src_local_mesh_apply_minus_y_b6A6A6A6A_bb9ea5ec2dbbab96    
-      0.0             2240          1    2240.0    2240.0      2240      2240          0.0  src_local_mesh_apply_minus_x_b6A6A6A6A_37462209e700eb49    
+     75.3       1016808469       3021  336580.1  334722.0    321826    694180      13917.2  src_solver_rk_stage_kernel_I6A6A6A6AcB6A6A_7c3f570523ec7842
+     22.3        301007730       3021   99638.4   98720.0     86945    457571      11609.8  src_solver_bj_limiter_kernel6A6A6A6AcB6A_5b40018572e48988  
+      2.4         32994601       3021   10921.7   10912.0     10624     12032        105.6  src_solver_compute_cell_averag6A6A6A6A_063243dd86f47919    
+      0.0            38817          1   38817.0   38817.0     38817     38817          0.0  src_local_mesh_build_elements_6A6A6A6A_b4fb09db0125e176    
+      0.0            32736          1   32736.0   32736.0     32736     32736          0.0  bench_mhd_brio_wu_3d_brio_wu_ic6A6A_7661648075d6fa75       
+      0.0            14176          1   14176.0   14176.0     14176     14176          0.0  src_local_mesh_build_faces_ker6A6A6A6A_3680e9f99a1681d1    
+      0.0             4352          1    4352.0    4352.0      4352      4352          0.0  src_local_mesh_apply_minus_z_b6A6A6A6A_c8c28a08f1399a09    
+      0.0             4193          1    4193.0    4193.0      4193      4193          0.0  src_local_mesh_apply_minus_y_b6A6A6A6A_bb9ea5ec2dbbab96    
+      0.0             2272          1    2272.0    2272.0      2272      2272          0.0  src_local_mesh_apply_minus_x_b6A6A6A6A_37462209e700eb49    
       0.0             1728          1    1728.0    1728.0      1728      1728          0.0  src_local_mesh_apply_plus_y_bc6A6A6A6A_eb57f0e906e160d9    
       0.0             1728          1    1728.0    1728.0      1728      1728          0.0  src_local_mesh_apply_plus_z_bc6A6A6A6A_58aa7a5ffc83f85a    
-      0.0             1536          1    1536.0    1536.0      1536      1536          0.0  src_local_mesh_apply_plus_x_bc6A6A6A6A_c6994c630f35afad    
+      0.0             1504          1    1504.0    1504.0      1504      1504          0.0  src_local_mesh_apply_plus_x_bc6A6A6A6A_c6994c630f35afad    
 
 [7/8] Executing 'cuda_gpu_mem_time_sum' stats report

@@ -413,20 +413,27 @@ def compute_cell_averages_kernel[NP: Int, NC: Int](
     num_local:    Int,
     cell_avg_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
-    var elem = Int(global_idx.x)
-    if elem >= num_local:
+    # One thread per (element, component) pair (NC-fold parallelism
+    # vs the original 1-thread-per-element design).  Adjacent threads
+    # in a warp access q[base_q + nn*NC + c] at consecutive c values
+    # for the same (elem, nn) -- stride-1 inside a warp, full
+    # coalescing on the q reads.  Same refactor applied to the 2D
+    # `cell_mean_kernel_2d` in commit eff0cba (2.3x speedup at NP=10).
+    var tid = Int(global_idx.x)
+    var total = num_local * NC
+    if tid >= total:
         return
+    var elem = tid // NC
+    var c = tid % NC
     var base_q = elem * NP * NC
-    var base_avg = elem * NC
     # Mass-matrix-weighted nodal quadrature for the exact P=P Lagrange
     # cell mean.  node_weights[] is normalised so sum == 1 over the
     # reference element; weights can be negative (e.g. -1/20 at P=2
     # tet vertex nodes), so the naive unweighted average is wrong.
-    for c in range(NC):
-        var s: Float32 = 0.0
-        for nn in range(NP):
-            s += node_weights[nn] * q[base_q + nn * NC + c]
-        cell_avg_out[base_avg + c] = s
+    var s: Float32 = 0.0
+    for nn in range(NP):
+        s += node_weights[nn] * q[base_q + nn * NC + c]
+    cell_avg_out[elem * NC + c] = s
 
 
 def bj_limiter_kernel[NP: Int, NC: Int](
@@ -761,14 +768,16 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         if num_owned == 0:
             return
 
-        # Pass 1: cell averages over every local element.
+        # Pass 1: cell averages over every local element.  One thread
+        # per (element, component) pair for NC-fold parallelism +
+        # coalesced q reads (see kernel comment).
         comptime _avg_kernel = compute_cell_averages_kernel[Self.NP, Self.NC]
         self.ctx.enqueue_function[_avg_kernel, _avg_kernel](
             q_ptr,
             self.d_node_weights.unsafe_ptr(),
             num_local,
             self.d_cell_avg.unsafe_ptr(),
-            grid_dim=ceildiv(num_local, 256),
+            grid_dim=ceildiv(num_local * Self.NC, 256),
             block_dim=256,
         )
 
