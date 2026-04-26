@@ -1,12 +1,12 @@
 # ======================================================================
-# local_mesh_2d_gpu_mhd_glm.mojo -- GLM-enabled 2D MHD (NC=7).
+# local_mesh_2d_gpu_mhd_glm.mojo -- GLM-enabled 2D MHD (NC=7)
 # ======================================================================
-# Extracted from src/local_mesh_2d_gpu.mojo as the second step in
-# splitting that file along physics boundaries (Maxwell extracted in
-# the previous commit).  See `src/local_mesh_2d_gpu_maxwell.mojo` for
-# the pattern.
+# State (rho, mx, my, Bx, By, E, psi).  Driver entry point:
+# `mhd_glm_rk_stage_2d[P]` for the 2-launch flux update;
+# `launch_mhd_glm_psi_damp_2d[NP]` is invoked separately by drivers
+# once per timestep for the Strang-split psi damping (see below).
 #
-# Adds Dedner-Kemm-Kroner-Munz-Schnitzer-Wesenberg generalised
+# Adds the Dedner-Kemm-Kroner-Munz-Schnitzer-Wesenberg generalised
 # Lagrange multiplier divergence-cleaning equation:
 #
 #   dB/dt + div(u B - B u + psi I) = 0           (modified)

@@ -1,16 +1,12 @@
 # ======================================================================
-# local_mesh_2d_gpu_sw.mojo -- 2D Shallow Water (NC=3) GPU kernels.
+# local_mesh_2d_gpu_sw.mojo -- 2D Shallow Water (NC=3) GPU kernels
 # ======================================================================
-# Extracted from src/local_mesh_2d_gpu.mojo as the fourth step in
-# splitting that file along physics boundaries (Maxwell, MHD GLM, and
-# plain MHD already extracted).  Pattern matches the prior modules:
-# physics docs colocated with kernels, LocalMesh2DGpu re-imported
-# from the parent module as the shared mesh anchor.
-#
-# State (h, mx=h*u, my=h*v).  Two flux variants:
-#   * sw_face_flux_kernel_2d / sw_rk_stage_2d         -- Rusanov
-#   * sw_face_flux_hll_kernel_2d / sw_rk_stage_hll_2d -- Einfeldt HLL
-# Volume RHS and vol+lift+RK kernels are flux-independent.
+# State (h, mx=h*u, my=h*v).  Two driver entry points, one per
+# Riemann solver:
+#   * `sw_rk_stage_2d[P]`        -- Rusanov flux
+#   * `sw_rk_stage_hll_2d[P]`    -- Einfeldt HLL (1988)
+# Each stage is 2 launches (face-flux + fused per-(elem, node)
+# vol+lift+RK).  The vol+lift+RK kernel is flux-independent.
 # ======================================================================
 
 from src.local_mesh_2d_gpu import LocalMesh2DGpu

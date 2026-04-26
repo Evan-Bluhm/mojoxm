@@ -1,15 +1,12 @@
 # ======================================================================
-# local_mesh_2d_gpu_maxwell.mojo -- Maxwell 2D GPU kernels (NC=6 EM).
+# local_mesh_2d_gpu_maxwell.mojo -- 2D Maxwell (NC=6 EM) GPU kernels
 # ======================================================================
-# Extracted from src/local_mesh_2d_gpu.mojo to start splitting that
-# 3600+ line file along physics boundaries.
-#
-# Maxwell 2D: NC=6 with [Ex, Ey, Ez, Bx, By, Bz] layout.  2D embedding
-# of the full 3D Maxwell equations: kernels iterate over triangular
-# elements with 2D normals (nx, ny, nz=0) so only F^x and F^y enter
-# the volume RHS.  All six EM components are still tracked, matching
-# the 3D Maxwell layout for consistency.  TM mode (Ex=Ey=Bz=0) and
-# TE mode (Ez=Bx=By=0) are both representable.
+# State [Ex, Ey, Ez, Bx, By, Bz].  2D embedding of the full 3D
+# Maxwell equations: kernels iterate over triangular elements with
+# 2D normals (nx, ny, nz=0) so only F^x and F^y enter the volume
+# RHS.  All six EM components are still tracked, matching the 3D
+# Maxwell layout for consistency.  TM mode (Ex=Ey=Bz=0) and TE mode
+# (Ez=Bx=By=0) are both representable.
 #
 # Flux structure (3D version with z-derivatives dropped):
 #   F^x = [0, c^2 Bz, -c^2 By, 0, -Ez, Ey]

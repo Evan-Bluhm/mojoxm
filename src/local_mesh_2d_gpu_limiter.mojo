@@ -1,17 +1,19 @@
 # ======================================================================
-# local_mesh_2d_gpu_limiter.mojo -- 2D Barth-Jespersen slope limiter.
+# local_mesh_2d_gpu_limiter.mojo -- 2D Barth-Jespersen slope limiter
 # ======================================================================
-# Extracted from src/local_mesh_2d_gpu.mojo.  The BJ slope limiter is
-# logically separate from the per-physics RHS pipeline (it runs as a
-# post-stage filter on every NC-component conserved state), so it
-# lives in its own module rather than the parent's "shared utilities"
-# bucket.  Callers import `bj_limit_full_2d[P, NC]` directly from
-# this module.
+# Post-stage filter: scales every nodal deviation from the cell mean
+# by the tightest theta keeping the scaled deviation within the
+# (min, max) cell-average range over self + 3 face neighbours,
+# sampled on component 0 (typically density).  The scaling is then
+# applied uniformly to every NC component so coupled quantities
+# (e.g. mass + momentum) stay consistent.  Venkatakrishnan smoothing
+# (epsilon > 0) avoids over-limiting smooth regions; epsilon = 0
+# recovers raw BJ which kills P+1 accuracy.
 #
-# Dependencies on the parent module:
-#   * `LocalMesh2DGpu[P]` -- the shared mesh struct.
-#   * `launch_cell_mean_2d[NP, NC]` -- the mass-matrix-weighted mean
-#     kernel that bj_limit_full_2d calls before the BJ scaling pass.
+# Public entry point: `bj_limit_full_2d[P, NC](ctx, mesh, q,
+# node_weights, cell_mean_scratch, venkat_eps)`.  Internally chains
+# `launch_cell_mean_2d` (parent module, mass-matrix-weighted mean)
+# with the BJ scaling pass.
 # ======================================================================
 
 from src.local_mesh_2d_gpu import LocalMesh2DGpu, launch_cell_mean_2d

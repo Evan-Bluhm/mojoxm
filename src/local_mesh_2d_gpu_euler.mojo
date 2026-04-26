@@ -1,16 +1,15 @@
 # ======================================================================
-# local_mesh_2d_gpu_euler.mojo -- 2D Euler (NC=4) GPU kernels.
+# local_mesh_2d_gpu_euler.mojo -- 2D Euler (NC=4) GPU kernels
 # ======================================================================
-# Extracted from src/local_mesh_2d_gpu.mojo as the fifth step in
-# splitting that file along physics boundaries.  Pattern matches the
-# prior modules (Maxwell, MHD GLM, plain MHD, Shallow Water): physics
-# docs colocated with kernels, LocalMesh2DGpu re-imported from the
-# parent module as the shared mesh anchor.
-#
-# State (rho, mx=rho*u, my=rho*v, E).  Two flux variants:
-#   * euler_face_flux_kernel_2d / euler_rk_stage_2d         -- Rusanov
-#   * euler_face_flux_hllc_kernel_2d / euler_rk_stage_hllc_2d -- HLLC
-# Volume RHS and vol+lift+RK kernels are flux-independent.
+# State (rho, mx=rho*u, my=rho*v, E).  Two driver entry points, one
+# per Riemann solver:
+#   * `euler_rk_stage_2d[P]`        -- Rusanov flux
+#   * `euler_rk_stage_hllc_2d[P]`   -- HLLC flux (Toro 1994)
+# Each stage is 2 launches: face-flux kernel writes fstar to global,
+# then a per-(elem, node) fused kernel computes the volume RHS
+# locally, applies the face-lift, and does the RK update.  The
+# vol+lift+RK kernel is flux-independent (the only difference
+# between the Rusanov and HLLC paths is which face-flux kernel runs).
 # ======================================================================
 
 from src.local_mesh_2d_gpu import LocalMesh2DGpu

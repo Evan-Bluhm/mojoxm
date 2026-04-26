@@ -1,17 +1,19 @@
 # ======================================================================
-# local_mesh_2d_gpu_advection.mojo -- 2D scalar advection (NC=1).
+# local_mesh_2d_gpu_advection.mojo -- 2D scalar advection (NC=1)
 # ======================================================================
-# Final extraction in the file split (Maxwell, MHD GLM, plain MHD,
-# Shallow Water, Euler already extracted).  Pattern matches the prior
-# modules: physics docs colocated with kernels, LocalMesh2DGpu re-
-# imported from the parent module as the shared mesh anchor.
+# State: scalar q.  Single hyperbolic eigenvalue, so a single upwind
+# flux (no Rusanov / HLLC variants).  Driver entry point:
+# `advection_rk_stage_2d[P]` runs one SSPRK3 stage as 2 launches:
+# face-flux kernel (`launch_advection_face_flux_2d`) writes fstar to
+# global, then a per-(elem, node) fused kernel
+# (`launch_advection_vol_lift_2d`) computes the volume RHS locally,
+# applies the face-lift, and does the RK update.
 #
-# State: scalar q.  Single Rusanov-style upwind flux (no flux variants
-# here -- advection's a single hyperbolic eigenvalue).
-#
-# `rk_update_kernel_2d` (used by `local_mesh_2d_gpu_test` to verify
-# the SSPRK3 weighted combine in isolation) remains in the parent
-# `src/local_mesh_2d_gpu.mojo` since it is not advection-specific.
+# Public surface used outside this module:
+#   * `advection_rk_stage_2d[P]`            -- driver SSPRK3 stage
+#   * `launch_advection_volume_rhs_2d[NP]`  -- standalone volume-rhs
+#     and `launch_advection_face_flux_2d[NP, NFP]` are exercised by
+#     `local_mesh_2d_gpu_test` to verify the individual stages.
 # ======================================================================
 
 from src.local_mesh_2d_gpu import LocalMesh2DGpu

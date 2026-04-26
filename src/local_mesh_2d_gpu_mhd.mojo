@@ -1,14 +1,13 @@
 # ======================================================================
-# local_mesh_2d_gpu_mhd.mojo -- Plain ideal 2D MHD (NC=6, no GLM).
+# local_mesh_2d_gpu_mhd.mojo -- Plain ideal 2D MHD (NC=6, no GLM)
 # ======================================================================
-# Extracted from src/local_mesh_2d_gpu.mojo as the third step in
-# splitting that file along physics boundaries (see prior
-# `local_mesh_2d_gpu_maxwell.mojo` and `local_mesh_2d_gpu_mhd_glm.mojo`
-# for the pattern).
-#
 # State (rho, mx, my, Bx, By, E).  Flux per Powell 1999 ideal 2D MHD
-# (no div B cleaning); fast-magnetosonic speed bound.  For divergence
-# cleaning, use the parallel NC=7 GLM stack in
+# with no divB cleaning; Rusanov dissipation against the fast-
+# magnetosonic wave speed.  Driver entry point:
+# `mhd_rk_stage_2d[P]` runs one SSPRK3 stage as 2 launches
+# (face-flux + fused per-(elem, node) vol+lift+RK).
+#
+# For divergence cleaning, use the parallel NC=7 GLM stack in
 # `src/local_mesh_2d_gpu_mhd_glm.mojo`.
 # ======================================================================
 
