@@ -1,21 +1,36 @@
 # ======================================================================
-# Device mirror of LocalMesh2D -- the foundation of task #19
+# local_mesh_2d_gpu.mojo -- 2D GPU mesh wrapper + shared utilities
 # ======================================================================
 #
-# The CPU mesh in `src/local_mesh_2d.mojo` is Float64 host-side.  A GPU
-# solver wants Float32 device buffers (to match the 3D stack and keep
-# shared-memory / register pressure in line).  `LocalMesh2DGpu[P]`
-# takes a host `LocalMesh2D[P]` + a `DeviceContext`, converts the
-# Float64 tables to Float32, and uploads everything.  Int32 tables
-# (face topology, bc_type, etc.) transfer directly.
+# This module holds the foundation of the 2D GPU DG stack:
 #
-# No GPU kernels are defined here yet -- this module just gets the
-# mesh data onto the device.  The follow-on work is a 2D analog of
-# `src/solver.mojo::rk_stage_kernel` that reads these buffers and
-# writes a Float32 q buffer.  See project_2d_triangles_scope.md for
-# the broader roadmap.
+#   * `LocalMesh2DGpu[P]` -- Float32 device mirror of `LocalMesh2D[P]`
+#     (`src/local_mesh_2d.mojo` is host-side Float64; the GPU stack
+#     runs in Float32 to match the 3D stack's register / shared-mem
+#     budget).  Constructor takes a host `LocalMesh2D[P]` +
+#     `DeviceContext`, converts Float64 -> Float32 in pinned host
+#     buffers, and enqueues the upload.  Int32 tables (face topology,
+#     bc_type, etc.) transfer directly.
 #
-# Buffer layout mirrors the host mesh exactly; no reshuffling:
+#   * Generic NC-templated kernels usable by every physics path:
+#     `cell_avg_kernel_2d`        -- unweighted nodal-mean reduction
+#     `cell_mean_kernel_2d`       -- mass-matrix-weighted true cell mean
+#     `rk_update_kernel_2d`       -- q_out = a*q_a + b*q_b + cc*dt*rhs
+#     `lift_combine_kernel_2d`    -- legacy 3-launch lift+combine
+#     `lift_combine_rk_kernel_2d` -- legacy 3-launch lift+combine+RK
+#
+# Per-physics kernels live in dedicated sibling modules to keep this
+# file focused on the shared infrastructure:
+#
+#   src/local_mesh_2d_gpu_advection.mojo  -- scalar advection (NC=1)
+#   src/local_mesh_2d_gpu_euler.mojo      -- Euler (NC=4): Rusanov + HLLC
+#   src/local_mesh_2d_gpu_sw.mojo         -- Shallow Water (NC=3): Rusanov + HLL
+#   src/local_mesh_2d_gpu_mhd.mojo        -- IdealMHD (NC=6, no GLM)
+#   src/local_mesh_2d_gpu_mhd_glm.mojo    -- IdealMHD + Dedner GLM (NC=7)
+#   src/local_mesh_2d_gpu_maxwell.mojo    -- Maxwell (NC=6 EM)
+#   src/local_mesh_2d_gpu_limiter.mojo    -- Barth-Jespersen slope limiter
+#
+# Buffer layout (mirrors the host mesh exactly; no reshuffling):
 #   d_elem_node_xyz    [num_elements * NP * 2]   Float32
 #   d_elem_invJ        [num_elements * 4]        Float32
 #   d_elem_inv_2A      [num_elements]            Float32
