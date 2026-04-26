@@ -143,13 +143,13 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  68 analytic-solution gates tying schemes to closed-form reference
+  69 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D), and
   P=4 / P=5 rate gates for advection in both 2D (NP=15, NP=21) and
   3D (NP=35, NP=56).
-  * **2D smooth (24):** `bench_advection_translation_2d` (rate >= 2.0)
+  * **2D smooth (25):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
     `bench_advection_inflow_2d` (BC_INFLOW preservation gate with
@@ -169,13 +169,14 @@ Nine reference drivers under `examples/`:
     gate; uniform subcritical state matched to inflow ghost stays
     unchanged to ~Float32 epsilon),
     `bench_euler_channel_steady_2d`,
-    `bench_euler_hydrostatic_2d` (closes a 2D gravity source-term
-    parity gap with the 3D path: 3D Euler had `Euler.source_term`
-    plumbing for (gx, gy, gz) and was gated by
-    bench_euler_hydrostatic_3d, but the 2D Euler vol+lift kernel
-    had no source-term path at all.  Now both dimensions exercise
-    the same physics.  Hydrostatic equilibrium preserves the rest
-    state to ~Float32 epsilon over T=1).
+    `bench_euler_hydrostatic_2d` + `_p3` (closes a 2D gravity
+    source-term parity gap with the 3D path: 3D Euler had
+    `Euler.source_term` plumbing for (gx, gy, gz) and was gated
+    by bench_euler_hydrostatic_3d, but the 2D Euler vol+lift
+    kernel had no source-term path at all.  Now both dimensions
+    exercise the same physics at NP=6 and NP=10.  Hydrostatic
+    equilibrium preserves the rest state to ~Float32 epsilon
+    over T=1).
   * **2D shocks + EM (10):** `bench_euler_sod_2d`,
     `bench_euler_sod_limited_2d` + `_p3` (HLLC + BJ limiter at P=2
     and P=3; the P=2 variant lands the shock within 0.2 cells of
@@ -297,7 +298,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 68 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 69 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
