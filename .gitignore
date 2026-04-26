@@ -78,6 +78,7 @@ bench_maxwell_cavity_2d
 bench_advection_3d
 bench_advection_3d_p3
 bench_advection_3d_p4
+bench_advection_3d_p5
 bench_advection_outflow_3d
 bench_advection_inflow_3d
 bench_mhd_alfven_3d

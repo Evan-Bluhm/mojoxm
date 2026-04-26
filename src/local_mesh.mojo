@@ -367,7 +367,7 @@ def _reference_face_to_elem(P: Int) raises -> List[Int32]:
     """Raw (non-parametric) face-to-element-node table for order P.
     Dispatches a comptime-parameterised `ReferenceElement[P]`; we only
     need the face_to_elem list out so downstream callers can stay in a
-    single non-parametric code path.  Supports P=1..4."""
+    single non-parametric code path.  Supports P=1..5."""
     if P == 1:
         var r1 = ReferenceElement[1]()
         return r1.face_to_elem.copy()
@@ -380,6 +380,9 @@ def _reference_face_to_elem(P: Int) raises -> List[Int32]:
     if P == 4:
         var r4 = ReferenceElement[4]()
         return r4.face_to_elem.copy()
+    if P == 5:
+        var r5 = ReferenceElement[5]()
+        return r5.face_to_elem.copy()
     raise Error("unsupported Lagrange order P=" + String(P))
 
 
