@@ -379,7 +379,7 @@ HaloExchange):
 | `src/reference_2d.mojo`                       |   299 | 2D reference triangle: equispaced Lagrange, `D_ref`, `Lift_ref`, edge node maps |
 | `src/reference_2d_gpu.mojo`                   |    64 | Float32 device mirror of `ReferenceElement2D`                                   |
 | `src/local_mesh_2d.mojo`                      |   400 | Periodic Kuhn-2-tri (per cube halved on diagonal) mesh + BC overlay             |
-| `src/local_mesh_2d_gpu.mojo`                  |   269 | `LocalMesh2DGpu[P]` upload + generic NC-templated helpers (cell_avg, cell_mean, rk_update) |
+| `src/local_mesh_2d_gpu.mojo`                  |   271 | `LocalMesh2DGpu[P]` upload + generic NC-templated helpers (cell_avg, cell_mean, rk_update) |
 | `src/local_mesh_2d_gpu_advection.mojo`        |   337 | 2D scalar advection (NC=1)                                                      |
 | `src/local_mesh_2d_gpu_euler.mojo`            |   649 | 2D Euler (NC=4): Rusanov + HLLC, gravity (gx,gy) source                         |
 | `src/local_mesh_2d_gpu_sw.mojo`               |   514 | 2D Shallow Water (NC=3): Rusanov + HLL                                          |
