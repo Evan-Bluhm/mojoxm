@@ -49,10 +49,12 @@ Nine reference drivers under `examples/`:
 ## Capabilities at a glance
 
 - **Boundary conditions**: periodic, slip wall (`BC_WALL`), transmissive
-  outflow (`BC_OUTFLOW`). Single- and multi-rank supported. Drivers
-  declare BCs via a `BoundaryConditions` struct; the mesh builder
-  allocates BC-side faces and routes them to a physics-provided
-  `boundary_flux(q, bc_type, n)` hook.
+  outflow (`BC_OUTFLOW`), prescribed inflow (`BC_INFLOW`). Single- and
+  multi-rank supported. Drivers declare BCs via a `BoundaryConditions`
+  struct; the mesh builder allocates BC-side faces and routes them to
+  a physics-provided `boundary_flux(q, bc_type, n)` hook.  Every BC
+  dispatch arm in every physics has at least one direct gate in the
+  test/bench harness.
 - **Source-term hook**: physics types provide a `source_term(q, x, s_out)`
   method evaluated per-node and added pointwise to the SSPRK3 RHS.
   Used for gravity (Euler), current / charge coupling (Maxwell,
@@ -783,12 +785,13 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
 - **2D MPI not implemented.** The 2D triangular GPU stack runs at
   np=1 only; the 3D Mesh + HaloExchange + Solver path supports np>=2
   via `make test`/`test-bc`.
-- **2D MHD lacks GLM by default.** The new `mhd_glm_*` kernels add
-  GLM as an opt-in NC=7 path, but shocked 2D MHD (Brio-Wu, OT vortex,
-  ...) requires HLLD or constrained-transport divB handling that we
-  don't yet have -- GLM alone is insufficient.  See
-  `bench_mhd_alfven_glm_2d` (smooth gate that passes) for the current
-  state.
+- **2D MHD shocked-Riemann problems are unsupported.** The
+  `mhd_glm_*` kernels in `src/local_mesh_2d_gpu_mhd_glm.mojo` add
+  GLM as an opt-in NC=7 path (gated by 4 benches: alfven-via-GLM at
+  P=2 and P=3, psi transport, psi damp), but shocked 2D MHD
+  (Brio-Wu, OT vortex, ...) requires HLLD or constrained-transport
+  divB handling that we don't yet have -- GLM alone is insufficient.
+  Smooth 2D MHD problems work today; sharp 2D MHD shocks need HLLD.
 - **2D pipeline still uses 2 kernel launches per RK stage** vs 1 in
   the 3D `rk_stage_kernel`.  The vol+lift+RK fusion in commits
   f7bff49..fa4257a brought 2D from 3 launches/stage down to 2
