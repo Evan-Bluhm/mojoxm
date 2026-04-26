@@ -131,7 +131,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  32 analytic-solution gates tying schemes to closed-form reference
+  33 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D), and
@@ -145,12 +145,15 @@ Nine reference drivers under `examples/`:
     `bench_mhd_glm_psi_transport_2d` (c_h>0 psi/Bx wave coupling),
     `bench_mhd_glm_psi_damp_2d` (alpha_d>0 decay matches A0/e),
     `bench_shallow_water_wave_2d`, `bench_euler_channel_steady_2d`.
-  * **2D shocks + EM (4):** `bench_euler_sod_2d`,
+  * **2D shocks + EM (5):** `bench_euler_sod_2d`,
     `bench_euler_sod_limited_2d` (HLLC + BJ limiter, shock position
     within 0.2 cells of exact Rankine-Hugoniot),
     `bench_shallow_water_dam_break_2d` (closed-pool conservation
     invariants), `bench_maxwell_cavity_2d` (TM(1,1) standing wave in
-    PEC cavity, period sqrt(2), rel L2 ~3e-4).
+    PEC cavity, period sqrt(2), rel L2 ~3e-4),
+    `bench_maxwell_plane_wave_2d` (TM plane wave traveling in +x
+    on a periodic box, one full period; gates actual wave
+    propagation + zero-component leakage).
   * **3D smooth (12):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
@@ -197,7 +200,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 32 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 33 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
