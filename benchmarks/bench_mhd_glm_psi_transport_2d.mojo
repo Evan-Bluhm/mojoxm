@@ -117,7 +117,6 @@ def _run(NX: Int) raises -> Float64:
     var min_rho = Float32(1.0e-6)
     var min_p   = Float32(1.0e-6)
     var c_h_f   = Float32(C_H)
-    var alpha_d_f = Float32(ALPHA_D)
 
     for _ in range(num_steps):
         mhd_glm_rk_stage_2d[P](
@@ -127,7 +126,7 @@ def _run(NX: Int) raises -> Float64:
             d_q.unsafe_ptr(), d_q.unsafe_ptr(),
             d_q1.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            gamma_f, min_rho, min_p, c_h_f, alpha_d_f,
+            gamma_f, min_rho, min_p, c_h_f,
             Float32(1.0), Float32(0.0), Float32(1.0), dt,
         )
         mhd_glm_rk_stage_2d[P](
@@ -137,7 +136,7 @@ def _run(NX: Int) raises -> Float64:
             d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
             d_q2.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            gamma_f, min_rho, min_p, c_h_f, alpha_d_f,
+            gamma_f, min_rho, min_p, c_h_f,
             Float32(0.75), Float32(0.25), Float32(0.25), dt,
         )
         mhd_glm_rk_stage_2d[P](
@@ -147,7 +146,7 @@ def _run(NX: Int) raises -> Float64:
             d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
             d_q.unsafe_ptr(),
             d_fstar.unsafe_ptr(),
-            gamma_f, min_rho, min_p, c_h_f, alpha_d_f,
+            gamma_f, min_rho, min_p, c_h_f,
             Float32(1.0 / 3.0), Float32(2.0 / 3.0),
             Float32(2.0 / 3.0), dt,
         )

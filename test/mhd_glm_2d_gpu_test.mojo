@@ -56,7 +56,6 @@ def main() raises:
     var min_rho = Float32(1.0e-8)
     var min_p   = Float32(1.0e-8)
     var c_h     = Float32(1.5)
-    var alpha_d = Float32(0.0)
     var rho0 = Float32(1.0)
     var u0   = Float32(0.2)
     var v0   = Float32(0.1)
@@ -99,7 +98,7 @@ def main() raises:
         d_q.unsafe_ptr(), d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p, c_h, alpha_d,
+        gamma, min_rho, min_p, c_h,
         Float32(1.0), Float32(0.0), Float32(1.0), dt,
     )
     mhd_glm_rk_stage_2d[P](
@@ -109,7 +108,7 @@ def main() raises:
         d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p, c_h, alpha_d,
+        gamma, min_rho, min_p, c_h,
         Float32(0.75), Float32(0.25), Float32(0.25), dt,
     )
     mhd_glm_rk_stage_2d[P](
@@ -119,7 +118,7 @@ def main() raises:
         d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p, c_h, alpha_d,
+        gamma, min_rho, min_p, c_h,
         Float32(1.0 / 3.0), Float32(2.0 / 3.0),
         Float32(2.0 / 3.0), dt,
     )

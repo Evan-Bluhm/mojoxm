@@ -448,10 +448,14 @@ def mhd_glm_rk_stage_2d[P: Int](
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
     gamma: Float32, min_density: Float32, min_pressure: Float32,
-    c_h: Float32, alpha_d: Float32,
+    c_h: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
 ) raises:
-    # Two flux launches per stage: face flux + fused vol+lift+RK.
+    # Two flux launches per stage: face flux + fused vol+lift+RK.  GLM
+    # psi damping (alpha_d) is NOT applied here -- callers must invoke
+    # `launch_mhd_glm_psi_damp_2d` ONCE PER SSPRK3 STEP (not per stage)
+    # via operator splitting.  Putting damp inside this kernel would
+    # apply it three times per step.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_mhd_glm_face_flux_2d[NP, NFP](
@@ -476,12 +480,3 @@ def mhd_glm_rk_stage_2d[P: Int](
         mesh.num_elements, gamma, min_density, min_pressure, c_h,
         a, b, cc, dt, q_out,
     )
-    # NOTE: the alpha_d argument is no longer applied here.  Operator-
-    # splitting psi damping must be invoked ONCE PER SSPRK3 step by the
-    # caller via `launch_mhd_glm_psi_damp_2d`, not once per stage --
-    # otherwise the decay gets applied three times per timestep.  The
-    # parameter is retained for backward compatibility with existing
-    # drivers that pass alpha_d (the GLM Alfven and psi-transport
-    # benches use alpha_d = 0 so the change is observably a no-op for
-    # them).
-    _ = alpha_d
