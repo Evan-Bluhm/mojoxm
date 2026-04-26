@@ -46,6 +46,8 @@ def euler_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
     gamma:             Float32,
     min_density:       Float32,
     min_pressure:      Float32,
+    gx:                Float32,
+    gy:                Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
     q_out:             UnsafePointer[Float32, MutAnyOrigin],
 ):
@@ -117,12 +119,22 @@ def euler_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
             face2 += sLf * fstar[fbase + 2]
             face3 += sLf * fstar[fbase + 3]
 
-    # ---- Combine + RK update for all 4 components.
+    # ---- Combine + RK update for all 4 components.  Gravity source
+    # (matching 3D Euler.source_term: d(rho u_i)/dt += rho * g_i,
+    # dE/dt += rho * (u . g)) is read at node i and added to the
+    # momentum / energy RHSes.  With default gx = gy = 0 this is a
+    # no-op the compiler elides.
     var idx = (elem * NP + i) * 4
+    var i_base = (elem * NP + i) * 4
+    var i_rho = q_in[i_base + 0]
+    if i_rho < min_density:
+        i_rho = min_density
+    var i_mx = q_in[i_base + 1]
+    var i_my = q_in[i_base + 2]
     var rhs0 = acc0 - inv_2A * face0
-    var rhs1 = acc1 - inv_2A * face1
-    var rhs2 = acc2 - inv_2A * face2
-    var rhs3 = acc3 - inv_2A * face3
+    var rhs1 = acc1 - inv_2A * face1 + i_rho * gx
+    var rhs2 = acc2 - inv_2A * face2 + i_rho * gy
+    var rhs3 = acc3 - inv_2A * face3 + i_mx * gx + i_my * gy
     q_out[idx + 0] = a * q_a[idx + 0] + b * q_b[idx + 0] + cc * dt * rhs0
     q_out[idx + 1] = a * q_a[idx + 1] + b * q_b[idx + 1] + cc * dt * rhs1
     q_out[idx + 2] = a * q_a[idx + 2] + b * q_b[idx + 2] + cc * dt * rhs2
@@ -147,6 +159,8 @@ def launch_euler_vol_lift_2d[NP: Int, NFP: Int](
     gamma:             Float32,
     min_density:       Float32,
     min_pressure:      Float32,
+    gx:                Float32,
+    gy:                Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
     q_out:             UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
@@ -157,6 +171,7 @@ def launch_euler_vol_lift_2d[NP: Int, NFP: Int](
         elem_inv_2A, elem_faces, elem_face_side, elem_canon_to_ref,
         face_length, Lift_ref, q_a, q_b,
         num_elements, gamma, min_density, min_pressure,
+        gx, gy,
         a, b, cc, dt, q_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
@@ -547,10 +562,15 @@ def euler_rk_stage_2d[P: Int](
     inflow_rho: Float32, inflow_rhou: Float32,
     inflow_rhov: Float32, inflow_E: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
+    gx: Float32 = Float32(0.0),
+    gy: Float32 = Float32(0.0),
 ) raises:
     # Two launches per stage (down from three): face flux, then a fused
     # vol+lift+RK kernel.  vol_scratch / rhs_scratch are unused on the
     # fused path; kept in the signature for backward compatibility.
+    # Gravity defaults to zero so existing callers (vortex / smooth-wave /
+    # channel-steady / sod / sod-limited / shocked benches and the
+    # examples) are source-compatible without edits.
     _ = vol_scratch
     _ = rhs_scratch
     comptime NP = num_tri_nodes_2d(P)
@@ -576,6 +596,7 @@ def euler_rk_stage_2d[P: Int](
         mesh.d_face_length.unsafe_ptr(),
         Lift_ref, q_a, q_b,
         mesh.num_elements, gamma, min_density, min_pressure,
+        gx, gy,
         a, b, cc, dt, q_out,
     )
 
@@ -602,9 +623,13 @@ def euler_rk_stage_hllc_2d[P: Int](
     inflow_rho: Float32, inflow_rhou: Float32,
     inflow_rhov: Float32, inflow_E: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
+    gx: Float32 = Float32(0.0),
+    gy: Float32 = Float32(0.0),
 ) raises:
     # Two launches per stage (down from three).  HLLC variant of the
     # face flux + the same fused vol+lift+RK kernel as Rusanov path.
+    # See `euler_rk_stage_2d` for the gravity convention; gx, gy are
+    # forwarded unchanged.
     _ = vol_scratch
     _ = rhs_scratch
     comptime NP = num_tri_nodes_2d(P)
@@ -630,5 +655,6 @@ def euler_rk_stage_hllc_2d[P: Int](
         mesh.d_face_length.unsafe_ptr(),
         Lift_ref, q_a, q_b,
         mesh.num_elements, gamma, min_density, min_pressure,
+        gx, gy,
         a, b, cc, dt, q_out,
     )
