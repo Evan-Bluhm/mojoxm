@@ -1,0 +1,191 @@
+# ======================================================================
+# bench_maxwell_uniform_m_2d_p3 -- 2D Maxwell M source at P=3 (NP=10)
+# ======================================================================
+#
+# P=3 (NP=10) counterpart of bench_maxwell_uniform_m_2d.  Same
+# uniform M source-term gate (q=0 IC, M=(0,0,Mz), Bz(T) = -Mz*T
+# exact linear ramp), but routed through LocalMesh2D[3] /
+# maxwell_rk_stage_2d[3] so the 2D Maxwell M source path is
+# exercised at NP=10.
+#
+# Together with bench_maxwell_uniform_j_2d_p3 (added the previous
+# iteration), this completes 2D Maxwell source-term P-parity at
+# NP=6 / NP=10 across both the J and M arms, mirroring the 3D
+# coverage at NP=10 / NP=20.
+#
+# Pass criteria (P=3, periodic 6x6, T=0.5):
+#   * |Bz - Bz_exact| / |Bz_exact| < 1e-5 (Float32 roundoff floor)
+#   * max |Ex, Ey, Ez, Bx, By| < 1e-5
+#   * no NaN / Inf
+# ======================================================================
+
+from std.math import sqrt, isnan, isinf
+from std.sys import has_accelerator
+from std.gpu.host import DeviceContext, DeviceBuffer
+from src import mpi
+from src.local_mesh_2d import LocalMesh2D
+from src.local_mesh_2d_gpu import LocalMesh2DGpu
+from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
+from src.reference_2d import (
+    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+)
+from src.reference_2d_gpu import ReferenceElement2DGpu
+
+
+comptime P = 3
+comptime NX = 6
+comptime NY = 6
+comptime LX = 1.0
+comptime LY = 1.0
+comptime C_LIGHT: Float32 = 1.0
+comptime MZ:      Float32 = 1.0
+comptime CFL = 0.2
+comptime T_FINAL: Float64 = 0.5
+
+comptime BZ_REL_TOL: Float64 = 1.0e-5
+comptime ZERO_COMPONENT_TOL: Float64 = 1.0e-5
+
+
+def main() raises:
+    comptime assert has_accelerator(), "Requires GPU"
+    mpi.init()
+    var size = mpi.world_size()
+    if size > 1:
+        mpi.finalize()
+        print("bench_maxwell_uniform_m_2d_p3: runs at np=1 only")
+        return
+
+    print("bench_maxwell_uniform_m_2d_p3 (uniform M source-term gate)")
+    print("  P=", P, "  mesh=", NX, "x", NY, "  Mz=", MZ, "  T=", T_FINAL)
+
+    comptime NP_p = num_tri_nodes_2d(P)
+    comptime NFP_e = num_edge_nodes(P)
+    comptime NC = 6
+    var ctx = DeviceContext()
+
+    var host_mesh = LocalMesh2D[P](NX, NY, LX, LY)
+    var host_re = ReferenceElement2D[P]()
+    var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
+    var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
+
+    var n_q = gpu_mesh.num_elements * NP_p * NC
+    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e * NC
+    )
+    var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
+    var hptr_q = hbuf_q.unsafe_ptr()
+    for k in range(n_q):
+        hptr_q[k] = Float32(0.0)
+    ctx.enqueue_copy(d_q, hbuf_q)
+    ctx.synchronize()
+
+    var h_cell = LX / Float64(NX)
+    var dt_est = CFL * h_cell / (Float64(C_LIGHT) * Float64(2 * P + 1))
+    var num_steps = Int(T_FINAL / dt_est) + 1
+    var dt = Float32(T_FINAL / Float64(num_steps))
+    print("  dt=", dt, "  steps=", num_steps)
+
+    for _ in range(num_steps):
+        maxwell_rk_stage_2d[P](
+            ctx, gpu_mesh,
+            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+            d_q.unsafe_ptr(),
+            d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+            d_q1.unsafe_ptr(),
+            d_fstar.unsafe_ptr(),
+            C_LIGHT,
+            Float32(1.0), Float32(0.0), Float32(1.0), dt,
+            Float32(0.0), Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), MZ,
+        )
+        maxwell_rk_stage_2d[P](
+            ctx, gpu_mesh,
+            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+            d_q1.unsafe_ptr(),
+            d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+            d_q2.unsafe_ptr(),
+            d_fstar.unsafe_ptr(),
+            C_LIGHT,
+            Float32(0.75), Float32(0.25), Float32(0.25), dt,
+            Float32(0.0), Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), MZ,
+        )
+        maxwell_rk_stage_2d[P](
+            ctx, gpu_mesh,
+            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
+            d_q2.unsafe_ptr(),
+            d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+            d_q.unsafe_ptr(),
+            d_fstar.unsafe_ptr(),
+            C_LIGHT,
+            Float32(1.0 / 3.0), Float32(2.0 / 3.0),
+            Float32(2.0 / 3.0), dt,
+            Float32(0.0), Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), MZ,
+        )
+    ctx.synchronize()
+    ctx.enqueue_copy(hbuf_q, d_q)
+    ctx.synchronize()
+
+    var Bz_expect = Float64(-MZ * Float32(T_FINAL))
+    var max_bz_rel: Float64 = 0.0
+    var max_zero: Float64 = 0.0
+    var n_nodes = gpu_mesh.num_elements * NP_p
+    for i in range(n_nodes):
+        var ex = hptr_q[i * 6 + 0]
+        var ey = hptr_q[i * 6 + 1]
+        var ez = hptr_q[i * 6 + 2]
+        var bx = hptr_q[i * 6 + 3]
+        var by = hptr_q[i * 6 + 4]
+        var bz = hptr_q[i * 6 + 5]
+        if (isnan(ex) or isinf(ex) or isnan(ey) or isinf(ey)
+            or isnan(ez) or isinf(ez) or isnan(bx) or isinf(bx)
+            or isnan(by) or isinf(by) or isnan(bz) or isinf(bz)):
+            raise Error("bench_maxwell_uniform_m_2d_p3: non-finite output")
+        var d_bz = Float64(bz) - Bz_expect
+        if d_bz < 0.0: d_bz = -d_bz
+        var rel = d_bz / _abs(Bz_expect)
+        if rel > max_bz_rel: max_bz_rel = rel
+        var av_ex = Float64(ex if ex >= Float32(0.0) else -ex)
+        var av_ey = Float64(ey if ey >= Float32(0.0) else -ey)
+        var av_ez = Float64(ez if ez >= Float32(0.0) else -ez)
+        var av_bx = Float64(bx if bx >= Float32(0.0) else -bx)
+        var av_by = Float64(by if by >= Float32(0.0) else -by)
+        if av_ex > max_zero: max_zero = av_ex
+        if av_ey > max_zero: max_zero = av_ey
+        if av_ez > max_zero: max_zero = av_ez
+        if av_bx > max_zero: max_zero = av_bx
+        if av_by > max_zero: max_zero = av_by
+
+    print("  Bz(T) expected =", Bz_expect)
+    print("  max |Bz - exact| / |Bz_exact| =", max_bz_rel,
+          "  (threshold", BZ_REL_TOL, ")")
+    print("  max |Ex,Ey,Ez,Bx,By| =", max_zero,
+          "  (threshold", ZERO_COMPONENT_TOL, ")")
+
+    if max_bz_rel > BZ_REL_TOL:
+        raise Error(
+            String("bench_maxwell_uniform_m_2d_p3 FAILED: Bz rel err ")
+            + String(max_bz_rel) + " > " + String(BZ_REL_TOL)
+        )
+    if max_zero > ZERO_COMPONENT_TOL:
+        raise Error(
+            String("bench_maxwell_uniform_m_2d_p3 FAILED: zero-component drift ")
+            + String(max_zero) + " > " + String(ZERO_COMPONENT_TOL)
+        )
+
+    print("=== bench_maxwell_uniform_m_2d_p3 PASSED ===")
+    mpi.finalize()
+
+
+def _abs(x: Float64) -> Float64:
+    return x if x >= 0.0 else -x
