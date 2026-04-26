@@ -555,9 +555,7 @@ def euler_rk_stage_2d[P: Int](
     q_a:      UnsafePointer[Float32, MutAnyOrigin],
     q_b:      UnsafePointer[Float32, MutAnyOrigin],
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
-    vol_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    rhs_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     gamma: Float32, min_density: Float32, min_pressure: Float32,
     inflow_rho: Float32, inflow_rhou: Float32,
     inflow_rhov: Float32, inflow_E: Float32,
@@ -565,14 +563,10 @@ def euler_rk_stage_2d[P: Int](
     gx: Float32 = Float32(0.0),
     gy: Float32 = Float32(0.0),
 ) raises:
-    # Two launches per stage (down from three): face flux, then a fused
-    # vol+lift+RK kernel.  vol_scratch / rhs_scratch are unused on the
-    # fused path; kept in the signature for backward compatibility.
-    # Gravity defaults to zero so existing callers (vortex / smooth-wave /
-    # channel-steady / sod / sod-limited / shocked benches and the
-    # examples) are source-compatible without edits.
-    _ = vol_scratch
-    _ = rhs_scratch
+    # Two launches per stage: face flux, then a fused vol+lift+RK
+    # kernel that computes the volume RHS in-register.  Gravity
+    # defaults to zero so callers without a gravity vector are
+    # source-compatible.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_euler_face_flux_2d[NP, NFP](
@@ -616,9 +610,7 @@ def euler_rk_stage_hllc_2d[P: Int](
     q_a:      UnsafePointer[Float32, MutAnyOrigin],
     q_b:      UnsafePointer[Float32, MutAnyOrigin],
     q_out:    UnsafePointer[Float32, MutAnyOrigin],
-    vol_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    rhs_scratch:   UnsafePointer[Float32, MutAnyOrigin],
     gamma: Float32, min_density: Float32, min_pressure: Float32,
     inflow_rho: Float32, inflow_rhou: Float32,
     inflow_rhov: Float32, inflow_E: Float32,
@@ -626,12 +618,9 @@ def euler_rk_stage_hllc_2d[P: Int](
     gx: Float32 = Float32(0.0),
     gy: Float32 = Float32(0.0),
 ) raises:
-    # Two launches per stage (down from three).  HLLC variant of the
-    # face flux + the same fused vol+lift+RK kernel as Rusanov path.
-    # See `euler_rk_stage_2d` for the gravity convention; gx, gy are
-    # forwarded unchanged.
-    _ = vol_scratch
-    _ = rhs_scratch
+    # HLLC variant of the face flux + the same fused vol+lift+RK kernel
+    # as the Rusanov path.  See `euler_rk_stage_2d` for the gravity
+    # convention; gx, gy are forwarded unchanged.
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_euler_face_flux_hllc_2d[NP, NFP](
