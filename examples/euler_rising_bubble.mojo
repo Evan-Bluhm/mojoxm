@@ -2,8 +2,9 @@
 # euler_rising_bubble -- buoyant thermal bubble in a stratified box
 # ======================================================================
 #
-# First driver to exercise the Physics trait's new source-term hook via
-# the Euler module's gravity vector (gx, gy, gz).  Setup:
+# Demo of the Euler module's gravity vector (gx, gy, gz) source term
+# in a non-trivial buoyancy setup (vs the static hydrostatic balance
+# gated by `bench_euler_hydrostatic_3d` + `_p3`).  Setup:
 #
 #   * Closed box with reflecting walls on all 6 sides.
 #   * Gravity g = (0, -1, 0) (dimensionless units).
