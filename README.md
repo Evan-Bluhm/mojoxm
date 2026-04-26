@@ -81,10 +81,18 @@ Nine reference drivers under `examples/`:
   (validated by `make test-reference-2d` / `test-local-mesh-2d`) and
   are uploaded to the device through `LocalMesh2DGpu[P]` /
   `ReferenceElement2DGpu[P]`.  All physics run on device in Float32
-  via kernels in `src/local_mesh_2d_gpu.mojo`:
-  volume-rhs + face-flux + multi-component lift-combine + rk-update,
-  orchestrated per physics by `<name>_rk_stage_2d[P]`.  Four physics
-  (Advection / Euler / ShallowWater / IdealMHD), full BC menu
+  via per-physics modules under `src/`:
+  `local_mesh_2d_gpu_advection.mojo` /
+  `local_mesh_2d_gpu_euler.mojo` /
+  `local_mesh_2d_gpu_sw.mojo` /
+  `local_mesh_2d_gpu_mhd.mojo` /
+  `local_mesh_2d_gpu_mhd_glm.mojo` /
+  `local_mesh_2d_gpu_maxwell.mojo`, each with volume-rhs + face-flux
+  + lift-combine kernels orchestrated by `<name>_rk_stage_2d[P]`.
+  The parent `src/local_mesh_2d_gpu.mojo` holds the `LocalMesh2DGpu`
+  struct + generic NC-templated helpers (cell-avg / cell-mean /
+  rk-update / lift-combine) + the BJ slope limiter.  Five physics
+  (Advection / Euler / ShallowWater / IdealMHD / Maxwell), full BC menu
   (periodic / wall / outflow / inflow), two Euler Riemann solvers
   (Rusanov and HLLC) and two SW Riemann solvers (Rusanov and HLL), a
   Venkat-smoothed Barth-Jespersen cell-level limiter
@@ -183,7 +191,7 @@ Nine reference drivers under `examples/`:
   bugs that move L2 by more than a small constant trip the gate.
 
 - **GLM-enabled 2D MHD** (`mhd_glm_*` kernels in
-  `local_mesh_2d_gpu.mojo`):  Dedner divergence-cleaning ported from
+  `src/local_mesh_2d_gpu_mhd_glm.mojo`):  Dedner divergence-cleaning ported from
   3D as a parallel NC=7 path; the existing NC=6 `mhd_rk_stage_2d`
   remains the smooth-flow workhorse.  Validated end-to-end through
   `bench_mhd_alfven_glm_2d` and `bench_mhd_glm_psi_transport_2d`.
@@ -255,7 +263,7 @@ Nine reference drivers under `examples/`:
 
 ## System architecture
 
-Roughly 10k lines of Mojo + a thin MPI shim in C. Core components live
+Roughly 13k lines of Mojo + a thin MPI shim in C. Core components live
 under `src/`; problem-specific drivers live under `examples/`.
 
 | file                                | lines | role                                                                                   |
@@ -280,6 +288,22 @@ under `src/`; problem-specific drivers live under `examples/`.
 | `src/time_integrator.mojo`          |   177 | `run_ssprk3_loop` and `run_ssprk3_loop_with_diagnostics`                               |
 | `src/nvtx.mojo`                     |    84 | Runtime-loaded NVTX shim for Nsight Systems timelines                                  |
 | `src/mpi.mojo` + `src/mpi_shim.c`   |   ~300| Mojo / C-shim bindings for OpenMPI (init, point-to-point, allreduce, request handling) |
+
+The 2D GPU stack lives in a separate set of modules (single-rank, no
+HaloExchange):
+
+| file                                          | lines | role                                                                            |
+|-----------------------------------------------|-------|---------------------------------------------------------------------------------|
+| `src/reference_2d.mojo`                       |   299 | 2D reference triangle: equispaced Lagrange, `D_ref`, `Lift_ref`, edge node maps |
+| `src/reference_2d_gpu.mojo`                   |    64 | Float32 device mirror of `ReferenceElement2D`                                   |
+| `src/local_mesh_2d.mojo`                      |   400 | Periodic Kuhn-2-tri (per cube halved on diagonal) mesh + BC overlay             |
+| `src/local_mesh_2d_gpu.mojo`                  |   589 | `LocalMesh2DGpu[P]` upload + generic NC-templated helpers + BJ slope limiter   |
+| `src/local_mesh_2d_gpu_advection.mojo`        |   422 | 2D scalar advection (NC=1)                                                      |
+| `src/local_mesh_2d_gpu_euler.mojo`            |   739 | 2D Euler (NC=4): Rusanov + HLLC                                                 |
+| `src/local_mesh_2d_gpu_sw.mojo`               |   607 | 2D Shallow Water (NC=3): Rusanov + HLL                                          |
+| `src/local_mesh_2d_gpu_mhd.mojo`              |   523 | 2D plain ideal MHD (NC=6, no GLM)                                               |
+| `src/local_mesh_2d_gpu_mhd_glm.mojo`          |   604 | 2D MHD + Dedner GLM divB cleaning (NC=7)                                        |
+| `src/local_mesh_2d_gpu_maxwell.mojo`          |   317 | 2D Maxwell (NC=6 EM): Rusanov, PEC reflection                                   |
 
 Example drivers exercise various combinations of physics, BC kind,
 and diagnostics; see the list at the top of this README.
