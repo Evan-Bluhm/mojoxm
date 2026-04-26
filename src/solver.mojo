@@ -382,23 +382,38 @@ def rk_stage_kernel[
 # ----------------------------------------------------------------------
 # Barth-Jespersen (BJ) slope limiter
 # ----------------------------------------------------------------------
-# Two-pass conservation-preserving slope limiter, run once per RK stage.
+# Three-pass conservation-preserving slope limiter, run once per RK stage.
 #
-#   Pass 1 (`compute_cell_averages_kernel`): one thread per *local* element
-#   (owned + ghost -- every cell whose q might be read as a neighbour by
-#   pass 2), writes the NC-vector cell mean to `d_cell_avg`.
+#   Pass 1 (`compute_cell_averages_kernel`): one thread per (local element,
+#   component) pair -- writes the NC-vector cell mean to `d_cell_avg` for
+#   every local cell (owned + ghost; ghost means are read as face-neighbour
+#   references in pass 2).
 #
-#   Pass 2 (`bj_limiter_kernel`): one thread per *owned* element.  Reads
-#   own cell average + the 4 face-neighbour cell averages; for every
-#   component independently finds the BJ scaling factor alpha that keeps
-#   every nodal value within
+#   Pass 2 (`bj_limiter_compute_theta_kernel`): one thread per *owned*
+#   element.  Reads own cell average + the 4 face-neighbour cell
+#   averages; for every component independently finds the BJ scaling
+#   factor alpha that keeps every nodal value within
 #       [nbr_min_avg, nbr_max_avg]
 #   where nbr_min/max_avg is the min/max cell average across the owning
 #   cell + its 4 face-neighbours.  theta = min over nodes * components of
-#   alpha (bounded to [0, 1]).  Then applies
+#   alpha (bounded to [0, 1]).  Writes one Float32 theta per owned
+#   element to `d_bj_theta`.
+#
+#   Pass 3 (`bj_limiter_apply_kernel`): one thread per
+#   (owned-element, node, component) triple (NP*NC = 100x more
+#   parallelism at P=3, NC=5 vs the per-element pass).  Reads
+#   theta[owned_idx]; if theta == 1 early-exits, otherwise applies
 #       q_new[node, c] = own_avg[c] + theta * (q_old[node, c] - own_avg[c])
-#   to every node, every component.  Conservation of mass / momentum /
-#   energy is exact because own_avg is preserved.
+#   to its single (nn, c) slot.  Adjacent threads in a warp share the
+#   same elem so theta-broadcast costs 1 transaction and q[] writes
+#   are stride-1 within the element -> fully coalesced.  Conservation
+#   of mass / momentum / energy is exact because own_avg is preserved.
+#
+# Why the split: with one thread per element doing NP*NC stores at
+# stride 1 within the element but stride NP*NC across the warp, the
+# apply phase was the worst-case uncoalesced pattern -- 20.8% of GPU
+# time on shocked Sod 3D P=3, the same hot path the 2D limiter
+# bottlenecked on (commit cdc3210 split that one in half too).
 #
 # Smooth regions: theta ~= 1, the limiter is a near no-op.  Shocks:
 # theta << 1, the high-order modes get dampened proportionally while the
@@ -436,7 +451,7 @@ def compute_cell_averages_kernel[NP: Int, NC: Int](
     cell_avg_out[elem * NC + c] = s
 
 
-def bj_limiter_kernel[NP: Int, NC: Int](
+def bj_limiter_compute_theta_kernel[NP: Int, NC: Int](
     q:              UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32,   MutAnyOrigin],
     num_owned:      Int,
@@ -444,6 +459,7 @@ def bj_limiter_kernel[NP: Int, NC: Int](
     elem_faces:     UnsafePointer[Int32,   MutAnyOrigin],
     face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
     venkat_eps:     Float32,
+    theta_out:      UnsafePointer[Float32, MutAnyOrigin],
 ):
     var idx = Int(global_idx.x)
     if idx >= num_owned:
@@ -514,18 +530,35 @@ def bj_limiter_kernel[NP: Int, NC: Int](
             if alpha < theta:
                 theta = alpha
 
-    if not (theta < Float32(1.0)):
-        return     # theta is 1 (or NaN -- leave alone; upstream floor catches that)
+    theta_out[idx] = theta
 
-    # Apply uniform theta across all nodes, all components.  The cell
-    # average is preserved exactly because `own_avg + theta * (x - avg)`
-    # averaged over NP nodes = own_avg + theta * (avg - avg) = own_avg.
-    for nn in range(NP):
-        for c in range(NC):
-            var node_val = q[base_q + nn * NC + c]
-            q[base_q + nn * NC + c] = (
-                own_avg[c] + theta * (node_val - own_avg[c])
-            )
+
+def bj_limiter_apply_kernel[NP: Int, NC: Int](
+    q:              UnsafePointer[Float32, MutAnyOrigin],
+    owned_elem_ids: UnsafePointer[Int32,   MutAnyOrigin],
+    num_owned:      Int,
+    cell_avg:       UnsafePointer[Float32, MutAnyOrigin],
+    theta_in:       UnsafePointer[Float32, MutAnyOrigin],
+):
+    # One thread per (owned_idx, nn, c) -- coalesced apply pass.
+    var tid = Int(global_idx.x)
+    var total = num_owned * NP * NC
+    if tid >= total:
+        return
+
+    var owned_idx = tid // (NP * NC)
+    var theta = theta_in[owned_idx]
+    if not (theta < Float32(1.0)):
+        return  # smooth cell: no read/write needed
+
+    var rem = tid - owned_idx * NP * NC
+    var nn = rem // NC
+    var c = rem % NC
+    var elem = Int(owned_elem_ids[owned_idx])
+    var base_q = elem * NP * NC
+    var bm = cell_avg[elem * NC + c]
+    var v = q[base_q + nn * NC + c]
+    q[base_q + nn * NC + c] = bm + theta * (v - bm)
 
 
 # ----------------------------------------------------------------------
@@ -568,7 +601,8 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
 
     # Cell-level Barth-Jespersen slope-limiter toggle.  False (default)
     # disables the limiter entirely -- it is a no-op add to the kernel
-    # graph.  True runs `compute_cell_averages_kernel` + `bj_limiter_kernel`
+    # graph.  True runs `compute_cell_averages_kernel` +
+    # `bj_limiter_compute_theta_kernel` + `bj_limiter_apply_kernel`
     # after every RK stage: BJ damps every element's nodal deviations
     # from its cell average by the tightest factor that keeps each
     # nodal value within [min, max] of the cell + face-neighbour
@@ -584,6 +618,9 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
     # Scratch per-element mean buffer sized for the full local mesh
     # (owned + ghost).  Populated fresh on each limiter launch.
     var d_cell_avg: DeviceBuffer[dtype]
+    # Per-owned-element theta scratch.  compute_theta writes one
+    # Float32 per owned element; apply reads it.  Sized num_owned.
+    var d_bj_theta: DeviceBuffer[dtype]
 
     def __init__(
         out self,
@@ -615,6 +652,13 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         self.d_cell_avg = self.ctx.enqueue_create_buffer[dtype](
             self.num_local_elements * Self.NC,
         )
+        # One theta per OWNED element (not local).  Size 1 if the
+        # owner has no owned elements, since DeviceBuffer creation
+        # is unhappy with size 0.
+        var theta_size = self.num_owned_elements
+        if theta_size == 0:
+            theta_size = 1
+        self.d_bj_theta = self.ctx.enqueue_create_buffer[dtype](theta_size)
 
         self.d_q  = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
         self.d_q1 = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
@@ -781,9 +825,11 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
             block_dim=256,
         )
 
-        # Pass 2: BJ limiter over owned elements only.
-        comptime _bj_kernel = bj_limiter_kernel[Self.NP, Self.NC]
-        self.ctx.enqueue_function[_bj_kernel, _bj_kernel](
+        # Pass 2: BJ theta computation over owned elements (one
+        # thread per owned element; same parallelism as the old
+        # single-kernel limiter).
+        comptime _theta_kernel = bj_limiter_compute_theta_kernel[Self.NP, Self.NC]
+        self.ctx.enqueue_function[_theta_kernel, _theta_kernel](
             q_ptr,
             self.mesh.d_owned_elem_ids.unsafe_ptr(),
             num_owned,
@@ -791,7 +837,22 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
             self.mesh.local.d_elem_faces.unsafe_ptr(),
             self.mesh.local.d_face_elem.unsafe_ptr(),
             self.cell_limiter_venkat_eps,
+            self.d_bj_theta.unsafe_ptr(),
             grid_dim=ceildiv(num_owned, 256),
+            block_dim=256,
+        )
+
+        # Pass 3: theta apply over (owned_elem, node, component)
+        # triples (NP*NC = 100x more parallelism at P=3, NC=5).
+        comptime _apply_kernel = bj_limiter_apply_kernel[Self.NP, Self.NC]
+        var apply_total = num_owned * Self.NP * Self.NC
+        self.ctx.enqueue_function[_apply_kernel, _apply_kernel](
+            q_ptr,
+            self.mesh.d_owned_elem_ids.unsafe_ptr(),
+            num_owned,
+            self.d_cell_avg.unsafe_ptr(),
+            self.d_bj_theta.unsafe_ptr(),
+            grid_dim=ceildiv(apply_total, 256),
             block_dim=256,
         )
 

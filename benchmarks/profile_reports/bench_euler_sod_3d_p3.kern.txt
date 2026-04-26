@@ -2,15 +2,16 @@
 
  Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                             Name                            
  --------  ---------------  ---------  --------  --------  --------  --------  -----------  -----------------------------------------------------------
-     77.6        881452487       4242  207791.7  205601.0    201313    553187      12998.8  src_solver_rk_stage_kernel_I6A6A6A6AcB6A6A_6c3d70985c310bcf
-     20.8        236183342       4242   55677.4   54880.0     53441    323266       4571.7  src_solver_bj_limiter_kernel6A6A6A6AcB6A_40a53c2f6951cfe5  
-      1.7         18861634       4242    4446.4    4448.0      4224      4896        100.8  src_solver_compute_cell_averag6A6A6A6A_44d1b990188edb14    
-      0.0            35872          1   35872.0   35872.0     35872     35872          0.0  src_local_mesh_build_elements_6A6A6A6A_750e88d5cd1ffdc5    
-      0.0            13248          1   13248.0   13248.0     13248     13248          0.0  src_local_mesh_build_faces_ker6A6A6A6A_6b306321a2e1eddf    
-      0.0             6689          1    6689.0    6689.0      6689      6689          0.0  src_local_mesh_apply_minus_z_b6A6A6A6A_d931349b8199d34a    
-      0.0             6656          1    6656.0    6656.0      6656      6656          0.0  src_local_mesh_apply_minus_y_b6A6A6A6A_327cf42d2c35445a    
-      0.0             5696          1    5696.0    5696.0      5696      5696          0.0  bench_euler_sod_3d_p3_sod_ic_ke6A6A_1c4967d174d6e8fd       
-      0.0             2592          1    2592.0    2592.0      2592      2592          0.0  src_local_mesh_apply_minus_x_b6A6A6A6A_2234b58aea260724    
+     84.0        883478704       4242  208269.4  205889.0    201762    578468      11810.5  src_solver_rk_stage_kernel_I6A6A6A6AcB6A6A_6c3d70985c310bcf
+     11.8        123795722       4242   29183.3   29056.0     27264     33504       1153.8  src_solver_bj_limiter_compute_6A6A6A6A_1f51d1a21eca5ae3    
+      2.4         25296471       4242    5963.3    5824.0      5760      8000        245.5  src_solver_bj_limiter_apply_ke6A6A6A6A_2d4f68df181bb8ec    
+      1.8         18754274       4242    4421.1    4416.0      4160      5408        102.6  src_solver_compute_cell_averag6A6A6A6A_44d1b990188edb14    
+      0.0            36001          1   36001.0   36001.0     36001     36001          0.0  src_local_mesh_build_elements_6A6A6A6A_750e88d5cd1ffdc5    
+      0.0            13216          1   13216.0   13216.0     13216     13216          0.0  src_local_mesh_build_faces_ker6A6A6A6A_6b306321a2e1eddf    
+      0.0             6688          1    6688.0    6688.0      6688      6688          0.0  src_local_mesh_apply_minus_z_b6A6A6A6A_d931349b8199d34a    
+      0.0             6593          1    6593.0    6593.0      6593      6593          0.0  src_local_mesh_apply_minus_y_b6A6A6A6A_327cf42d2c35445a    
+      0.0             5664          1    5664.0    5664.0      5664      5664          0.0  bench_euler_sod_3d_p3_sod_ic_ke6A6A_1c4967d174d6e8fd       
+      0.0             2560          1    2560.0    2560.0      2560      2560          0.0  src_local_mesh_apply_minus_x_b6A6A6A6A_2234b58aea260724    
       0.0             1728          1    1728.0    1728.0      1728      1728          0.0  src_local_mesh_apply_plus_y_bc6A6A6A6A_eb57f0e906e160d9    
       0.0             1728          1    1728.0    1728.0      1728      1728          0.0  src_local_mesh_apply_plus_z_bc6A6A6A6A_58aa7a5ffc83f85a    
       0.0             1536          1    1536.0    1536.0      1536      1536          0.0  src_local_mesh_apply_plus_x_bc6A6A6A6A_c6994c630f35afad    
