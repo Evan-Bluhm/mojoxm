@@ -125,12 +125,11 @@ def euler_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
     # momentum / energy RHSes.  With default gx = gy = 0 this is a
     # no-op the compiler elides.
     var idx = (elem * NP + i) * 4
-    var i_base = (elem * NP + i) * 4
-    var i_rho = q_in[i_base + 0]
+    var i_rho = q_in[idx + 0]
     if i_rho < min_density:
         i_rho = min_density
-    var i_mx = q_in[i_base + 1]
-    var i_my = q_in[i_base + 2]
+    var i_mx = q_in[idx + 1]
+    var i_my = q_in[idx + 2]
     var rhs0 = acc0 - inv_2A * face0
     var rhs1 = acc1 - inv_2A * face1 + i_rho * gx
     var rhs2 = acc2 - inv_2A * face2 + i_rho * gy
