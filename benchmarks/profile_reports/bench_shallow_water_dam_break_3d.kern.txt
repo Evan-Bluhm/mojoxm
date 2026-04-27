@@ -1,0 +1,19 @@
+[6/8] Executing 'cuda_gpu_kern_sum' stats report
+
+ Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                             Name                            
+ --------  ---------------  ---------  --------  --------  --------  --------  -----------  -----------------------------------------------------------
+     51.4        107245721       6645   16139.3   16098.0     15618     20802        239.4  src_solver_rk_stage_kernel_I6A6A6A6AcB6A6A_43e382ef45dafc6d
+     36.3         75769500       6645   11402.5   10881.0     10753     13281        746.8  src_solver_bj_limiter_compute_6A6A6A6A_366e47a14473d711    
+      7.0         14581468       6645    2194.4    2208.0      1760      2305         51.4  src_solver_bj_limiter_apply_ke6A6A6A6A_86493db851760939    
+      5.3         11062436       6645    1664.8    1664.0      1632      2464         19.4  src_solver_compute_cell_averag6A6A6A6A_5538076fda2ba95b    
+      0.0            21187          1   21187.0   21187.0     21187     21187          0.0  src_local_mesh_build_elements_6A6A6A6A_b4fb09db0125e176    
+      0.0             6145          1    6145.0    6145.0      6145      6145          0.0  src_local_mesh_build_faces_ker6A6A6A6A_3680e9f99a1681d1    
+      0.0             4416          1    4416.0    4416.0      4416      4416          0.0  src_local_mesh_apply_minus_z_b6A6A6A6A_c8c28a08f1399a09    
+      0.0             4129          1    4129.0    4129.0      4129      4129          0.0  src_local_mesh_apply_minus_y_b6A6A6A6A_bb9ea5ec2dbbab96    
+      0.0             2688          1    2688.0    2688.0      2688      2688          0.0  bench_shallow_water_dam_break_3d_4d3a5b0d61aeb8da          
+      0.0             2240          1    2240.0    2240.0      2240      2240          0.0  src_local_mesh_apply_minus_x_b6A6A6A6A_37462209e700eb49    
+      0.0             1696          1    1696.0    1696.0      1696      1696          0.0  src_local_mesh_apply_plus_y_bc6A6A6A6A_eb57f0e906e160d9    
+      0.0             1696          1    1696.0    1696.0      1696      1696          0.0  src_local_mesh_apply_plus_z_bc6A6A6A6A_58aa7a5ffc83f85a    
+      0.0             1568          1    1568.0    1568.0      1568      1568          0.0  src_local_mesh_apply_plus_x_bc6A6A6A6A_c6994c630f35afad    
+
+[7/8] Executing 'cuda_gpu_mem_time_sum' stats report
