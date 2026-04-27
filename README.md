@@ -100,7 +100,7 @@ Nine reference drivers under `examples/`:
   (periodic / wall / outflow / inflow), two Euler Riemann solvers
   (Rusanov and HLLC) and two SW Riemann solvers (Rusanov and HLL), a
   Venkat-smoothed Barth-Jespersen cell-level limiter
-  (`bj_limit_full_2d`) for shock stability.  Eight end-to-end
+  (`bj_limit_full_2d`) for shock stability.  Nine end-to-end
   drivers under `examples/*_2d_gpu.mojo` emit 21-frame VTU
   sequences + `.pvd` collections (see
   [`scripts/animate_2d.py`](scripts/animate_2d.py) for MP4 export):
@@ -116,7 +116,10 @@ Nine reference drivers under `examples/`:
     with inflow + outflow + walls; rho_max_drift = 1.2e-7 --
     analytic steady answer preserved to Float32 epsilon),
     `shallow_water_dam_break_2d_gpu` (h_L=2 / h_R=1 Riemann in a
-    closed basin; ~8700 steps/sec).
+    closed basin; ~8700 steps/sec),
+    `maxwell_cavity_2d_gpu` (~12600 steps/sec, TM(1,1) PEC standing
+    wave with rel L2 ~4e-5 at P=2 / 32x32 over one period; BC_WALL
+    on all four sides).
   * **Shocks (HLLC + BJ limiter):** `euler_sod_2d_gpu` (classical
     Sod lifted to 2D at P=2 / 128x16: rho overshoot 0.27 % above
     rho_L, boundary states within 0.2 % of expected; 5100 steps/sec
