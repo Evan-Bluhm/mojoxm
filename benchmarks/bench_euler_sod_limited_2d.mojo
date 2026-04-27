@@ -24,7 +24,7 @@
 #   * No NaN / Inf
 # ======================================================================
 
-from std.math import sqrt, pow, tanh, isnan, isinf
+from std.math import sqrt, tanh, isnan, isinf
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
 from src import mpi
@@ -37,6 +37,7 @@ from src.reference_2d import (
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL, BC_OUTFLOW
+from src.sod_exact_riemann import sod_exact_rho, shock_speed_S_R
 
 
 comptime P = 2
@@ -56,93 +57,6 @@ comptime VENKAT_EPS = 0.1
 comptime PLATEAU_TOL_REL: Float64 = 0.02
 comptime STAR_TOL_REL:    Float64 = 0.05
 comptime SHOCK_TOL_CELLS: Float64 = 2.0
-
-
-def _f_K(p: Float64, rho_K: Float64, p_K: Float64, a_K: Float64) -> Float64:
-    if p > p_K:
-        var A = 2.0 / ((GAMMA + 1.0) * rho_K)
-        var B = (GAMMA - 1.0) / (GAMMA + 1.0) * p_K
-        return (p - p_K) * sqrt(A / (p + B))
-    else:
-        var e = (GAMMA - 1.0) / (2.0 * GAMMA)
-        return (2.0 * a_K / (GAMMA - 1.0)) * (pow(p / p_K, e) - 1.0)
-
-
-def _solve_star(
-    rho_L: Float64, u_L: Float64, p_L: Float64, a_L: Float64,
-    rho_R: Float64, u_R: Float64, p_R: Float64, a_R: Float64,
-) raises -> Float64:
-    var e = (GAMMA - 1.0) / (2.0 * GAMMA)
-    var p_tr = pow(
-        (a_L + a_R - 0.5 * (GAMMA - 1.0) * (u_R - u_L))
-        / (a_L / pow(p_L, e) + a_R / pow(p_R, e)),
-        1.0 / e,
-    )
-    var p = p_tr if p_tr > 0.0 else 0.5 * (p_L + p_R)
-    var tol: Float64 = 1.0e-10
-    for _ in range(50):
-        var fL = _f_K(p, rho_L, p_L, a_L)
-        var fR = _f_K(p, rho_R, p_R, a_R)
-        var dfL: Float64
-        var dfR: Float64
-        if p > p_L:
-            var A_L = 2.0 / ((GAMMA + 1.0) * rho_L)
-            var B_L = (GAMMA - 1.0) / (GAMMA + 1.0) * p_L
-            var sL = sqrt(A_L / (p + B_L))
-            dfL = sL * (1.0 - 0.5 * (p - p_L) / (p + B_L))
-        else:
-            dfL = (1.0 / (rho_L * a_L)) * pow(p / p_L, -(GAMMA + 1.0) / (2.0 * GAMMA))
-        if p > p_R:
-            var A_R = 2.0 / ((GAMMA + 1.0) * rho_R)
-            var B_R = (GAMMA - 1.0) / (GAMMA + 1.0) * p_R
-            var sR = sqrt(A_R / (p + B_R))
-            dfR = sR * (1.0 - 0.5 * (p - p_R) / (p + B_R))
-        else:
-            dfR = (1.0 / (rho_R * a_R)) * pow(p / p_R, -(GAMMA + 1.0) / (2.0 * GAMMA))
-        var resid = fL + fR + (u_R - u_L)
-        var dp = -resid / (dfL + dfR)
-        var p_new = p + dp
-        if p_new <= 0.0:
-            p_new = 0.5 * p
-        var rel = 2.0 * (p_new - p) / (p_new + p)
-        var arel = rel if rel >= 0.0 else -rel
-        p = p_new
-        if arel < tol:
-            return p
-    raise Error("Sod Newton did not converge")
-
-
-def _sod_exact_rho(x: Float64, t: Float64) raises -> Float64:
-    var xi = (x - 0.5) / t
-    var a_L = sqrt(GAMMA * P_L / RHO_L)
-    var a_R = sqrt(GAMMA * P_R / RHO_R)
-    var p_star = _solve_star(RHO_L, 0.0, P_L, a_L, RHO_R, 0.0, P_R, a_R)
-    var u_star = 0.5 * (
-        _f_K(p_star, RHO_R, P_R, a_R) - _f_K(p_star, RHO_L, P_L, a_L)
-    )
-    var rho_star_L = RHO_L * pow(p_star / P_L, 1.0 / GAMMA)
-    var a_star_L = a_L * pow(p_star / P_L, (GAMMA - 1.0) / (2.0 * GAMMA))
-    var xi_head_L = -a_L
-    var xi_tail_L = u_star - a_star_L
-    var rho_star_R = RHO_R * (
-        (p_star / P_R + (GAMMA - 1.0) / (GAMMA + 1.0))
-        / ((GAMMA - 1.0) / (GAMMA + 1.0) * p_star / P_R + 1.0)
-    )
-    var S_R = a_R * sqrt(
-        (GAMMA + 1.0) / (2.0 * GAMMA) * p_star / P_R
-        + (GAMMA - 1.0) / (2.0 * GAMMA)
-    )
-    if xi < xi_head_L:
-        return RHO_L
-    elif xi < xi_tail_L:
-        var v = 2.0 / (GAMMA + 1.0) * (a_L + xi)
-        var a = a_L - 0.5 * (GAMMA - 1.0) * v
-        return RHO_L * pow(a / a_L, 2.0 / (GAMMA - 1.0))
-    elif xi < u_star:
-        return rho_star_L
-    elif xi < S_R:
-        return rho_star_R
-    return RHO_R
 
 
 def main() raises:
@@ -296,9 +210,9 @@ def main() raises:
         else:
             profile.append(0.0)
 
-    var rho_ref_L    = _sod_exact_rho(0.10, T_FINAL)
-    var rho_ref_R    = _sod_exact_rho(0.95, T_FINAL)
-    var rho_ref_star = _sod_exact_rho(0.60, T_FINAL)
+    var rho_ref_L    = sod_exact_rho(0.10, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
+    var rho_ref_R    = sod_exact_rho(0.95, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
+    var rho_ref_star = sod_exact_rho(0.60, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
     var ix_L    = Int((0.10 / LX) * Float64(NX))
     var ix_R    = Int((0.95 / LX) * Float64(NX))
     var ix_star = Int((0.60 / LX) * Float64(NX))
@@ -345,13 +259,7 @@ def main() raises:
         raise Error("bench_euler_sod_limited_2d FAILED: no shock front found")
     var x_shock_meas = (Float64(ix_shock) - 0.5) * dx_cell
 
-    var a_R0 = sqrt(GAMMA * P_R / RHO_R)
-    var a_L0 = sqrt(GAMMA * P_L / RHO_L)
-    var p_star = _solve_star(RHO_L, 0.0, P_L, a_L0, RHO_R, 0.0, P_R, a_R0)
-    var S_R = a_R0 * sqrt(
-        (GAMMA + 1.0) / (2.0 * GAMMA) * p_star / P_R
-        + (GAMMA - 1.0) / (2.0 * GAMMA)
-    )
+    var S_R = shock_speed_S_R(RHO_L, P_L, RHO_R, P_R, GAMMA)
     var x_shock_exact = 0.5 + T_FINAL * S_R
     var shock_err_cells = (x_shock_meas - x_shock_exact) / dx_cell
     var a_shock_err_cells = shock_err_cells if shock_err_cells >= 0.0 else -shock_err_cells
