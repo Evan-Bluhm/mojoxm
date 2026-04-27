@@ -158,6 +158,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_euler_inflow_3d bench_euler_vortex_3d \
                 bench_euler_vortex_3d_p3 \
                 bench_euler_sod_3d bench_euler_sod_3d_p3 \
+                bench_euler_sod_3d_p4 \
                 bench_shallow_water_wave_3d bench_shallow_water_wave_3d_p3 \
                 bench_shallow_water_wave_3d_p4 \
                 bench_shallow_water_inflow_3d \
@@ -466,6 +467,8 @@ bench-euler-sod-3d: bench_euler_sod_3d
 	./bench_euler_sod_3d
 bench-euler-sod-3d-p3: bench_euler_sod_3d_p3
 	./bench_euler_sod_3d_p3
+bench-euler-sod-3d-p4: bench_euler_sod_3d_p4
+	./bench_euler_sod_3d_p4
 bench-shallow-water-wave-3d: bench_shallow_water_wave_3d
 	./bench_shallow_water_wave_3d
 bench-shallow-water-wave-3d-p3: bench_shallow_water_wave_3d_p3
@@ -511,7 +514,7 @@ bench-all: \
 		bench-advection-3d-p4 bench-advection-3d-p5 \
 		bench-advection-outflow-3d bench-advection-inflow-3d \
 		bench-euler-vortex-3d bench-euler-vortex-3d-p3 \
-		bench-euler-sod-3d bench-euler-sod-3d-p3 \
+		bench-euler-sod-3d bench-euler-sod-3d-p3 bench-euler-sod-3d-p4 \
 		bench-euler-smooth-wave-3d bench-euler-smooth-wave-3d-p3 \
 		bench-euler-smooth-wave-3d-p4 \
 		bench-euler-flux-coverage-3d \
@@ -707,6 +710,8 @@ profile-bench-euler-sod-3d: bench_euler_sod_3d
 	@bin=bench_euler_sod_3d; $(PROFILE_BIN)
 profile-bench-euler-sod-3d-p3: bench_euler_sod_3d_p3
 	@bin=bench_euler_sod_3d_p3; $(PROFILE_BIN)
+profile-bench-euler-sod-3d-p4: bench_euler_sod_3d_p4
+	@bin=bench_euler_sod_3d_p4; $(PROFILE_BIN)
 profile-bench-shallow-water-wave-3d: bench_shallow_water_wave_3d
 	@bin=bench_shallow_water_wave_3d; $(PROFILE_BIN)
 profile-bench-shallow-water-wave-3d-p3: bench_shallow_water_wave_3d_p3
@@ -750,7 +755,7 @@ profile-bench-all: \
 		profile-bench-advection-3d-p4 profile-bench-advection-3d-p5 \
 		profile-bench-advection-outflow-3d profile-bench-advection-inflow-3d \
 		profile-bench-euler-vortex-3d profile-bench-euler-vortex-3d-p3 \
-		profile-bench-euler-sod-3d profile-bench-euler-sod-3d-p3 \
+		profile-bench-euler-sod-3d profile-bench-euler-sod-3d-p3 profile-bench-euler-sod-3d-p4 \
 		profile-bench-euler-smooth-wave-3d profile-bench-euler-smooth-wave-3d-p3 \
 		profile-bench-euler-smooth-wave-3d-p4 \
 		profile-bench-euler-flux-coverage-3d \
