@@ -122,6 +122,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_euler_hydrostatic_2d_p3 \
                 bench_euler_smooth_wave_2d_p3 \
                 bench_euler_smooth_wave_2d_p4 \
+                bench_euler_smooth_wave_2d_p5 \
                 bench_euler_channel_steady_2d bench_shallow_water_wave_2d \
                 bench_shallow_water_wave_2d_p3 \
                 bench_shallow_water_wave_2d_p4 \
@@ -353,6 +354,8 @@ bench-euler-smooth-wave-2d-p3: bench_euler_smooth_wave_2d_p3
 	./bench_euler_smooth_wave_2d_p3
 bench-euler-smooth-wave-2d-p4: bench_euler_smooth_wave_2d_p4
 	./bench_euler_smooth_wave_2d_p4
+bench-euler-smooth-wave-2d-p5: bench_euler_smooth_wave_2d_p5
+	./bench_euler_smooth_wave_2d_p5
 bench-euler-channel-steady-2d: bench_euler_channel_steady_2d
 	./bench_euler_channel_steady_2d
 bench-euler-hydrostatic-2d: bench_euler_hydrostatic_2d
@@ -493,7 +496,7 @@ bench-all: \
 		bench-euler-sod-limited-2d bench-euler-sod-limited-2d-p3 \
 		bench-euler-sod-limited-2d-p4 \
 		bench-euler-smooth-wave-2d bench-euler-smooth-wave-2d-p3 \
-		bench-euler-smooth-wave-2d-p4 \
+		bench-euler-smooth-wave-2d-p4 bench-euler-smooth-wave-2d-p5 \
 		bench-euler-channel-steady-2d \
 		bench-euler-hydrostatic-2d bench-euler-hydrostatic-2d-p3 \
 		bench-shallow-water-wave-2d bench-shallow-water-wave-2d-p3 \
@@ -596,6 +599,8 @@ profile-bench-euler-smooth-wave-2d-p3: bench_euler_smooth_wave_2d_p3
 	@bin=bench_euler_smooth_wave_2d_p3; $(PROFILE_BIN)
 profile-bench-euler-smooth-wave-2d-p4: bench_euler_smooth_wave_2d_p4
 	@bin=bench_euler_smooth_wave_2d_p4; $(PROFILE_BIN)
+profile-bench-euler-smooth-wave-2d-p5: bench_euler_smooth_wave_2d_p5
+	@bin=bench_euler_smooth_wave_2d_p5; $(PROFILE_BIN)
 profile-bench-euler-hydrostatic-2d: bench_euler_hydrostatic_2d
 	@bin=bench_euler_hydrostatic_2d; $(PROFILE_BIN)
 profile-bench-euler-hydrostatic-2d-p3: bench_euler_hydrostatic_2d_p3
@@ -734,7 +739,7 @@ profile-bench-all: \
 		profile-bench-euler-sod-limited-2d profile-bench-euler-sod-limited-2d-p3 \
 		profile-bench-euler-sod-limited-2d-p4 \
 		profile-bench-euler-smooth-wave-2d profile-bench-euler-smooth-wave-2d-p3 \
-		profile-bench-euler-smooth-wave-2d-p4 \
+		profile-bench-euler-smooth-wave-2d-p4 profile-bench-euler-smooth-wave-2d-p5 \
 		profile-bench-euler-channel-steady-2d \
 		profile-bench-euler-hydrostatic-2d profile-bench-euler-hydrostatic-2d-p3 \
 		profile-bench-shallow-water-wave-2d profile-bench-shallow-water-wave-2d-p3 \
