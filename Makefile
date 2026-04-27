@@ -180,7 +180,7 @@ help:
 	@echo '  make test-diagnostics    run DiagnosticsWriter unit test (GPU, np=1)'
 	@echo '  make test-all            run every test above'
 	@echo '  make test-klone          run MPI correctness test on Klone'
-	@echo '  make bench-all           build + run every analytic-solution gate (86 benches)'
+	@echo '  make bench-all           build + run every analytic-solution gate (87 benches)'
 	@echo '  make bench-<name>        build + run a single bench (e.g. bench-euler-sod-2d)'
 	@echo '  make profile-bench-<name> profile a single bench under nsys, save kernel summary'
 	@echo '                           to benchmarks/profile_reports/<name>.kern.txt'
