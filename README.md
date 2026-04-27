@@ -146,7 +146,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  88 analytic-solution gates tying schemes to closed-form reference
+  89 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
@@ -277,7 +277,7 @@ Nine reference drivers under `examples/`:
     17-component rest state preserved under BC_OUTFLOW / BC_WALL
     on all 6 faces),
     `bench_two_fluid_langmuir_3d`.
-  * **3D shocks (5):** `bench_euler_sod_3d` + `_p3` + `_p4` (BJ-limited,
+  * **3D shocks (6):** `bench_euler_sod_3d` + `_p3` + `_p4` (BJ-limited,
     bounds + mass conservation; the P=4 / NP=35 variant is the
     highest-NP shocked-flow gate in the suite -- exercises the
     cooperative shared-memory rk_stage_kernel + the split-kernel
@@ -285,7 +285,11 @@ Nine reference drivers under `examples/`:
     `bench_mhd_brio_wu_3d` + `_p3` (canonical 1D MHD Riemann embedded
     in 3D, GLM + BJ limiter; the P=3 variant is the first analytic-
     Riemann-style 3D MHD shocked gate at NP=20 / NC=9, ~408 us per
-    rk_stage launch -- the heaviest 3D bench in the suite).
+    rk_stage launch -- the heaviest 3D bench in the suite),
+    `bench_shallow_water_dam_break_3d` (closed-pool h_L=2 / h_R=1
+    Riemann in a 3D box with BC_WALL on all 6 faces and the BJ
+    limiter -- first 3D SW shocked-flow gate, mirrors the 2D
+    dam-break invariants at NP=10).
 
   Tight tolerances where the problem admits them, with each gate's
   threshold sized to ~1.4-3x the empirical error floor (catches any
@@ -322,7 +326,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 88 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 89 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
