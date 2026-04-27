@@ -363,7 +363,7 @@ Nine reference drivers under `examples/`:
 
 ## System architecture
 
-Roughly 12.6k lines of Mojo + a thin MPI shim in C. Core components live
+Roughly 12.9k lines of Mojo + a thin MPI shim in C. Core components live
 under `src/`; problem-specific drivers live under `examples/`.
 
 | file                                | lines | role                                                                                   |
@@ -397,14 +397,16 @@ HaloExchange):
 | `src/reference_2d.mojo`                       |   299 | 2D reference triangle: equispaced Lagrange, `D_ref`, `Lift_ref`, edge node maps |
 | `src/reference_2d_gpu.mojo`                   |    64 | Float32 device mirror of `ReferenceElement2D`                                   |
 | `src/local_mesh_2d.mojo`                      |   400 | Periodic Kuhn-2-tri (per cube halved on diagonal) mesh + BC overlay             |
-| `src/local_mesh_2d_gpu.mojo`                  |   271 | `LocalMesh2DGpu[P]` upload + generic NC-templated helpers (cell_avg, cell_mean, rk_update) |
+| `src/local_mesh_2d_gpu.mojo`                  |   189 | `LocalMesh2DGpu[P]` upload + mass-matrix-weighted `cell_mean_kernel_2d`         |
 | `src/local_mesh_2d_gpu_advection.mojo`        |   337 | 2D scalar advection (NC=1)                                                      |
 | `src/local_mesh_2d_gpu_euler.mojo`            |   649 | 2D Euler (NC=4): Rusanov + HLLC, gravity (gx,gy) source                         |
 | `src/local_mesh_2d_gpu_sw.mojo`               |   514 | 2D Shallow Water (NC=3): Rusanov + HLL                                          |
 | `src/local_mesh_2d_gpu_mhd.mojo`              |   408 | 2D plain ideal MHD (NC=6, no GLM)                                               |
 | `src/local_mesh_2d_gpu_mhd_glm.mojo`          |   482 | 2D MHD + Dedner GLM divB cleaning (NC=7)                                        |
 | `src/local_mesh_2d_gpu_maxwell.mojo`          |   372 | 2D Maxwell (NC=6 EM): Rusanov + PEC reflection + J/M source                     |
-| `src/local_mesh_2d_gpu_limiter.mojo`          |   164 | 2D Barth-Jespersen slope limiter (Venkat-smoothed)                              |
+| `src/local_mesh_2d_gpu_limiter.mojo`          |   225 | 2D Barth-Jespersen slope limiter (Venkat-smoothed): split into `cell_mean` + `compute_theta` + coalesced `apply` kernels |
+| `src/vtu_2d.mojo`                             |   263 | 2D VTU frame writer + `dump_pvd_collection` + `vtu_frame_name` helpers          |
+| `src/sod_exact_riemann.mojo`                  |   166 | Toro-style analytic Riemann solver for the canonical Sod IC, used by the 4 Sod benches |
 
 Example drivers exercise various combinations of physics, BC kind,
 and diagnostics; see the list at the top of this README.
