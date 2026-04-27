@@ -222,6 +222,21 @@ def dump_vtu_2d_frame[P: Int](
 # timestamps in the same order.  Lengths must match.
 # ----------------------------------------------------------------------
 
+def vtu_frame_name(prefix: String, i: Int, width: Int = 5) raises -> String:
+    """Build a zero-padded VTU frame filename: `prefix + NNNNN + .vtu`.
+    Default width=5 matches the convention used by every 2D-GPU
+    example driver (`scripts/animate_2d.py` walks the resulting PVD
+    so the exact width doesn't actually matter -- the convention is
+    just for human-readable output directory listings)."""
+    var idx = String(i)
+    var s = prefix
+    for _ in range(width - idx.byte_length()):
+        s += "0"
+    s += idx
+    s += ".vtu"
+    return s^
+
+
 def dump_pvd_collection(
     pvd_path: String,
     paths: List[String],

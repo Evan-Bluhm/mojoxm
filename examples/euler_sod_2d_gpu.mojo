@@ -31,7 +31,7 @@ from src.reference_2d import (
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL, BC_OUTFLOW
-from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection
+from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
 
 
 comptime P = 2
@@ -50,14 +50,7 @@ comptime CFL = 0.15
 comptime VENKAT_EPS = 0.1
 
 
-def _frame_name(i: Int) raises -> String:
-    var s = String("frame_sod2d_gpu_")
-    var idx = String(i)
-    for _ in range(5 - idx.byte_length()):
-        s += "0"
-    s += idx
-    s += ".vtu"
-    return s^
+comptime FRAME_PREFIX = "frame_sod2d_gpu_"
 
 
 def main() raises:
@@ -150,9 +143,12 @@ def main() raises:
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
             density[elem * NP_p + nn] = Float64(host_q[(elem * NP_p + nn) * NC + 0])
-    var f0_path = String("output/") + _frame_name(0)
-    dump_vtu_2d_frame[P](mesh_coords, density, f0_path, String("rho"))
-    paths.append(_frame_name(0))
+    var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
+    dump_vtu_2d_frame[P](
+        mesh_coords, density,
+        String("output/") + f0_name, String("rho"),
+    )
+    paths.append(f0_name)
     times.append(0.0)
 
     var run_start = perf_counter_ns()
@@ -221,9 +217,12 @@ def main() raises:
                     hptr_q[(elem * NP_p + nn) * NC + 0]
                 )
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
-        var path_i = String("output/") + _frame_name(fi)
-        dump_vtu_2d_frame[P](mesh_coords, density, path_i, String("rho"))
-        paths.append(_frame_name(fi))
+        var fname = vtu_frame_name(FRAME_PREFIX, fi)
+        dump_vtu_2d_frame[P](
+            mesh_coords, density,
+            String("output/") + fname, String("rho"),
+        )
+        paths.append(fname)
         times.append(t)
         print("    frame", fi, "/", NUM_FRAMES, " t=", t)
     var run_end = perf_counter_ns()

@@ -27,7 +27,7 @@ from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import (
     BoundaryConditions2D, BC_WALL, BC_OUTFLOW, BC_INFLOW,
 )
-from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection
+from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
 
 
 comptime P = 2
@@ -44,14 +44,7 @@ comptime NUM_FRAMES = 20
 comptime CFL       = 0.15
 
 
-def _frame_name(i: Int) raises -> String:
-    var s = String("frame_channel_gpu_")
-    var idx = String(i)
-    for _ in range(5 - idx.byte_length()):
-        s += "0"
-    s += idx
-    s += ".vtu"
-    return s^
+comptime FRAME_PREFIX = "frame_channel_gpu_"
 
 
 def main() raises:
@@ -143,9 +136,12 @@ def main() raises:
             density[elem * NP_p + nn] = Float64(
                 host_q[(elem * NP_p + nn) * NC + 0]
             )
-    var f0_path = String("output/") + _frame_name(0)
-    dump_vtu_2d_frame[P](mesh_coords, density, f0_path, String("rho"))
-    paths.append(_frame_name(0))
+    var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
+    dump_vtu_2d_frame[P](
+        mesh_coords, density,
+        String("output/") + f0_name, String("rho"),
+    )
+    paths.append(f0_name)
     times.append(0.0)
 
     var rho_max_drift: Float64 = 0.0
@@ -206,9 +202,12 @@ def main() raises:
                 if adr > rho_max_drift:
                     rho_max_drift = adr
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
-        var path_i = String("output/") + _frame_name(fi)
-        dump_vtu_2d_frame[P](mesh_coords, density, path_i, String("rho"))
-        paths.append(_frame_name(fi))
+        var fname = vtu_frame_name(FRAME_PREFIX, fi)
+        dump_vtu_2d_frame[P](
+            mesh_coords, density,
+            String("output/") + fname, String("rho"),
+        )
+        paths.append(fname)
         times.append(t)
         print("    frame", fi, "/", NUM_FRAMES, " t=", t,
               "  rho max |drift|:", rho_max_drift)

@@ -25,7 +25,7 @@ from src.reference_2d import (
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_OUTFLOW
-from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection
+from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
 
 
 comptime P = 2
@@ -44,14 +44,7 @@ comptime CY: Float32 = 0.3
 comptime SIGMA: Float32 = 0.1
 
 
-def _frame_name(i: Int) raises -> String:
-    var s = String("frame_advout_gpu_")
-    var idx = String(i)
-    for _ in range(5 - idx.byte_length()):
-        s += "0"
-    s += idx
-    s += ".vtu"
-    return s^
+comptime FRAME_PREFIX = "frame_advout_gpu_"
 
 
 def main() raises:
@@ -126,9 +119,12 @@ def main() raises:
 
     for k in range(n_q):
         q_scalar[k] = Float64(host_q[k])
-    var f0_path = String("output/") + _frame_name(0)
-    dump_vtu_2d_frame[P](mesh_coords, q_scalar, f0_path, String("q"))
-    paths.append(_frame_name(0))
+    var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
+    dump_vtu_2d_frame[P](
+        mesh_coords, q_scalar,
+        String("output/") + f0_name, String("q"),
+    )
+    paths.append(f0_name)
     times.append(0.0)
     print("    t=0.0       mass =", mass_ic)
 
@@ -179,9 +175,12 @@ def main() raises:
             q_scalar[k] = Float64(hptr_q[k])
             mass_now += q_scalar[k]
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
-        var path_i = String("output/") + _frame_name(fi)
-        dump_vtu_2d_frame[P](mesh_coords, q_scalar, path_i, String("q"))
-        paths.append(_frame_name(fi))
+        var fname = vtu_frame_name(FRAME_PREFIX, fi)
+        dump_vtu_2d_frame[P](
+            mesh_coords, q_scalar,
+            String("output/") + fname, String("q"),
+        )
+        paths.append(fname)
         times.append(t)
         if fi % 4 == 0 or fi == NUM_FRAMES:
             print("    t=", t, " mass =", mass_now,

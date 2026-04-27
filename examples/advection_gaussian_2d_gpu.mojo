@@ -23,7 +23,7 @@ from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
-from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection
+from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
 
 
 comptime P = 2
@@ -52,14 +52,7 @@ def _gauss(x: Float32, y: Float32) -> Float32:
     return exp(-(dx * dx + dy * dy) / (Float32(2.0) * s2))
 
 
-def _frame_name(i: Int) raises -> String:
-    var s = String("frame_adv2d_gpu_")
-    var idx = String(i)
-    for _ in range(5 - idx.byte_length()):
-        s += "0"
-    s += idx
-    s += ".vtu"
-    return s^
+comptime FRAME_PREFIX = "frame_adv2d_gpu_"
 
 
 def main() raises:
@@ -130,9 +123,12 @@ def main() raises:
     # Frame 0: IC.
     for k in range(n_q):
         q_scalar[k] = Float64(host_q[k])
-    var f0_path = String("output/") + _frame_name(0)
-    dump_vtu_2d_frame[P](mesh_coords, q_scalar, f0_path, String("q"))
-    paths.append(_frame_name(0))
+    var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
+    dump_vtu_2d_frame[P](
+        mesh_coords, q_scalar,
+        String("output/") + f0_name, String("q"),
+    )
+    paths.append(f0_name)
     times.append(0.0)
 
     var run_start = perf_counter_ns()
@@ -180,9 +176,12 @@ def main() raises:
         for k in range(n_q):
             q_scalar[k] = Float64(hptr_q[k])
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
-        var path_i = String("output/") + _frame_name(fi)
-        dump_vtu_2d_frame[P](mesh_coords, q_scalar, path_i, String("q"))
-        paths.append(_frame_name(fi))
+        var fname = vtu_frame_name(FRAME_PREFIX, fi)
+        dump_vtu_2d_frame[P](
+            mesh_coords, q_scalar,
+            String("output/") + fname, String("q"),
+        )
+        paths.append(fname)
         times.append(t)
         print("    frame", fi, "/", NUM_FRAMES, " t=", t)
     var run_end = perf_counter_ns()
