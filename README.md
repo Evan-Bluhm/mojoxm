@@ -143,13 +143,14 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  76 analytic-solution gates tying schemes to closed-form reference
+  85 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
-  P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D), and
-  P=4 / P=5 rate gates for advection in both 2D (NP=15, NP=21) and
-  3D (NP=35, NP=56).
-  * **2D smooth (26):** `bench_advection_translation_2d` (rate >= 2.0)
+  P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
+  P=4 absolute-L2 sentinels for every core physics in 2D + 3D
+  (Euler / Maxwell / SW / MHD-GLM), and P=4 / P=5 rate gates for
+  advection in both 2D (NP=15, NP=21) and 3D (NP=35, NP=56).
+  * **2D smooth (28):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
     `bench_advection_inflow_2d` (BC_INFLOW preservation gate with
@@ -158,16 +159,17 @@ Nine reference drivers under `examples/`:
     sentinel; rel L2 ~6.8%% at T=10, comparable to the P=2 / Rusanov
     floor since the long-horizon dissipation is roughly P- and
     flux-type-independent on this setup),
-    `bench_euler_smooth_wave_2d` + `_p3`,
-    `bench_mhd_alfven_2d`, `bench_mhd_alfven_glm_2d` + `_p3`
-    (NP=10 GLM-MHD gate),
+    `bench_euler_smooth_wave_2d` + `_p3` + `_p4` (NP=15 multi-component
+    HLLC absolute-L2 sentinel at the Float32 floor),
+    `bench_mhd_alfven_2d`, `bench_mhd_alfven_glm_2d` + `_p3` + `_p4`
+    (NP=10 / NP=15 GLM-MHD gate),
     `bench_mhd_glm_psi_transport_2d` + `_p3` (c_h>0 psi/Bx wave
     coupling at NP=6 and NP=10),
     `bench_mhd_glm_psi_damp_2d` + `_p3` (alpha_d>0 decay matches A0/e
     via the 2D operator-splitting damp kernel; gated at NP=6 and
     NP=10),
-    `bench_shallow_water_wave_2d` + `_p3` (NP=10 SW HLL gate)
-    + `_rusanov` (gates the Rusanov-flux SW path used by
+    `bench_shallow_water_wave_2d` + `_p3` + `_p4` (NP=10 / NP=15 SW
+    HLL gate) + `_rusanov` (gates the Rusanov-flux SW path used by
     `examples/shallow_water_dam_break_2d_gpu`),
     `bench_shallow_water_inflow_2d` (BC_INFLOW + BC_OUTFLOW preservation
     gate; uniform subcritical state matched to inflow ghost stays
@@ -181,12 +183,12 @@ Nine reference drivers under `examples/`:
     exercise the same physics at NP=6 and NP=10.  Hydrostatic
     equilibrium preserves the rest state to ~Float32 epsilon
     over T=1).
-  * **2D shocks + EM (12):** `bench_euler_sod_2d`,
-    `bench_euler_sod_limited_2d` + `_p3` (HLLC + BJ limiter at P=2
-    and P=3; the P=2 variant lands the shock within 0.2 cells of
-    Rankine-Hugoniot, the P=3 variant within 0.3 cells with NP=10
-    nodes per triangle and is the first analytic-Riemann gate on
-    the higher-order limiter path),
+  * **2D shocks + EM (15):** `bench_euler_sod_2d`,
+    `bench_euler_sod_limited_2d` + `_p3` + `_p4` (HLLC + BJ limiter
+    at P=2 / P=3 / P=4; the P=2 variant lands the shock within 0.2
+    cells of Rankine-Hugoniot, the P=3 variant within 0.3, the P=4
+    variant within 0.4 with NP=15.  The P=4 gate exercises the
+    split-kernel BJ limiter at the highest 2D-Euler NP available),
     `bench_shallow_water_dam_break_2d` (closed-pool conservation
     invariants), `bench_maxwell_cavity_2d` (TM(1,1) standing wave in
     PEC cavity, period sqrt(2), rel L2 ~3e-4),
@@ -195,9 +197,10 @@ Nine reference drivers under `examples/`:
     propagation + zero-component leakage),
     `bench_maxwell_te_plane_wave_2d` (TE-polarization dual: gates
     the previously-untested Bz / Ey flux paths in the same kernel),
-    `bench_maxwell_plane_wave_2d_p3` (NP=10 Maxwell gate -- closes
-    the P-parity gap; rel L2 ~5e-5 at NX=NY=12 vs the P=2 bench's
-    6e-4 floor),
+    `bench_maxwell_plane_wave_2d_p3` + `_p4` (NP=10 / NP=15 Maxwell
+    gates -- close the P-parity gap; rel L2 ~5e-5 at NX=NY=12 / P=3
+    and ~2e-5 at NX=NY=8 / P=4, both at Float32 floor vs the P=2
+    bench's 6e-4 floor),
     `bench_maxwell_outflow_2d` + `_inflow` (uniform-state
     preservation under BC_OUTFLOW / BC_INFLOW on all four faces;
     closes the BC_INFLOW dispatch arm of
@@ -211,11 +214,13 @@ Nine reference drivers under `examples/`:
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (35):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (39):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
-    steady-state), `bench_euler_smooth_wave_3d` + `_p3`,
+    steady-state),
+    `bench_euler_smooth_wave_3d` + `_p3` + `_p4` (NP=20 / NP=35
+    multi-component HLLEC gates at the Float32 floor),
     `bench_euler_flux_coverage_3d` (gates the Rusanov / Roe / HLLE
     flux paths in `src/euler.mojo`; HLLEC is gated by the other
     Euler benches),
@@ -232,7 +237,9 @@ Nine reference drivers under `examples/`:
     the 2D bench since F^z = 0 on z-uniform fields and the long-
     horizon dissipation floor is roughly P- and flux-type-
     independent on this setup),
-    `bench_mhd_alfven_3d` + `_p3` (NP=20 IdealMHD gate),
+    `bench_mhd_alfven_3d` + `_p3` + `_p4` (NP=20 / NP=35 IdealMHD
+    gate; the P=4 variant exercises the cooperative shared-memory
+    rk_stage_kernel at NC=9 / NP=35 = 315 q values per element),
     `bench_mhd_glm_psi_damp_3d` + `_p3` (3D GLM psi-damping via
     the source_term hook in rk_stage_kernel; analytic decay match
     to Float32 epsilon at both NP=10 and NP=20),
@@ -242,9 +249,9 @@ Nine reference drivers under `examples/`:
     `_p3` damp + transport pair completes 3D GLM P-parity at P=3
     with the existing 2D _p3 analogs,
     `bench_maxwell_cavity_3d`,
-    `bench_maxwell_plane_wave_3d` + `_p3` (TM plane wave on triply-
-    periodic cube; the P=3 variant brings 3D Maxwell into NP=20
-    parity with advection / Euler / SW / MHD),
+    `bench_maxwell_plane_wave_3d` + `_p3` + `_p4` (TM plane wave on
+    triply-periodic cube; the P=3 variant brings 3D Maxwell into
+    NP=20 parity, the P=4 variant brings it into NP=35 parity),
     `bench_maxwell_uniform_j_3d` + `_p3` + `_m` + `_m_p3` (uniform-J /
     uniform-M source-term gates: Ex / Bz grow linearly under the
     source while flux divergences stay zero on uniform fields; both
@@ -259,8 +266,8 @@ Nine reference drivers under `examples/`:
     constant state matched to the inflow ghost on all six faces;
     after this gate every BC arm in every physics has a direct
     test),
-    `bench_shallow_water_wave_3d` + `_p3` (NP=20 SW gate)
-    + `_inflow` (BC_INFLOW + BC_OUTFLOW preservation),
+    `bench_shallow_water_wave_3d` + `_p3` + `_p4` (NP=20 / NP=35 SW
+    gates) + `_inflow` (BC_INFLOW + BC_OUTFLOW preservation),
     `bench_two_fluid_outflow_3d` + `_walls` (charge-balanced
     17-component rest state preserved under BC_OUTFLOW / BC_WALL
     on all 6 faces),
@@ -308,7 +315,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 76 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 85 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
