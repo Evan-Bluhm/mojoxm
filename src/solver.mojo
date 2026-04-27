@@ -790,14 +790,17 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         venkat_eps: Float32 = Float32(0.1),
     ):
         """Turn the Barth-Jespersen slope limiter on or off.  When on,
-        a two-pass post-RK-stage limiter runs after every SSPRK3 stage:
-        `compute_cell_averages_kernel` writes per-element means and
-        `bj_limiter_kernel` damps nodal deviations via the Venkat-
-        smoothed Barth-Jespersen formula.  `venkat_eps` controls the
-        smoothness tolerance: small values approach classical BJ
-        (over-limits smooth P2 flow); larger values preserve smooth
-        variation.  Default 0.1 is good for density in O(1) range;
-        larger scales should bump eps proportionally."""
+        a three-pass post-RK-stage limiter runs after every SSPRK3
+        stage: `compute_cell_averages_kernel` writes per-element
+        means; `bj_limiter_compute_theta_kernel` reads cell averages
+        and node deviations to compute a per-element Venkat-smoothed
+        theta; `bj_limiter_apply_kernel` (one thread per
+        (elem, nn, c) for coalesced writes) scales nodal deviations.
+        `venkat_eps` controls the smoothness tolerance: small values
+        approach classical BJ (over-limits smooth P2 flow); larger
+        values preserve smooth variation.  Default 0.1 is good for
+        density in O(1) range; larger scales should bump eps
+        proportionally."""
         self.cell_limiter_enabled = enabled
         self.cell_limiter_venkat_eps = venkat_eps
 

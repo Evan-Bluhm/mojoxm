@@ -2,8 +2,10 @@
 # limiter_3d_test -- 3D BJ slope limiter conservation invariant
 # ======================================================================
 #
-# Validates the 3D Barth-Jespersen slope limiter (compute_cell_averages_kernel
-# + bj_limiter_kernel in src/solver.mojo).  Two checks:
+# Validates the 3D Barth-Jespersen slope limiter
+# (`compute_cell_averages_kernel` + `bj_limiter_compute_theta_kernel`
+# + `bj_limiter_apply_kernel` in src/solver.mojo, since the
+# split-for-coalescing refactor in commit 0435ad6).  Two checks:
 #
 #   (1) Constant-state preservation: q[c] = constant on every node ->
 #       limiter is a no-op (every nodal deviation is 0, theta=1).
