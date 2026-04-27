@@ -13,7 +13,6 @@
 # ======================================================================
 
 from std.math import sqrt
-from std.pathlib import Path
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.time import perf_counter_ns
@@ -28,7 +27,7 @@ from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import (
     BoundaryConditions2D, BC_WALL, BC_OUTFLOW, BC_INFLOW,
 )
-from src.vtu_2d import dump_vtu_2d_frame
+from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection
 
 
 comptime P = 2
@@ -224,20 +223,9 @@ def main() raises:
     print("  rho max |drift| vs IC:", rho_max_drift,
           " (expected ~ 0 for exact steady solution)")
 
-    var pvd = String()
-    pvd += '<?xml version="1.0"?>\n'
-    pvd += ('<VTKFile type="Collection" version="0.1"'
-            ' byte_order="LittleEndian">\n')
-    pvd += '<Collection>\n'
-    for i in range(len(paths)):
-        pvd += '<DataSet timestep="'
-        pvd += String(times[i])
-        pvd += '" group="" part="0" file="'
-        pvd += paths[i]
-        pvd += '"/>\n'
-    pvd += '</Collection>\n'
-    pvd += '</VTKFile>\n'
-    Path("output/solution_channel_gpu.pvd").write_text(pvd)
+    dump_pvd_collection(
+        String("output/solution_channel_gpu.pvd"), paths, times,
+    )
     print("  wrote output/solution_channel_gpu.pvd +",
           NUM_FRAMES + 1, "VTU frames")
 

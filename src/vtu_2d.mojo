@@ -197,3 +197,52 @@ def dump_vtu_2d_frame[P: Int](
     var span = Span(ptr=out, length=total_size)
     p.write_bytes(span)
     out.free()
+
+
+# ----------------------------------------------------------------------
+# PVD time-series collection emitter
+# ----------------------------------------------------------------------
+# After dumping a sequence of `dump_vtu_2d_frame` files, callers want a
+# `.pvd` (ParaView XML) collection that ties them together with their
+# physical timestamps.  Format:
+#
+#   <?xml version="1.0"?>
+#   <VTKFile type="Collection" version="0.1" byte_order="LittleEndian">
+#   <Collection>
+#     <DataSet timestep="0.0"   group="" part="0" file="frame_NNNNN.vtu"/>
+#     <DataSet timestep="0.05"  group="" part="0" file="frame_NNNNN.vtu"/>
+#     ...
+#   </Collection>
+#   </VTKFile>
+#
+# This helper centralises the XML emission that the 2D example drivers
+# all duplicated -- 14-line blocks repeated 9x with no per-driver
+# variation.  `paths` are written into the PVD verbatim (relative to
+# the PVD's directory), `times` are the corresponding physical
+# timestamps in the same order.  Lengths must match.
+# ----------------------------------------------------------------------
+
+def dump_pvd_collection(
+    pvd_path: String,
+    paths: List[String],
+    times: List[Float64],
+) raises:
+    if len(paths) != len(times):
+        raise Error(
+            "dump_pvd_collection: paths/times length mismatch ("
+            + String(len(paths)) + " vs " + String(len(times)) + ")"
+        )
+    var pvd = String()
+    pvd += '<?xml version="1.0"?>\n'
+    pvd += ('<VTKFile type="Collection" version="0.1"'
+            ' byte_order="LittleEndian">\n')
+    pvd += '<Collection>\n'
+    for i in range(len(paths)):
+        pvd += '<DataSet timestep="'
+        pvd += String(times[i])
+        pvd += '" group="" part="0" file="'
+        pvd += paths[i]
+        pvd += '"/>\n'
+    pvd += '</Collection>\n'
+    pvd += '</VTKFile>\n'
+    Path(pvd_path).write_text(pvd)

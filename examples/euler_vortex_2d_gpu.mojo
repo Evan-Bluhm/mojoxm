@@ -18,7 +18,6 @@
 # ======================================================================
 
 from std.math import sqrt, exp, pi
-from std.pathlib import Path
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.time import perf_counter_ns
@@ -30,7 +29,7 @@ from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
-from src.vtu_2d import dump_vtu_2d_frame
+from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection
 
 
 comptime P = 2
@@ -248,20 +247,9 @@ def main() raises:
           "  (IC L2 =", l2_ic, ")")
 
     # PVD collection -- `scripts/animate_2d.py` walks this directly.
-    var pvd = String()
-    pvd += '<?xml version="1.0"?>\n'
-    pvd += ('<VTKFile type="Collection" version="0.1"'
-            ' byte_order="LittleEndian">\n')
-    pvd += '<Collection>\n'
-    for i in range(len(paths)):
-        pvd += '<DataSet timestep="'
-        pvd += String(times[i])
-        pvd += '" group="" part="0" file="'
-        pvd += paths[i]
-        pvd += '"/>\n'
-    pvd += '</Collection>\n'
-    pvd += '</VTKFile>\n'
-    Path("output/solution_euler2d_gpu.pvd").write_text(pvd)
+    dump_pvd_collection(
+        String("output/solution_euler2d_gpu.pvd"), paths, times,
+    )
     print("  wrote output/solution_euler2d_gpu.pvd +",
           NUM_FRAMES + 1, "VTU frames")
 
