@@ -25,6 +25,9 @@ from std.pathlib import Path
 from std.memory import alloc, memcpy, memset
 from src.local_mesh_2d import LocalMesh2D
 from src.reference_2d import num_tri_nodes_2d
+# Re-exported so the 2D example drivers can emit `.pvd` collections
+# through the same code path as 3D `FrameWriter.finalize`.
+from src.vtu import write_pvd as dump_pvd_collection
 
 
 comptime VTK_TRIANGLE = 5
@@ -200,26 +203,11 @@ def dump_vtu_2d_frame[P: Int](
 
 
 # ----------------------------------------------------------------------
-# PVD time-series collection emitter
+# Frame-name + PVD-collection helpers (2D-side)
 # ----------------------------------------------------------------------
-# After dumping a sequence of `dump_vtu_2d_frame` files, callers want a
-# `.pvd` (ParaView XML) collection that ties them together with their
-# physical timestamps.  Format:
-#
-#   <?xml version="1.0"?>
-#   <VTKFile type="Collection" version="0.1" byte_order="LittleEndian">
-#   <Collection>
-#     <DataSet timestep="0.0"   group="" part="0" file="frame_NNNNN.vtu"/>
-#     <DataSet timestep="0.05"  group="" part="0" file="frame_NNNNN.vtu"/>
-#     ...
-#   </Collection>
-#   </VTKFile>
-#
-# This helper centralises the XML emission that the 2D example drivers
-# all duplicated -- 14-line blocks repeated 9x with no per-driver
-# variation.  `paths` are written into the PVD verbatim (relative to
-# the PVD's directory), `times` are the corresponding physical
-# timestamps in the same order.  Lengths must match.
+# `vtu_frame_name` builds zero-padded VTU filenames; the
+# `dump_pvd_collection` re-export above ties to the PVD format already
+# in use by the 3D `FrameWriter.finalize` (`src.vtu.write_pvd`).
 # ----------------------------------------------------------------------
 
 def vtu_frame_name(prefix: String, i: Int, width: Int = 5) raises -> String:
@@ -237,27 +225,3 @@ def vtu_frame_name(prefix: String, i: Int, width: Int = 5) raises -> String:
     return s^
 
 
-def dump_pvd_collection(
-    pvd_path: String,
-    paths: List[String],
-    times: List[Float64],
-) raises:
-    if len(paths) != len(times):
-        raise Error(
-            "dump_pvd_collection: paths/times length mismatch ("
-            + String(len(paths)) + " vs " + String(len(times)) + ")"
-        )
-    var pvd = String()
-    pvd += '<?xml version="1.0"?>\n'
-    pvd += ('<VTKFile type="Collection" version="0.1"'
-            ' byte_order="LittleEndian">\n')
-    pvd += '<Collection>\n'
-    for i in range(len(paths)):
-        pvd += '<DataSet timestep="'
-        pvd += String(times[i])
-        pvd += '" group="" part="0" file="'
-        pvd += paths[i]
-        pvd += '"/>\n'
-    pvd += '</Collection>\n'
-    pvd += '</VTKFile>\n'
-    Path(pvd_path).write_text(pvd)

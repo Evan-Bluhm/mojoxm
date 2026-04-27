@@ -296,6 +296,16 @@ struct VtuWriter(Movable):
 # ----------------------------------------------------------------------
 
 def write_pvd(path: String, vtu_paths: List[String], times: List[Float64]) raises:
+    """Emit a ParaView `.pvd` collection that ties a sequence of VTU
+    frames to their physical timestamps.  Used by both the 3D
+    `FrameWriter.finalize` and the 2D example drivers (via
+    `src.vtu_2d.dump_pvd_collection`, which re-exports this).
+    `vtu_paths` are relative to the `.pvd`'s directory."""
+    if len(vtu_paths) != len(times):
+        raise Error(
+            "write_pvd: vtu_paths/times length mismatch ("
+            + String(len(vtu_paths)) + " vs " + String(len(times)) + ")"
+        )
     var out = String()
     out += '<?xml version="1.0"?>\n'
     out += '<VTKFile type="Collection" version="0.1" byte_order="LittleEndian">\n'
