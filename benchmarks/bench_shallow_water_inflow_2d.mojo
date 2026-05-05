@@ -86,11 +86,13 @@ def main() raises:
         BC_INFLOW, BC_OUTFLOW,         # -x, +x
         BC_INTERIOR, BC_INTERIOR,      # -y, +y (periodic)
     )
-    var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
-    var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY, bcs)
+    var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
+    var mesh_coords = LocalMesh2D[P](
+        Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs,
+    )
     var host_re = ReferenceElement2D[P]()
-    var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
-    var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
+    var gpu_mesh = LocalMesh2DGpu[P](ctx=ctx, host=host_mesh^)
+    var gpu_re = ReferenceElement2DGpu[P](ctx=ctx, host=host_re)
 
     # IC: uniform h = H0, hu = H0*U0, hv = 0.  Matches the inflow
     # ghost exactly so the analytic solution is the IC for all time.

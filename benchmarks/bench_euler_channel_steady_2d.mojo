@@ -86,10 +86,10 @@ def main() raises:
     var bcs = BoundaryConditions2D(
         BC_INFLOW, BC_OUTFLOW, BC_WALL, BC_WALL,
     )
-    var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
+    var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var host_re = ReferenceElement2D[P]()
-    var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
-    var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
+    var gpu_mesh = LocalMesh2DGpu[P](ctx=ctx, host=host_mesh^)
+    var gpu_re = ReferenceElement2DGpu[P](ctx=ctx, host=host_re)
 
     var n_q = gpu_mesh.num_elements * NP_p * NC
     var host_q = List[Float32]()
