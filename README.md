@@ -62,6 +62,12 @@ Nine reference drivers under `examples/`:
 - **Diagnostics**: every driver can register linear, squared, and
   max-norm conserved-quantity integrals via `DiagnosticsWriter`. One
   CSV row per frame, with MPI allreduce at np>1.
+- **Perf introspection**: `Solver.memory_report()` returns a WARPXM-
+  Kokkos-style categorised device-memory breakdown; `Solver.bench_
+  step_loop()` runs a sync'd warmup + measurement loop and returns a
+  `ThroughputReport` with per-step wall time, DOF/s, and a state-
+  bandwidth lower bound.  Every 3D example driver prints both at
+  startup / shutdown; see [Performance](#performance) for a sample.
 - **Animated dashboard**: `scripts/animate_dashboard.py` reads the VTU
   frames + diagnostics CSV and emits a 2×2 animated GIF (density
   field + auto-grouped time-series panels). Lazy frame loader scales
@@ -591,6 +597,59 @@ dashboard with 81 frames peaks at under 1 GB of resident memory.
 ```
 
 ## Performance
+
+### Built-in perf introspection
+
+Every 3D example driver prints two reports per run -- a WARPXM-Kokkos-
+style device-memory table at startup and a sync'd throughput summary
+at the end -- so users can see where GPU memory goes and how fast the
+compute kernels are running without reaching for an external profiler.
+
+Sample output from `./euler_vortex` at 32³ (RTX 3090):
+
+```
+=== Device memory usage ===
+  Temporal solver (RK stages): 112.5 MB
+  Spatial solvers (DG ops):    2.1 KB
+  Cell limiter scratch:        4.5 MB
+  Mesh connectivity:           84.8 MB
+  Ghost cell sync (device):    0 B
+  Ghost cell sync (pinned):    0 B
+  ----------------------------------
+  Total device memory:         201.8 MB
+===========================
+...
+=== Step-loop throughput ===
+  steps:                50
+  DOF / step:           9830400
+  wall time:            388.8 ms
+  per-step wall:        7.8 ms
+  throughput:           1.3 GDOF/s
+  state bytes / step:   300.0 MB
+  state bandwidth:      37.7 GB/s  (lower bound; excludes operator + mesh reads)
+============================
+```
+
+The memory breakdown is exact (computed from each allocation's
+known shape -- no probe / sampling).  The throughput report comes
+from `Solver.bench_step_loop()`, which runs a 5-step warmup + 50-
+step measurement loop with `ctx.synchronize()` at both endpoints
+so the elapsed wall covers GPU compute (not async enqueue).  See
+`src/memory_report.mojo` for the structs (`MemoryReport`,
+`ThroughputReport`) and `src/solver.mojo` for the helper methods
+(`Solver.memory_report()`, `Solver.dof_count()`,
+`Solver.state_bytes_per_step()`, `Solver.bench_step_loop()`).
+
+The reported state-bandwidth is a true LOWER BOUND on achieved
+DRAM bandwidth: it counts only the bytes the SSPRK3 kernel sequence
+MUST move between launches (8 × total_q_len × Float32 per step,
+derived from the 2-3-3 read/write pattern of the three RK stages),
+and excludes operator + connectivity reads (small, cache-friendly).
+Achieved bandwidth divided by device peak (e.g. ~1 TB/s on RTX
+3090) gives a quick "how memory-bound is this run" intuition.
+NC=1 advection routinely hits >100 GB/s state bandwidth at this
+mesh size; NC=5 Euler runs at ~40 GB/s on the same hardware
+because each loaded byte fuels more arithmetic per element.
 
 ### advection_gaussian at 48³ (RTX 3090, WSL2)
 
