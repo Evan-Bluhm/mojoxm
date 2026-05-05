@@ -114,6 +114,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_alfven_2d bench_mhd_alfven_glm_2d \
                 bench_mhd_alfven_glm_2d_p3 \
                 bench_mhd_alfven_glm_2d_p4 \
+                bench_mhd_alfven_glm_2d_p5 \
                 bench_mhd_glm_psi_transport_2d_p3 \
                 bench_mhd_glm_psi_transport_2d bench_mhd_glm_psi_damp_2d \
                 bench_mhd_glm_psi_damp_2d_p3 \
@@ -388,6 +389,8 @@ bench-mhd-alfven-glm-2d-p3: bench_mhd_alfven_glm_2d_p3
 	./bench_mhd_alfven_glm_2d_p3
 bench-mhd-alfven-glm-2d-p4: bench_mhd_alfven_glm_2d_p4
 	./bench_mhd_alfven_glm_2d_p4
+bench-mhd-alfven-glm-2d-p5: bench_mhd_alfven_glm_2d_p5
+	./bench_mhd_alfven_glm_2d_p5
 bench-mhd-glm-psi-transport-2d: bench_mhd_glm_psi_transport_2d
 	./bench_mhd_glm_psi_transport_2d
 bench-mhd-glm-psi-transport-2d-p3: bench_mhd_glm_psi_transport_2d_p3
@@ -599,7 +602,7 @@ bench-all: \
 		bench-shallow-water-inflow-2d bench-shallow-water-dam-break-2d \
 		bench-mhd-alfven-2d \
 		bench-mhd-alfven-glm-2d bench-mhd-alfven-glm-2d-p3 \
-		bench-mhd-alfven-glm-2d-p4 \
+		bench-mhd-alfven-glm-2d-p4 bench-mhd-alfven-glm-2d-p5 \
 		bench-mhd-glm-psi-transport-2d bench-mhd-glm-psi-transport-2d-p3 \
 		bench-mhd-glm-psi-damp-2d bench-mhd-glm-psi-damp-2d-p3 \
 		bench-maxwell-cavity-2d \
@@ -676,6 +679,8 @@ profile-bench-mhd-alfven-glm-2d-p3: bench_mhd_alfven_glm_2d_p3
 	@bin=bench_mhd_alfven_glm_2d_p3; $(PROFILE_BIN)
 profile-bench-mhd-alfven-glm-2d-p4: bench_mhd_alfven_glm_2d_p4
 	@bin=bench_mhd_alfven_glm_2d_p4; $(PROFILE_BIN)
+profile-bench-mhd-alfven-glm-2d-p5: bench_mhd_alfven_glm_2d_p5
+	@bin=bench_mhd_alfven_glm_2d_p5; $(PROFILE_BIN)
 profile-bench-mhd-glm-psi-transport-2d: bench_mhd_glm_psi_transport_2d
 	@bin=bench_mhd_glm_psi_transport_2d; $(PROFILE_BIN)
 profile-bench-mhd-glm-psi-transport-2d-p3: bench_mhd_glm_psi_transport_2d_p3
@@ -863,7 +868,7 @@ profile-bench-all: \
 		profile-bench-shallow-water-inflow-2d profile-bench-shallow-water-dam-break-2d \
 		profile-bench-mhd-alfven-2d \
 		profile-bench-mhd-alfven-glm-2d profile-bench-mhd-alfven-glm-2d-p3 \
-		profile-bench-mhd-alfven-glm-2d-p4 \
+		profile-bench-mhd-alfven-glm-2d-p4 profile-bench-mhd-alfven-glm-2d-p5 \
 		profile-bench-mhd-glm-psi-transport-2d profile-bench-mhd-glm-psi-transport-2d-p3 \
 		profile-bench-mhd-glm-psi-damp-2d profile-bench-mhd-glm-psi-damp-2d-p3 \
 		profile-bench-maxwell-cavity-2d \

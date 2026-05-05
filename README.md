@@ -156,17 +156,16 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  95 analytic-solution gates tying schemes to closed-form reference
+  96 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
   P=4 absolute-L2 sentinels for every core physics in 2D + 3D
-  (Euler / Maxwell / SW / MHD-GLM), full 3D NP=56 P=5 coverage
-  across all 4 smooth multi-component physics (Euler, Maxwell, SW,
-  IdealMHD/GLM), 2D NP=21 P=5 coverage for Euler / Maxwell / SW,
-  and P=4 / P=5 rate gates for advection in both 2D (NP=15, NP=21)
-  and 3D (NP=35, NP=56).
-  * **2D smooth (30):** `bench_advection_translation_2d` (rate >= 2.0)
+  (Euler / Maxwell / SW / MHD-GLM), and full P=5 P-parity coverage
+  across all 5 smooth physics in both dimensions (advection / Euler
+  / Maxwell / SW / IdealMHD-GLM at 2D NP=21 and 3D NP=56) -- the
+  largest comptime configuration the suite gates end-to-end.
+  * **2D smooth (31):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
     `bench_advection_inflow_2d` (BC_INFLOW preservation gate with
@@ -179,7 +178,10 @@ Nine reference drivers under `examples/`:
     multi-component HLLC absolute-L2 sentinels at the Float32 floor;
     `_p5` is the highest-NP multi-component bench in the suite),
     `bench_mhd_alfven_2d`, `bench_mhd_alfven_glm_2d` + `_p3` + `_p4`
-    (NP=10 / NP=15 GLM-MHD gate),
+    + `_p5` (NP=10 / NP=15 / NP=21 GLM-MHD gate; the `_p5` variant
+    closes the 2D MHD-GLM P-parity sweep P=2/3/4/5 at the same
+    A^2~0.01 nonlinear floor as the lower P -- highest-NC 2D physics
+    gate at NC=7 / NP=21 = 147 q values per element),
     `bench_mhd_glm_psi_transport_2d` + `_p3` (c_h>0 psi/Bx wave
     coupling at NP=6 and NP=10),
     `bench_mhd_glm_psi_damp_2d` + `_p3` (alpha_d>0 decay matches A0/e
@@ -350,7 +352,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 95 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 96 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
