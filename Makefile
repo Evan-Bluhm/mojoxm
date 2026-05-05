@@ -176,7 +176,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-all test-klone bench-quick bench-p5 bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-all test-klone bench-quick bench-p5 bench-shocks bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -186,6 +186,7 @@ help:
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
 	@echo '  make bench-quick         smoke-test 12 representative benches (~60s)'
 	@echo '  make bench-p5            run 12 P=5 P-parity gates at NP=21/56 (~80s)'
+	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-all           build + run every analytic-solution gate (98 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -227,6 +228,10 @@ help:
 	@echo '                           across all 5 smooth physics + limited shocked Sod (~80s);'
 	@echo '                           the largest comptime configs the suite covers, where high-P'
 	@echo '                           regressions show first.'
+	@echo '  make bench-shocks        13 shocked-flow gates exercising HLLC / HLLEC + BJ limiter'
+	@echo '                           (Euler Sod 2D + 3D, P=2-5), HLL SW dam-break (2D + 3D), and'
+	@echo '                           Brio-Wu MHD shock (3D P=2/3); use when iterating on Riemann'
+	@echo '                           solvers or the limiter pipeline (~70s).'
 	@echo '  make bench-all           build + run every gate (98 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
@@ -588,6 +593,22 @@ bench-quick: \
 		bench-mhd-alfven-3d \
 		bench-maxwell-cavity-3d
 	@echo '=== bench-quick: 12 representative gates PASSED ==='
+
+
+# Shocked-flow sweep -- 13 gates exercising every Riemann solver +
+# limiter path the suite has.  Targets HLLC / HLLEC + BJ limiter
+# (Euler Sod 2D / 3D, P=2-5 in each dim), Brio-Wu MHD shock
+# (3D P=2 + P=3), and HLL SW dam-break (2D + 3D).  Run when
+# iterating on Riemann solvers, the BJ limiter pipeline, or
+# anything in the shock-capture path.  Run-time ~70s wall.
+bench-shocks: \
+		bench-euler-sod-2d bench-euler-sod-3d bench-euler-sod-3d-p3 \
+		bench-euler-sod-3d-p4 bench-euler-sod-3d-p5 \
+		bench-euler-sod-limited-2d bench-euler-sod-limited-2d-p3 \
+		bench-euler-sod-limited-2d-p4 bench-euler-sod-limited-2d-p5 \
+		bench-shallow-water-dam-break-2d bench-shallow-water-dam-break-3d \
+		bench-mhd-brio-wu-3d bench-mhd-brio-wu-3d-p3
+	@echo '=== bench-shocks: 13 shocked-flow gates PASSED ==='
 
 
 # P=5 P-parity sweep -- 12 gates at the largest comptime config
