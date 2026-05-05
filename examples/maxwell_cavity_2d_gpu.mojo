@@ -35,7 +35,9 @@ from src.reference_2d import (
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL
-from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
+from src.vtu_2d import (
+    dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
+)
 
 
 comptime P = 2
@@ -122,21 +124,45 @@ def main() raises:
           "  total steps=", total_steps)
 
     var Ez_field = List[Float64]()
+    var Emag = List[Float64]()
+    var Bmag = List[Float64]()
     for _ in range(gpu_mesh.num_elements * NP_p):
         Ez_field.append(0.0)
+        Emag.append(0.0)
+        Bmag.append(0.0)
     var paths = List[String]()
     var times = List[Float64]()
 
+    var field_names = List[String]()
+    field_names.append(String("Ez"))   # signed -- shows TM(1,1) phase
+    field_names.append(String("|E|"))
+    field_names.append(String("|B|"))
+
+    # Vacuum Maxwell (NC=6) state layout: Ex, Ey, Ez, Bx, By, Bz
+    @parameter
+    def fill_derived(src: UnsafePointer[Float32, MutAnyOrigin]) raises:
+        var n_nodes = gpu_mesh.num_elements * NP_p
+        for i in range(n_nodes):
+            var Ex = Float64(src[i * NC + 0])
+            var Ey = Float64(src[i * NC + 1])
+            var Ez = Float64(src[i * NC + 2])
+            var Bx = Float64(src[i * NC + 3])
+            var By = Float64(src[i * NC + 4])
+            var Bz = Float64(src[i * NC + 5])
+            Ez_field[i] = Ez
+            Emag[i] = sqrt(Ex * Ex + Ey * Ey + Ez * Ez)
+            Bmag[i] = sqrt(Bx * Bx + By * By + Bz * Bz)
+
     # Frame 0: dump IC before stepping.
-    for elem in range(gpu_mesh.num_elements):
-        for nn in range(NP_p):
-            Ez_field[elem * NP_p + nn] = Float64(
-                host_q[(elem * NP_p + nn) * NC + 2]   # component 2 = Ez
-            )
+    fill_derived(hptr_q)
+    var fields = List[List[Float64]]()
+    fields.append(Ez_field.copy())
+    fields.append(Emag.copy())
+    fields.append(Bmag.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
-    dump_vtu_2d_frame[P](
-        mesh_coords, Ez_field,
-        String("output/") + f0_name, String("Ez"),
+    dump_vtu_2d_frame_multi[P](
+        mesh_coords, field_names, fields,
+        String("output/") + f0_name,
     )
     paths.append(f0_name)
     times.append(0.0)
@@ -186,16 +212,16 @@ def main() raises:
 
         ctx.enqueue_copy(hbuf_q, d_q)
         ctx.synchronize()
-        for elem in range(gpu_mesh.num_elements):
-            for nn in range(NP_p):
-                Ez_field[elem * NP_p + nn] = Float64(
-                    hptr_q[(elem * NP_p + nn) * NC + 2]
-                )
+        fill_derived(hptr_q)
+        var fi_fields = List[List[Float64]]()
+        fi_fields.append(Ez_field.copy())
+        fi_fields.append(Emag.copy())
+        fi_fields.append(Bmag.copy())
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
-        dump_vtu_2d_frame[P](
-            mesh_coords, Ez_field,
-            String("output/") + fname, String("Ez"),
+        dump_vtu_2d_frame_multi[P](
+            mesh_coords, field_names, fi_fields,
+            String("output/") + fname,
         )
         paths.append(fname)
         times.append(t)

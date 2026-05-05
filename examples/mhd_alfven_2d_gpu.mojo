@@ -33,7 +33,9 @@ from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
-from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
+from src.vtu_2d import (
+    dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
+)
 
 
 comptime P = 2
@@ -147,22 +149,53 @@ def main() raises:
     var min_rho = Float32(1.0e-6)
     var min_p   = Float32(1.0e-6)
 
+    var density = List[Float64]()
+    var vmag = List[Float64]()
+    var bmag = List[Float64]()
     var By_scalar = List[Float64]()
     for _ in range(gpu_mesh.num_elements * NP_p):
+        density.append(0.0)
+        vmag.append(0.0)
+        bmag.append(0.0)
         By_scalar.append(0.0)
     var paths = List[String]()
     var times = List[Float64]()
 
+    var field_names = List[String]()
+    field_names.append(String("rho"))
+    field_names.append(String("|v|"))
+    field_names.append(String("|B|"))
+    field_names.append(String("By"))   # signed component, useful for wave phase
+
+    # 2D plain MHD (NC=6) state layout: rho, mom_x, mom_y, Bx, By, E
+    @parameter
+    def fill_derived(src: UnsafePointer[Float32, MutAnyOrigin]) raises:
+        var n_nodes = gpu_mesh.num_elements * NP_p
+        for i in range(n_nodes):
+            var rho = Float64(src[i * NC + 0])
+            var mx  = Float64(src[i * NC + 1])
+            var my  = Float64(src[i * NC + 2])
+            var Bx  = Float64(src[i * NC + 3])
+            var By  = Float64(src[i * NC + 4])
+            var rho_safe = rho if rho > 1.0e-12 else 1.0e-12
+            var u = mx / rho_safe
+            var v = my / rho_safe
+            density[i] = rho
+            vmag[i] = sqrt(u * u + v * v)
+            bmag[i] = sqrt(Bx * Bx + By * By)
+            By_scalar[i] = By
+
     # Frame 0: IC.
-    for elem in range(gpu_mesh.num_elements):
-        for nn in range(NP_p):
-            By_scalar[elem * NP_p + nn] = Float64(
-                host_q[(elem * NP_p + nn) * NC + 4]
-            )
+    fill_derived(hptr_q)
+    var fields = List[List[Float64]]()
+    fields.append(density.copy())
+    fields.append(vmag.copy())
+    fields.append(bmag.copy())
+    fields.append(By_scalar.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
-    dump_vtu_2d_frame[P](
-        mesh_coords, By_scalar,
-        String("output/") + f0_name, String("By"),
+    dump_vtu_2d_frame_multi[P](
+        mesh_coords, field_names, fields,
+        String("output/") + f0_name,
     )
     paths.append(f0_name)
     times.append(0.0)
@@ -209,16 +242,17 @@ def main() raises:
 
         ctx.enqueue_copy(hbuf_q, d_q)
         ctx.synchronize()
-        for elem in range(gpu_mesh.num_elements):
-            for nn in range(NP_p):
-                By_scalar[elem * NP_p + nn] = Float64(
-                    hptr_q[(elem * NP_p + nn) * NC + 4]
-                )
+        fill_derived(hptr_q)
+        var fi_fields = List[List[Float64]]()
+        fi_fields.append(density.copy())
+        fi_fields.append(vmag.copy())
+        fi_fields.append(bmag.copy())
+        fi_fields.append(By_scalar.copy())
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
-        dump_vtu_2d_frame[P](
-            mesh_coords, By_scalar,
-            String("output/") + fname, String("By"),
+        dump_vtu_2d_frame_multi[P](
+            mesh_coords, field_names, fi_fields,
+            String("output/") + fname,
         )
         paths.append(fname)
         times.append(t)
