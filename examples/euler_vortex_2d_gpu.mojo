@@ -32,6 +32,7 @@ from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.vtu_2d import (
     dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
 )
+from src.memory_report import MemoryReport
 
 
 comptime P = 2
@@ -121,9 +122,23 @@ def main() raises:
     var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar_count = gpu_mesh.num_faces * NFP_e * NC
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](d_fstar_count)
+
+    # Pre-step perf snapshot: device-memory accounting.  2D drivers
+    # don't have a Solver wrapper so we assemble the report from each
+    # owner's device_bytes() helper plus the locally-allocated state /
+    # face-flux scratch.
+    MemoryReport(
+        rk_stage_bytes=3 * n_q * 4,                # d_q + d_q1 + d_q2
+        dg_operators_bytes=gpu_re.device_bytes(),
+        limiter_bytes=0,                           # (vortex doesn't use BJ)
+        mesh_connectivity_bytes=(
+            gpu_mesh.device_bytes() + d_fstar_count * 4
+        ),
+        halo_device_bytes=0,                       # 2D is np=1 only
+        halo_pinned_bytes=0,
+    ).print()
 
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()

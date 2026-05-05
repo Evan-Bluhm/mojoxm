@@ -127,6 +127,41 @@ struct LocalMesh2DGpu[P: Int = 2](Movable):
         self.d_face_bc_type     = _upload_i32(ctx, host.face_bc_type)
         ctx.synchronize()
 
+    def device_bytes(self) -> Int:
+        """Total Float32/Int32 device-buffer footprint of this mesh.
+        Per-buffer sizes match the layout documented at the top of
+        this file:
+            d_elem_node_xyz    [num_elements * NP * 2]   Float32
+            d_elem_invJ        [num_elements * 4]        Float32
+            d_elem_inv_2A      [num_elements]            Float32
+            d_elem_faces       [num_elements * 3]        Int32
+            d_elem_face_side   [num_elements * 3]        Int32
+            d_elem_canon_to_ref [num_elements * 3 * NFP] Int32
+            d_face_elem        [num_faces * 2]           Int32
+            d_face_elem_node   [num_faces * 2 * NFP]     Int32
+            d_face_normal      [num_faces * 2]           Float32
+            d_face_length      [num_faces]               Float32
+            d_face_bc_type     [num_faces]               Int32
+        Used by `MemoryReport` 2D-side construction in drivers."""
+        comptime SZ = 4   # Float32 == Int32 == 4 bytes
+        var ne = self.num_elements
+        var nf = self.num_faces
+        comptime NP = Self.NP
+        comptime NFP = Self.NFP_edge
+        return SZ * (
+            ne * NP * 2     # elem_node_xyz
+            + ne * 4         # elem_invJ
+            + ne             # elem_inv_2A
+            + ne * 3         # elem_faces
+            + ne * 3         # elem_face_side
+            + ne * 3 * NFP   # elem_canon_to_ref
+            + nf * 2         # face_elem
+            + nf * 2 * NFP   # face_elem_node
+            + nf * 2         # face_normal
+            + nf             # face_length
+            + nf             # face_bc_type
+        )
+
 
 # ----------------------------------------------------------------------
 # Cell mean kernel (mass-matrix-weighted nodal quadrature).

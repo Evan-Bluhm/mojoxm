@@ -62,3 +62,16 @@ struct ReferenceElement2DGpu[P: Int = 2](Movable):
         self.d_Lift_ref = _upload_f64_as_f32(ctx, host.Lift_ref)
         self.d_node_weights = _upload_f64_as_f32(ctx, host.node_weights)
         ctx.synchronize()
+
+    def device_bytes(self) -> Int:
+        """Total device footprint of this reference element's
+        operator tables.  Used by `MemoryReport` 2D-side construction
+        in drivers."""
+        comptime SZ = 4   # Float32 == 4 bytes
+        comptime NP = Self.NP
+        comptime NFP = Self.NFP_edge
+        return SZ * (
+            2 * NP * NP        # D_ref (r + s directions)
+            + 3 * NP * NFP     # Lift_ref (3 edges)
+            + NP               # node_weights
+        )
