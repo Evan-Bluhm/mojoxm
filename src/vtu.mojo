@@ -320,3 +320,199 @@ def write_pvd(path: String, vtu_paths: List[String], times: List[Float64]) raise
     out += '</VTKFile>\n'
     var p = Path(path)
     p.write_text(out)
+
+
+# ----------------------------------------------------------------------
+# Multi-field 3D VTU writer (synchronous)
+# ----------------------------------------------------------------------
+# Mirror of `src.vtu_2d.dump_vtu_2d_frame_multi` for the 3D side.  The
+# production `FrameWriter` / `VtuWriter` / `AsyncWriter` path emits a
+# single hardcoded "density" field per frame using a scatter-gather
+# writev for performance.  This synchronous helper accepts N named
+# scalar fields, does one host-side serialisation pass, and writes
+# the whole VTU in a single `write_bytes`.  Slower per frame than
+# the async path but it unblocks 3D drivers that want to dump
+# multiple physically meaningful fields per frame (e.g. rho + p +
+# |v| for Euler) without refactoring the async pipeline.
+#
+# Layout:
+#   - Points:     num_elements * NP, each stored as 3 Float32 (x, y, z).
+#   - Cells:      num_elements tets.
+#   - Cell type:  24 (VTK_QUADRATIC_TETRA) at NP=10, 71 (VTK_LAGRANGE_
+#                 TETRAHEDRON) elsewhere.
+#   - PointData:  N scalar fields (Float32) at every nodal DOF, in
+#                 the order passed.  The first field is exposed as
+#                 the PointData `Scalars` default (ParaView opens to
+#                 this).
+# ----------------------------------------------------------------------
+
+def _u32_le_3d(
+    buf: UnsafePointer[UInt8, MutAnyOrigin], offset: Int, v: UInt32,
+):
+    buf[offset + 0] = UInt8(v & 0xFF)
+    buf[offset + 1] = UInt8((v >> 8) & 0xFF)
+    buf[offset + 2] = UInt8((v >> 16) & 0xFF)
+    buf[offset + 3] = UInt8((v >> 24) & 0xFF)
+
+
+def dump_vtu_3d_frame_multi(
+    num_elements: Int,
+    nodes_per_elem: Int,
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
+    field_names: List[String],
+    field_data: List[List[Float64]],
+    path: String,
+) raises:
+    """Serialise one 3D frame to `path` as a standalone VTU with N
+    scalar PointData fields.  All `field_data[i]` arrays must be flat
+    `num_elements * nodes_per_elem` Float64.  `elem_node_xyz` is the
+    per-node x/y/z layout already used by `VtuWriter` / `FrameWriter`
+    (length `num_elements * nodes_per_elem * 3`).  The first field is
+    exposed as the PointData `Scalars` default."""
+    if len(field_names) != len(field_data):
+        raise Error(
+            "dump_vtu_3d_frame_multi: field_names/field_data length "
+            "mismatch (" + String(len(field_names)) + " vs "
+            + String(len(field_data)) + ")"
+        )
+    if len(field_names) == 0:
+        raise Error("dump_vtu_3d_frame_multi: at least one field required")
+
+    var total_points = num_elements * nodes_per_elem
+    for i in range(len(field_data)):
+        if len(field_data[i]) != total_points:
+            raise Error(
+                String("dump_vtu_3d_frame_multi: field_data[")
+                + String(i) + "] size "
+                + String(len(field_data[i])) + " != "
+                + String(total_points)
+            )
+    var n_fields = len(field_names)
+
+    var cell_type = (
+        VTK_QUADRATIC_TETRA if nodes_per_elem == 10
+        else VTK_LAGRANGE_TETRAHEDRON
+    )
+
+    var field_bytes = total_points * 4
+    var points_bytes = total_points * 3 * 4
+    var conn_bytes = total_points * 4
+    var off_bytes = num_elements * 4
+    var typ_bytes = num_elements
+
+    var off_fields = List[Int]()
+    for i in range(n_fields):
+        off_fields.append(i * (4 + field_bytes))
+    var off_points  = n_fields * (4 + field_bytes)
+    var off_conn    = off_points + 4 + points_bytes
+    var off_offsets = off_conn + 4 + conn_bytes
+    var off_types   = off_offsets + 4 + off_bytes
+
+    var hdr = String()
+    hdr += '<?xml version="1.0"?>\n'
+    hdr += ('<VTKFile type="UnstructuredGrid" version="0.1"'
+            ' byte_order="LittleEndian" header_type="UInt32">\n')
+    hdr += '<UnstructuredGrid>\n'
+    hdr += ('<Piece NumberOfPoints="' + String(total_points)
+            + '" NumberOfCells="' + String(num_elements) + '">\n')
+    hdr += '<PointData Scalars="' + field_names[0] + '">\n'
+    for i in range(n_fields):
+        hdr += ('<DataArray type="Float32" Name="' + field_names[i]
+                + '" format="appended" offset="'
+                + String(off_fields[i]) + '"/>\n')
+    hdr += '</PointData>\n'
+    hdr += '<Points>\n'
+    hdr += ('<DataArray type="Float32" NumberOfComponents="3"'
+            ' format="appended" offset="' + String(off_points) + '"/>\n')
+    hdr += '</Points>\n'
+    hdr += '<Cells>\n'
+    hdr += ('<DataArray type="Int32" Name="connectivity"'
+            ' format="appended" offset="' + String(off_conn) + '"/>\n')
+    hdr += ('<DataArray type="Int32" Name="offsets"'
+            ' format="appended" offset="' + String(off_offsets) + '"/>\n')
+    hdr += ('<DataArray type="UInt8" Name="types"'
+            ' format="appended" offset="' + String(off_types) + '"/>\n')
+    hdr += '</Cells>\n'
+    hdr += '</Piece>\n'
+    hdr += '</UnstructuredGrid>\n'
+    hdr += '<AppendedData encoding="raw">\n_'
+
+    var tail = String('\n</AppendedData>\n</VTKFile>\n')
+
+    var blob_size = (
+        n_fields * (4 + field_bytes)
+        + 4 + points_bytes
+        + 4 + conn_bytes
+        + 4 + off_bytes
+        + 4 + typ_bytes
+    )
+    var total_size = hdr.byte_length() + blob_size + tail.byte_length()
+    var out = alloc[UInt8](total_size)
+    var cur = 0
+
+    memcpy(
+        dest=out + cur,
+        src=hdr.unsafe_ptr().bitcast[UInt8](),
+        count=hdr.byte_length(),
+    )
+    cur += hdr.byte_length()
+
+    for i in range(n_fields):
+        _u32_le_3d(
+            rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur,
+            UInt32(field_bytes),
+        )
+        cur += 4
+        var fi_f32 = (out + cur).bitcast[Float32]()
+        for k in range(total_points):
+            fi_f32[k] = Float32(field_data[i][k])
+        cur += field_bytes
+
+    # Points: copy bulk x/y/z directly (already 3-component Float32).
+    _u32_le_3d(
+        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(points_bytes)
+    )
+    cur += 4
+    memcpy(
+        dest=out + cur,
+        src=elem_node_xyz.bitcast[UInt8](),
+        count=points_bytes,
+    )
+    cur += points_bytes
+
+    _u32_le_3d(
+        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(conn_bytes)
+    )
+    cur += 4
+    var conn_i32 = (out + cur).bitcast[Int32]()
+    for k in range(total_points):
+        conn_i32[k] = Int32(k)
+    cur += conn_bytes
+
+    _u32_le_3d(
+        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(off_bytes)
+    )
+    cur += 4
+    var off_i32 = (out + cur).bitcast[Int32]()
+    for e in range(num_elements):
+        off_i32[e] = Int32((e + 1) * nodes_per_elem)
+    cur += off_bytes
+
+    _u32_le_3d(
+        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(typ_bytes)
+    )
+    cur += 4
+    memset(ptr=out + cur, value=UInt8(cell_type), count=num_elements)
+    cur += typ_bytes
+
+    memcpy(
+        dest=out + cur,
+        src=tail.unsafe_ptr().bitcast[UInt8](),
+        count=tail.byte_length(),
+    )
+    cur += tail.byte_length()
+
+    var p = Path(path)
+    var span = Span(ptr=out, length=total_size)
+    p.write_bytes(span)
+    out.free()

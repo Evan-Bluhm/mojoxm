@@ -139,7 +139,7 @@ Nine reference drivers under `examples/`:
     with three limiter passes per SSPRK3 step).
 
   **Tests:** GPU kernels are validated by self-consistent invariants
-  rather than CPU reference code.  27 tests run under `make test-all`,
+  rather than CPU reference code.  28 tests run under `make test-all`,
   each gating a hard regression (or `make test-quick` for a 7-test
   ~30s smoke covering host operator construction, 2D + 3D physics
   constant-state, and the limiter pipelines):
@@ -953,12 +953,15 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
   single launch would require unifying the per-face and per-element
   parallelism (e.g. via cooperative shared-memory phases like the
   3D kernel uses).
-- **3D VTU writer emits one scalar per frame.** The 3D
-  `FrameWriter` writes a single rho field via `VtuWriter`.  The 2D
-  side has `dump_vtu_2d_frame_multi` for multi-field per-frame
-  output (Euler dumps rho + p + |v|, MHD dumps rho + |v| + |B| + By
-  / psi, etc.); the 3D analog would need a corresponding
-  `FrameWriter`/`AsyncWriter` extension.
+- **3D async-writev `FrameWriter` is single-field.** The async
+  scatter-gather pipeline (`VtuWriter` + `AsyncWriter`) writes a
+  single rho field per frame for performance.  A synchronous
+  multi-field helper `dump_vtu_3d_frame_multi` lives alongside
+  `write_pvd` in `src/vtu.mojo` and accepts N named scalar fields
+  (mirrors `dump_vtu_2d_frame_multi`); 3D drivers that want
+  multi-field output can opt into it at the cost of one
+  synchronous write per frame.  Folding multi-field into the async
+  pipeline would be the natural next step.
 
 ## References
 
