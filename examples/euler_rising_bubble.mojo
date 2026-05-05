@@ -199,6 +199,10 @@ def main() raises:
         print("  bubble centroid y at t=0 :", y_bubble_ic,
               " (expected ~", BUBBLE_Y0, ")")
 
+    # Pre-step perf snapshot: device memory accounting (rank 0 only).
+    if rank == 0:
+        solver.memory_report().print()
+
     var writer = FrameWriter[Euler](solver, nvtx, component=0)
 
     # Conserved-quantity time series for the animated dashboard.
@@ -237,6 +241,10 @@ def main() raises:
         print("  total steps:", result.total_steps,
               " wall time:", result.wall_sec, "s")
         print("  wrote output/solution.pvd")
+    # Post-run sync'd throughput measurement.
+    var tput = solver.bench_step_loop(dt, nvtx)
+    if rank == 0:
+        tput.print()
 
     mpi.finalize()
 

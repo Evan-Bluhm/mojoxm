@@ -189,6 +189,10 @@ def main() raises:
     # via By, but the VTU writer only emits one scalar; density is the
     # conventional "density" slot.  Use ParaView's Calculator filter
     # to see By if curious.
+    # Pre-step perf snapshot: device memory accounting (rank 0 only).
+    if rank == 0:
+        solver.memory_report().print()
+
     var writer = FrameWriter[IdealMHD](solver, nvtx, component=6)
 
     # Diagnostics.  Fluid invariants: mass, 3 momenta, total energy.
@@ -256,5 +260,9 @@ def main() raises:
         print("  total steps:", result.total_steps,
               " wall time:", result.wall_sec, "s")
         print("  wrote output/solution.pvd")
+    # Post-run sync'd throughput measurement.
+    var tput = solver.bench_step_loop(dt, nvtx)
+    if rank == 0:
+        tput.print()
 
     mpi.finalize()

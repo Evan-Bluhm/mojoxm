@@ -215,6 +215,10 @@ def main() raises:
     solver.ctx.synchronize()
     nvtx.pop_range()
 
+    # Pre-step perf snapshot: device memory accounting (rank 0 only).
+    if rank == 0:
+        solver.memory_report().print()
+
     var writer = FrameWriter[Euler](solver, nvtx, component=0)
 
     # Diagnostics.  Mass is exactly conserved even with transmissive
@@ -251,6 +255,10 @@ def main() raises:
         print("  total steps:", result.total_steps,
               " wall time:", result.wall_sec, "s")
         print("  wrote output/solution.pvd")
+    # Post-run sync'd throughput measurement.
+    var tput = solver.bench_step_loop(dt, nvtx)
+    if rank == 0:
+        tput.print()
 
     # The density-line / boundary-state diagnostics below are single-rank
     # conveniences -- they'd need an all-gather (or a separate post-

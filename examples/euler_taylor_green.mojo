@@ -209,6 +209,10 @@ def main() raises:
     solver.ctx.synchronize()
     nvtx.pop_range()
 
+    # Pre-step perf snapshot: device memory accounting (rank 0 only).
+    if rank == 0:
+        solver.memory_report().print()
+
     # Frame output (density is component 0 of the 5-component Euler state).
     var writer = FrameWriter[Euler](solver, nvtx, component=0)
 
@@ -251,5 +255,11 @@ def main() raises:
         print("    frame-write time (download + VTU):",
               result.frame_write_sec, "s")
         print("  wrote output/solution.pvd")
+    # Post-run sync'd throughput measurement (5-step warmup + 50-step
+    # measure).  Run AFTER finalize so we don't pollute the production
+    # state mid-simulation.
+    var tput = solver.bench_step_loop(dt, nvtx)
+    if rank == 0:
+        tput.print()
 
     mpi.finalize()

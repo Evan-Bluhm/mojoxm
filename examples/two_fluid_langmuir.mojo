@@ -203,6 +203,10 @@ def main() raises:
     )
     solver.ctx.synchronize()
 
+    # Pre-step perf snapshot: device memory accounting (rank 0 only).
+    if rank == 0:
+        solver.memory_report().print()
+
     var writer = FrameWriter[FiveMomentTwoFluid](
         solver, nvtx, component=10,    # Ex as the output scalar
     )
@@ -272,5 +276,9 @@ def main() raises:
         print("  total steps:", result.total_steps,
               " wall time:", result.wall_sec, "s")
         print("  wrote output/solution.pvd")
+    # Post-run sync'd throughput measurement.
+    var tput = solver.bench_step_loop(dt, nvtx)
+    if rank == 0:
+        tput.print()
 
     mpi.finalize()

@@ -201,6 +201,10 @@ def main() raises:
     solver.ctx.synchronize()
     nvtx.pop_range()
 
+    # Pre-step perf snapshot: device memory accounting (rank 0 only).
+    if rank == 0:
+        solver.memory_report().print()
+
     # Per-rank VTU output (density == full scalar solution for Advection).
     var writer = FrameWriter[Advection](solver, nvtx)
 
@@ -237,5 +241,9 @@ def main() raises:
         print("    frame-write time (download + VTU):",
               result.frame_write_sec, "s")
         print("  wrote output/solution.pvd")
+    # Post-run sync'd throughput measurement.
+    var tput = solver.bench_step_loop(dt, nvtx)
+    if rank == 0:
+        tput.print()
 
     mpi.finalize()

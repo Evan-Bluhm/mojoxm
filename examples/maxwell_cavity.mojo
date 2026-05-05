@@ -157,6 +157,10 @@ def main() raises:
         var energy_ic = _em_energy(solver, nvtx)
         print("  EM energy at t=0    :", energy_ic)
 
+    # Pre-step perf snapshot: device memory accounting (rank 0 only).
+    if rank == 0:
+        solver.memory_report().print()
+
     var writer = FrameWriter[Maxwell](solver, nvtx, component=0)
 
     # Diagnostics.  Maxwell has no linear conserved integrals (each E/B
@@ -211,6 +215,10 @@ def main() raises:
         print("  total steps:", result.total_steps,
               " wall time:", result.wall_sec, "s")
         print("  wrote output/solution.pvd")
+    # Post-run sync'd throughput measurement.
+    var tput = solver.bench_step_loop(dt, nvtx)
+    if rank == 0:
+        tput.print()
 
     mpi.finalize()
 

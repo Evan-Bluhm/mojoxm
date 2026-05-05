@@ -158,6 +158,10 @@ def main() raises:
         mass_ic = _total_mass(solver, nvtx)
         print("  integrated mass at t=0     :", mass_ic)
 
+    # Pre-step perf snapshot: device memory accounting (rank 0 only).
+    if rank == 0:
+        solver.memory_report().print()
+
     var writer = FrameWriter[ShallowWater](solver, nvtx, component=0)
 
     # Diagnostics.  Slip walls conserve mass exactly; normal momentum
@@ -196,6 +200,10 @@ def main() raises:
         print("  total steps:", result.total_steps,
               " wall time:", result.wall_sec, "s")
         print("  wrote output/solution.pvd")
+    # Post-run sync'd throughput measurement.
+    var tput = solver.bench_step_loop(dt, nvtx)
+    if rank == 0:
+        tput.print()
 
     mpi.finalize()
 
