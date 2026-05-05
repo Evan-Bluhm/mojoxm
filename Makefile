@@ -187,7 +187,7 @@ help:
 	@echo 'Quick start:'
 	@echo '  make gpu                 build all GPU drivers (~30s incremental on a hot cache)'
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
-	@echo '  make test-quick          smoke 7 representative tests (~30s w/ cached binaries)'
+	@echo '  make test-quick          smoke 8 representative tests (~30s w/ cached binaries)'
 	@echo '  make bench-quick         smoke 12 representative benches (~60s)'
 	@echo '  make bench-p5            run 12 P=5 P-parity gates at NP=21/56 (~80s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
