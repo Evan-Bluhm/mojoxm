@@ -156,7 +156,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  96 analytic-solution gates tying schemes to closed-form reference
+  97 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
@@ -204,12 +204,18 @@ Nine reference drivers under `examples/`:
     exercise the same physics at NP=6 and NP=10.  Hydrostatic
     equilibrium preserves the rest state to ~Float32 epsilon
     over T=1).
-  * **2D shocks + EM (16):** `bench_euler_sod_2d`,
-    `bench_euler_sod_limited_2d` + `_p3` + `_p4` (HLLC + BJ limiter
-    at P=2 / P=3 / P=4; the P=2 variant lands the shock within 0.2
-    cells of Rankine-Hugoniot, the P=3 variant within 0.3, the P=4
-    variant within 0.4 with NP=15.  The P=4 gate exercises the
-    split-kernel BJ limiter at the highest 2D-Euler NP available),
+  * **2D shocks + EM (17):** `bench_euler_sod_2d`,
+    `bench_euler_sod_limited_2d` + `_p3` + `_p4` + `_p5` (HLLC + BJ
+    limiter at P=2 / P=3 / P=4 / P=5; the P=2 variant lands the
+    shock within 0.2 cells of Rankine-Hugoniot, the P=3 variant
+    within 0.3, the P=4 variant within 0.4 with NP=15, and the
+    P=5 variant within 0.4 cells with NP=21.  Higher-order capture
+    keeps the shock sharp even with limiter dispersion; the trade-
+    off is that the BJ stencil at NP=21 reaches deeper into the
+    rarefaction tail, producing ~8% under-shoot on the left
+    plateau vs ~0.04% at NP=15.  The P=5 gate exercises the split-
+    kernel BJ limiter at the highest 2D-Euler NP shocked-flow
+    config in the suite),
     `bench_shallow_water_dam_break_2d` (closed-pool conservation
     invariants), `bench_maxwell_cavity_2d` (TM(1,1) standing wave in
     PEC cavity, period sqrt(2), rel L2 ~3e-4),
@@ -352,7 +358,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 96 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 97 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused

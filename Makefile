@@ -121,6 +121,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_euler_sod_2d \
                 bench_euler_sod_limited_2d bench_euler_sod_limited_2d_p3 \
                 bench_euler_sod_limited_2d_p4 \
+                bench_euler_sod_limited_2d_p5 \
                 bench_euler_smooth_wave_2d bench_euler_hydrostatic_2d \
                 bench_euler_hydrostatic_2d_p3 \
                 bench_euler_smooth_wave_2d_p3 \
@@ -185,7 +186,7 @@ help:
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
 	@echo '  make bench-quick         smoke-test 12 representative benches (~60s)'
 	@echo '  make bench-p5            run 10 P=5 P-parity gates at NP=21/56 (~50s)'
-	@echo '  make bench-all           build + run every analytic-solution gate (96 benches)'
+	@echo '  make bench-all           build + run every analytic-solution gate (97 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -225,7 +226,7 @@ help:
 	@echo '  make bench-p5            P=5 P-parity sweep -- 10 gates at NP=21 (2D) / NP=56 (3D)'
 	@echo '                           across all 5 smooth physics (~50s); the largest comptime'
 	@echo '                           configs the suite covers, where high-P regressions show first'
-	@echo '  make bench-all           build + run every gate (96 benches, ~10 min)'
+	@echo '  make bench-all           build + run every gate (97 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -411,6 +412,8 @@ bench-euler-sod-limited-2d-p3: bench_euler_sod_limited_2d_p3
 	./bench_euler_sod_limited_2d_p3
 bench-euler-sod-limited-2d-p4: bench_euler_sod_limited_2d_p4
 	./bench_euler_sod_limited_2d_p4
+bench-euler-sod-limited-2d-p5: bench_euler_sod_limited_2d_p5
+	./bench_euler_sod_limited_2d_p5
 bench-euler-smooth-wave-2d: bench_euler_smooth_wave_2d
 	./bench_euler_smooth_wave_2d
 bench-euler-smooth-wave-2d-p3: bench_euler_smooth_wave_2d_p3
@@ -614,7 +617,7 @@ bench-all: \
 		bench-euler-vortex-2d bench-euler-vortex-2d-p3 \
 		bench-euler-sod-2d \
 		bench-euler-sod-limited-2d bench-euler-sod-limited-2d-p3 \
-		bench-euler-sod-limited-2d-p4 \
+		bench-euler-sod-limited-2d-p4 bench-euler-sod-limited-2d-p5 \
 		bench-euler-smooth-wave-2d bench-euler-smooth-wave-2d-p3 \
 		bench-euler-smooth-wave-2d-p4 bench-euler-smooth-wave-2d-p5 \
 		bench-euler-channel-steady-2d \
@@ -720,6 +723,8 @@ profile-bench-euler-sod-limited-2d-p3: bench_euler_sod_limited_2d_p3
 	@bin=bench_euler_sod_limited_2d_p3; $(PROFILE_BIN)
 profile-bench-euler-sod-limited-2d-p4: bench_euler_sod_limited_2d_p4
 	@bin=bench_euler_sod_limited_2d_p4; $(PROFILE_BIN)
+profile-bench-euler-sod-limited-2d-p5: bench_euler_sod_limited_2d_p5
+	@bin=bench_euler_sod_limited_2d_p5; $(PROFILE_BIN)
 profile-bench-euler-smooth-wave-2d: bench_euler_smooth_wave_2d
 	@bin=bench_euler_smooth_wave_2d; $(PROFILE_BIN)
 profile-bench-euler-smooth-wave-2d-p3: bench_euler_smooth_wave_2d_p3
@@ -880,7 +885,7 @@ profile-bench-all: \
 		profile-bench-euler-vortex-2d profile-bench-euler-vortex-2d-p3 \
 		profile-bench-euler-sod-2d \
 		profile-bench-euler-sod-limited-2d profile-bench-euler-sod-limited-2d-p3 \
-		profile-bench-euler-sod-limited-2d-p4 \
+		profile-bench-euler-sod-limited-2d-p4 profile-bench-euler-sod-limited-2d-p5 \
 		profile-bench-euler-smooth-wave-2d profile-bench-euler-smooth-wave-2d-p3 \
 		profile-bench-euler-smooth-wave-2d-p4 profile-bench-euler-smooth-wave-2d-p5 \
 		profile-bench-euler-channel-steady-2d \
