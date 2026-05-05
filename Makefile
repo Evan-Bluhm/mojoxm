@@ -178,7 +178,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-quick test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-quick test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -191,6 +191,7 @@ help:
 	@echo '  make bench-p5            run 12 P=5 P-parity gates at NP=21/56 (~80s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
+	@echo '  make bench-bcs           run 18 BC + source-term gates -- inflow / outflow / wall / gravity (~80s cached)'
 	@echo '  make bench-all           build + run every analytic-solution gate (98 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -241,6 +242,11 @@ help:
 	@echo '                           e_2N) >= P-dependent floor.  Advection 2D + 3D P=2-5 (8) +'
 	@echo '                           Euler 3D P=2/3 (2).  Catches scheme-order regressions an'
 	@echo '                           absolute-L2 sentinel would miss (~50s).'
+	@echo '  make bench-bcs           18 boundary-condition + source-term gates exercising every'
+	@echo '                           BC dispatch arm (interior / wall / outflow / inflow) across'
+	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
+	@echo '                           channel steady-state.  Use when iterating on BC routing or'
+	@echo '                           the source-term hook in rk_stage_kernel (~80s w/ cached binaries).'
 	@echo '  make bench-all           build + run every gate (98 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
@@ -626,6 +632,28 @@ bench-quick: \
 		bench-mhd-alfven-3d \
 		bench-maxwell-cavity-3d
 	@echo '=== bench-quick: 12 representative gates PASSED ==='
+
+
+# Boundary-condition + source-term sweep -- 18 gates exercising
+# every BC dispatch arm (BC_INTERIOR / BC_WALL / BC_OUTFLOW /
+# BC_INFLOW) across all physics, plus the Euler gravity source
+# (hydrostatic) and Euler channel steady-state (3 BC types in one
+# gate).  Run when iterating on BC routing, ghost-state assembly,
+# inflow_q wiring, or the source-term hook in rk_stage_kernel.
+# Run-time ~80s w/ cached binaries (first cold run is ~3-4 min
+# since most BC benches aren't in any other aggregator's prebuild
+# path).
+bench-bcs: \
+		bench-advection-outflow-2d bench-advection-inflow-2d \
+		bench-advection-outflow-3d bench-advection-inflow-3d \
+		bench-euler-channel-steady-2d bench-euler-inflow-3d \
+		bench-euler-hydrostatic-2d bench-euler-hydrostatic-2d-p3 \
+		bench-euler-hydrostatic-3d bench-euler-hydrostatic-3d-p3 \
+		bench-shallow-water-inflow-2d bench-shallow-water-inflow-3d \
+		bench-maxwell-outflow-2d bench-maxwell-inflow-2d \
+		bench-maxwell-outflow-3d bench-maxwell-inflow-3d \
+		bench-two-fluid-outflow-3d bench-two-fluid-walls-3d
+	@echo '=== bench-bcs: 18 BC + source-term gates PASSED ==='
 
 
 # Convergence-rate sweep -- 10 gates that explicitly assert
