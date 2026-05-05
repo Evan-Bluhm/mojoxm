@@ -136,8 +136,10 @@ Nine reference drivers under `examples/`:
     with three limiter passes per SSPRK3 step).
 
   **Tests:** GPU kernels are validated by self-consistent invariants
-  rather than CPU reference code.  27 tests run under `make test-all`
-  (each gates a hard regression):
+  rather than CPU reference code.  27 tests run under `make test-all`,
+  each gating a hard regression (or `make test-quick` for a 7-test
+  ~30s smoke covering host operator construction, 2D + 3D physics
+  constant-state, and the limiter pipelines):
   * 2D pipeline -- `local_mesh_2d_gpu_test` (upload round-trips +
     constant-state at P=1/2/3), `euler_2d_gpu_test` /
     `sw_2d_gpu_test` / `mhd_2d_gpu_test` / `mhd_glm_2d_gpu_test` /
