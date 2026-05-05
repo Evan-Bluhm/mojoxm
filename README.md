@@ -156,15 +156,16 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  93 analytic-solution gates tying schemes to closed-form reference
+  94 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
   P=4 absolute-L2 sentinels for every core physics in 2D + 3D
-  (Euler / Maxwell / SW / MHD-GLM), P=5 multi-component Euler in
-  both 2D (NP=21) and 3D (NP=56), P=5 vacuum Maxwell in both 2D
-  (NP=21) and 3D (NP=56), P=5 SW in 3D (NP=56), and P=4 / P=5 rate
-  gates for advection in both 2D (NP=15, NP=21) and 3D (NP=35, NP=56).
+  (Euler / Maxwell / SW / MHD-GLM), full 3D NP=56 P=5 coverage
+  across all 4 smooth multi-component physics (Euler, Maxwell, SW,
+  IdealMHD/GLM), P=5 multi-component Euler in 2D (NP=21), P=5
+  vacuum Maxwell in 2D (NP=21), and P=4 / P=5 rate gates for
+  advection in both 2D (NP=15, NP=21) and 3D (NP=35, NP=56).
   * **2D smooth (29):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
@@ -231,7 +232,7 @@ Nine reference drivers under `examples/`:
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (42):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (43):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -256,9 +257,12 @@ Nine reference drivers under `examples/`:
     the 2D bench since F^z = 0 on z-uniform fields and the long-
     horizon dissipation floor is roughly P- and flux-type-
     independent on this setup),
-    `bench_mhd_alfven_3d` + `_p3` + `_p4` (NP=20 / NP=35 IdealMHD
-    gate; the P=4 variant exercises the cooperative shared-memory
-    rk_stage_kernel at NC=9 / NP=35 = 315 q values per element),
+    `bench_mhd_alfven_3d` + `_p3` + `_p4` + `_p5` (NP=20 / NP=35 /
+    NP=56 IdealMHD gate; the `_p5` variant exercises the cooperative
+    shared-memory rk_stage_kernel at NC=9 / NP=56 = 504 q values per
+    element -- the largest per-element working set in the suite --
+    and closes the 3D MHD P-parity sweep P=2/3/4/5 at the same
+    A^2~0.01 nonlinear floor as the lower P),
     `bench_mhd_glm_psi_damp_3d` + `_p3` (3D GLM psi-damping via
     the source_term hook in rk_stage_kernel; analytic decay match
     to Float32 epsilon at both NP=10 and NP=20),
@@ -344,7 +348,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 93 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 94 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused

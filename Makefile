@@ -143,7 +143,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_advection_3d_p5 \
                 bench_advection_outflow_3d bench_advection_inflow_3d \
                 bench_mhd_alfven_3d bench_mhd_alfven_3d_p3 \
-                bench_mhd_alfven_3d_p4 \
+                bench_mhd_alfven_3d_p4 bench_mhd_alfven_3d_p5 \
                 bench_mhd_glm_psi_damp_3d bench_mhd_glm_psi_damp_3d_p3 \
                 bench_mhd_glm_psi_transport_3d \
                 bench_mhd_glm_psi_transport_3d_p3 \
@@ -471,6 +471,8 @@ bench-mhd-alfven-3d-p3: bench_mhd_alfven_3d_p3
 	./bench_mhd_alfven_3d_p3
 bench-mhd-alfven-3d-p4: bench_mhd_alfven_3d_p4
 	./bench_mhd_alfven_3d_p4
+bench-mhd-alfven-3d-p5: bench_mhd_alfven_3d_p5
+	./bench_mhd_alfven_3d_p5
 bench-mhd-glm-psi-damp-3d: bench_mhd_glm_psi_damp_3d
 	./bench_mhd_glm_psi_damp_3d
 bench-mhd-glm-psi-damp-3d-p3: bench_mhd_glm_psi_damp_3d_p3
@@ -618,6 +620,7 @@ bench-all: \
 		bench-shallow-water-inflow-3d \
 		bench-shallow-water-dam-break-3d \
 		bench-mhd-alfven-3d bench-mhd-alfven-3d-p3 bench-mhd-alfven-3d-p4 \
+		bench-mhd-alfven-3d-p5 \
 		bench-mhd-glm-psi-damp-3d bench-mhd-glm-psi-damp-3d-p3 \
 		bench-mhd-glm-psi-transport-3d bench-mhd-glm-psi-transport-3d-p3 \
 		bench-mhd-brio-wu-3d bench-mhd-brio-wu-3d-p3 \
@@ -753,6 +756,8 @@ profile-bench-mhd-alfven-3d-p3: bench_mhd_alfven_3d_p3
 	@bin=bench_mhd_alfven_3d_p3; $(PROFILE_BIN)
 profile-bench-mhd-alfven-3d-p4: bench_mhd_alfven_3d_p4
 	@bin=bench_mhd_alfven_3d_p4; $(PROFILE_BIN)
+profile-bench-mhd-alfven-3d-p5: bench_mhd_alfven_3d_p5
+	@bin=bench_mhd_alfven_3d_p5; $(PROFILE_BIN)
 profile-bench-mhd-glm-psi-damp-3d: bench_mhd_glm_psi_damp_3d
 	@bin=bench_mhd_glm_psi_damp_3d; $(PROFILE_BIN)
 profile-bench-mhd-glm-psi-damp-3d-p3: bench_mhd_glm_psi_damp_3d_p3
@@ -876,7 +881,7 @@ profile-bench-all: \
 		profile-bench-shallow-water-inflow-3d \
 		profile-bench-shallow-water-dam-break-3d \
 		profile-bench-mhd-alfven-3d profile-bench-mhd-alfven-3d-p3 \
-		profile-bench-mhd-alfven-3d-p4 \
+		profile-bench-mhd-alfven-3d-p4 profile-bench-mhd-alfven-3d-p5 \
 		profile-bench-mhd-glm-psi-damp-3d profile-bench-mhd-glm-psi-damp-3d-p3 \
 		profile-bench-mhd-glm-psi-transport-3d profile-bench-mhd-glm-psi-transport-3d-p3 \
 		profile-bench-mhd-brio-wu-3d profile-bench-mhd-brio-wu-3d-p3 \
