@@ -176,7 +176,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-quick test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -220,7 +220,8 @@ help:
 	@echo '                           3D BJ limiter cell-mean conservation'
 	@echo '  make test-diagnostics    DiagnosticsWriter unit test (GPU, np=1)'
 	@echo '  make test-p3             P=3 round-trip smoke test'
-	@echo '  make test-all            run every test above'
+	@echo '  make test-quick          run 7 representative tests (~30s with cached binaries)'
+	@echo '  make test-all            run every test above (~3 min wall)'
 	@echo '  make test-klone          run MPI test on Klone (requires klone-run)'
 	@echo ''
 	@echo 'Bench targets (analytic-solution gates):'
@@ -382,6 +383,17 @@ test-two-fluid-3d: two_fluid_3d_test
 # failure.  Doesn't include test-klone (that's for cluster submission).
 test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test test-bc
 	@echo '=== ALL TESTS PASSED ==='
+
+
+# Quick test smoke -- 7 representative tests covering host operator
+# construction (reference, reference-2d), one 2D physics + one 3D
+# physics constant-state preservation (euler-2d-gpu, euler-3d), the
+# 2D + 3D limiter pipelines, and the P=3 round-trip parametrization.
+# Catches the broadest class of regressions in ~30s wall with cached
+# binaries (~1-2 min cold), vs ~3 min for full test-all.
+test-quick: test-reference test-reference-2d test-euler-2d-gpu test-euler-3d \
+            test-limiter-2d-gpu test-limiter-3d test-p3
+	@echo '=== test-quick: 7 representative tests PASSED ==='
 
 # Benchmarks: each runs a single known-solution problem and asserts
 # the measured metric (L2 error vs analytic, plateau deviation,
