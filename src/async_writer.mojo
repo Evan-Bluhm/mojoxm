@@ -101,7 +101,7 @@ def _writer_entry(
     segs.free()
     path_c.free()
     job_ptr.free()
-    return UnsafePointer[Int8, MutAnyOrigin]()
+    return UnsafePointer[Int8, MutAnyOrigin](unsafe_from_address=0)
 
 
 struct AsyncWriter(Movable):
@@ -123,7 +123,7 @@ struct AsyncWriter(Movable):
         while len(self._thread_ids) >= self._max_concurrent:
             var oldest = self._thread_ids[0]
             _ = self._thread_ids.pop(0)
-            var retval = UnsafePointer[Int8, MutAnyOrigin]()
+            var retval = UnsafePointer[Int8, MutAnyOrigin](unsafe_from_address=0)
             _ = external_call["pthread_join", Int32](oldest, retval)
 
         # Copy path into a heap-allocated, null-terminated C string.
@@ -146,7 +146,7 @@ struct AsyncWriter(Movable):
 
         # Spawn the writer thread.
         var tid_storage = alloc[UInt64](1)
-        var attr_null = UnsafePointer[Int8, MutAnyOrigin]()
+        var attr_null = UnsafePointer[Int8, MutAnyOrigin](unsafe_from_address=0)
         var rc = external_call["pthread_create", Int32](
             tid_storage,
             attr_null,
@@ -164,7 +164,7 @@ struct AsyncWriter(Movable):
 
     def wait_all(mut self):
         for i in range(len(self._thread_ids)):
-            var retval = UnsafePointer[Int8, MutAnyOrigin]()
+            var retval = UnsafePointer[Int8, MutAnyOrigin](unsafe_from_address=0)
             _ = external_call["pthread_join", Int32](
                 self._thread_ids[i], retval
             )
