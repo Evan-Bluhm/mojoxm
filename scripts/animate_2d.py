@@ -7,11 +7,16 @@ Usage
 -----
     scripts/animate_2d.py <pvd_file>                     (infer settings)
     scripts/animate_2d.py <pvd_file> -o movie.mp4 -f rho
+    scripts/animate_2d.py <pvd_file> --list-fields       (no rendering, just print)
 
 Examples
 --------
     ./advection_gaussian_2d_gpu                          # produces output/solution_adv2d_gpu.pvd
     scripts/animate_2d.py output/solution_adv2d_gpu.pvd
+
+If `-f <name>` doesn't match a field in frame 0 the script lists the
+available fields and exits cleanly.  Use `--list-fields` to inspect
+without re-running the simulation.
 
 The PVD file contains the frame list + per-frame time; if the pvd is
 missing the script falls back to sorting the VTU files in the directory
@@ -129,6 +134,10 @@ def main(argv: list[str] | None = None) -> None:
         help="point-data field name (default: first available)",
     )
     parser.add_argument(
+        "--list-fields", action="store_true",
+        help="print the available field names from frame 0 and exit",
+    )
+    parser.add_argument(
         "--fps", type=int, default=10,
         help="frames per second (default 10)",
     )
@@ -154,11 +163,23 @@ def main(argv: list[str] | None = None) -> None:
 
     # Peek at frame 0 to pick the field and build the triangulation.
     mesh0 = meshio.read(frames[0][0])
+    available = list(mesh0.point_data.keys())
+    if args.list_fields:
+        print(f"{frames[0][0]}: {len(available)} field(s)")
+        for name in available:
+            shape = mesh0.point_data[name].shape
+            print(f"  - {name} {shape}")
+        return
     triangulation = build_triangulation(mesh0)
     if args.field is None:
-        if not mesh0.point_data:
+        if not available:
             raise SystemExit("no point data in the VTU")
-        args.field = next(iter(mesh0.point_data.keys()))
+        args.field = available[0]
+    elif args.field not in mesh0.point_data:
+        raise SystemExit(
+            f"field '{args.field}' not found in {frames[0][0]}; "
+            f"available: {', '.join(available) or '(none)'}"
+        )
 
     # Colour range: sweep the whole sequence once so the range is steady.
     print(f"scanning {len(frames)} frames for colour range...", flush=True)
