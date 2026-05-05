@@ -25,7 +25,9 @@ from src.reference_2d import (
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL
-from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
+from src.vtu_2d import (
+    dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
+)
 
 
 comptime P = 2
@@ -112,18 +114,38 @@ def main() raises:
     var min_h = Float32(1.0e-6)
 
     var depth = List[Float64]()
+    var vmag = List[Float64]()
     for _ in range(gpu_mesh.num_elements * NP_p):
         depth.append(0.0)
+        vmag.append(0.0)
     var paths = List[String]()
     var times = List[Float64]()
 
-    for elem in range(gpu_mesh.num_elements):
-        for nn in range(NP_p):
-            depth[elem * NP_p + nn] = Float64(host_q[(elem * NP_p + nn) * NC + 0])
+    var field_names = List[String]()
+    field_names.append(String("h"))
+    field_names.append(String("|v|"))
+
+    @parameter
+    def fill_derived(src: UnsafePointer[Float32, MutAnyOrigin]) raises:
+        var n_nodes = gpu_mesh.num_elements * NP_p
+        for i in range(n_nodes):
+            var h = Float64(src[i * NC + 0])
+            var hu = Float64(src[i * NC + 1])
+            var hv = Float64(src[i * NC + 2])
+            var h_safe = h if h > 1.0e-12 else 1.0e-12
+            var u = hu / h_safe
+            var v = hv / h_safe
+            depth[i] = h
+            vmag[i] = sqrt(u * u + v * v)
+
+    fill_derived(hptr_q)
+    var fields = List[List[Float64]]()
+    fields.append(depth.copy())
+    fields.append(vmag.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
-    dump_vtu_2d_frame[P](
-        mesh_coords, depth,
-        String("output/") + f0_name, String("h"),
+    dump_vtu_2d_frame_multi[P](
+        mesh_coords, field_names, fields,
+        String("output/") + f0_name,
     )
     paths.append(f0_name)
     times.append(0.0)
@@ -170,16 +192,15 @@ def main() raises:
 
         ctx.enqueue_copy(hbuf_q, d_q)
         ctx.synchronize()
-        for elem in range(gpu_mesh.num_elements):
-            for nn in range(NP_p):
-                depth[elem * NP_p + nn] = Float64(
-                    hptr_q[(elem * NP_p + nn) * NC + 0]
-                )
+        fill_derived(hptr_q)
+        var fi_fields = List[List[Float64]]()
+        fi_fields.append(depth.copy())
+        fi_fields.append(vmag.copy())
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
-        dump_vtu_2d_frame[P](
-            mesh_coords, depth,
-            String("output/") + fname, String("h"),
+        dump_vtu_2d_frame_multi[P](
+            mesh_coords, field_names, fi_fields,
+            String("output/") + fname,
         )
         paths.append(fname)
         times.append(t)
