@@ -134,6 +134,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_maxwell_te_plane_wave_2d \
                 bench_maxwell_plane_wave_2d_p3 \
                 bench_maxwell_plane_wave_2d_p4 \
+                bench_maxwell_plane_wave_2d_p5 \
                 bench_maxwell_outflow_2d bench_maxwell_inflow_2d \
                 bench_maxwell_uniform_j_2d bench_maxwell_uniform_j_2d_p3 \
                 bench_maxwell_uniform_m_2d bench_maxwell_uniform_m_2d_p3 \
@@ -387,6 +388,8 @@ bench-maxwell-plane-wave-2d-p3: bench_maxwell_plane_wave_2d_p3
 	./bench_maxwell_plane_wave_2d_p3
 bench-maxwell-plane-wave-2d-p4: bench_maxwell_plane_wave_2d_p4
 	./bench_maxwell_plane_wave_2d_p4
+bench-maxwell-plane-wave-2d-p5: bench_maxwell_plane_wave_2d_p5
+	./bench_maxwell_plane_wave_2d_p5
 bench-maxwell-outflow-2d: bench_maxwell_outflow_2d
 	./bench_maxwell_outflow_2d
 bench-maxwell-inflow-2d: bench_maxwell_inflow_2d
@@ -517,6 +520,7 @@ bench-all: \
 		bench-maxwell-cavity-2d \
 		bench-maxwell-plane-wave-2d bench-maxwell-te-plane-wave-2d \
 		bench-maxwell-plane-wave-2d-p3 bench-maxwell-plane-wave-2d-p4 \
+		bench-maxwell-plane-wave-2d-p5 \
 		bench-maxwell-outflow-2d bench-maxwell-inflow-2d \
 		bench-maxwell-uniform-j-2d bench-maxwell-uniform-j-2d-p3 \
 		bench-maxwell-uniform-m-2d bench-maxwell-uniform-m-2d-p3 \
@@ -637,6 +641,8 @@ profile-bench-maxwell-plane-wave-2d-p3: bench_maxwell_plane_wave_2d_p3
 	@bin=bench_maxwell_plane_wave_2d_p3; $(PROFILE_BIN)
 profile-bench-maxwell-plane-wave-2d-p4: bench_maxwell_plane_wave_2d_p4
 	@bin=bench_maxwell_plane_wave_2d_p4; $(PROFILE_BIN)
+profile-bench-maxwell-plane-wave-2d-p5: bench_maxwell_plane_wave_2d_p5
+	@bin=bench_maxwell_plane_wave_2d_p5; $(PROFILE_BIN)
 profile-bench-maxwell-outflow-2d: bench_maxwell_outflow_2d
 	@bin=bench_maxwell_outflow_2d; $(PROFILE_BIN)
 profile-bench-maxwell-inflow-2d: bench_maxwell_inflow_2d
@@ -765,6 +771,7 @@ profile-bench-all: \
 		profile-bench-maxwell-cavity-2d \
 		profile-bench-maxwell-plane-wave-2d profile-bench-maxwell-te-plane-wave-2d \
 		profile-bench-maxwell-plane-wave-2d-p3 profile-bench-maxwell-plane-wave-2d-p4 \
+		profile-bench-maxwell-plane-wave-2d-p5 \
 		profile-bench-maxwell-outflow-2d profile-bench-maxwell-inflow-2d \
 		profile-bench-maxwell-uniform-j-2d profile-bench-maxwell-uniform-j-2d-p3 \
 		profile-bench-maxwell-uniform-m-2d profile-bench-maxwell-uniform-m-2d-p3 \
