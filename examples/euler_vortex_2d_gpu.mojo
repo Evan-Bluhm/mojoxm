@@ -80,11 +80,12 @@ def main() raises:
     comptime NC = 4
     var ctx = DeviceContext()
 
-    var host_mesh = LocalMesh2D[P](NX, NY, LX, LY)
+    var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY)
     var host_re = ReferenceElement2D[P]()
-    var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY)  # kept for IC + VTU
-    var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
-    var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
+    # kept for IC + VTU
+    var mesh_coords = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY)
+    var gpu_mesh = LocalMesh2DGpu[P](ctx=ctx, host=host_mesh^)
+    var gpu_re = ReferenceElement2DGpu[P](ctx=ctx, host=host_re)
     print("  elements:", gpu_mesh.num_elements,
           " faces:", gpu_mesh.num_faces,
           "  nodes/elem:", NP_p,
@@ -215,20 +216,28 @@ def main() raises:
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q=d_q.unsafe_ptr(),
+        d_q1=d_q1.unsafe_ptr(),
+        d_q2=d_q2.unsafe_ptr(),
     )
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
             for stage in stage_plans:
                 euler_rk_stage_2d[P](
-                    ctx, gpu_mesh,
-                    gpu_re.d_Lift_ref.unsafe_ptr(),
-                    gpu_re.d_D_ref.unsafe_ptr(),
-                    stage.q_in, stage.q_a, stage.q_b, stage.q_out,
-                    d_fstar.unsafe_ptr(),
-                    gamma, min_rho, min_p,
-                    stage.a, stage.b, stage.c, dt,
+                    ctx=ctx,
+                    mesh=gpu_mesh,
+                    Lift_ref=gpu_re.d_Lift_ref.unsafe_ptr(),
+                    D_ref=gpu_re.d_D_ref.unsafe_ptr(),
+                    q_in=stage.q_in,
+                    q_a=stage.q_a,
+                    q_b=stage.q_b,
+                    q_out=stage.q_out,
+                    fstar_scratch=d_fstar.unsafe_ptr(),
+                    gamma=gamma,
+                    min_density=min_rho,
+                    min_pressure=min_p,
+                    a=stage.a, b=stage.b, cc=stage.c, dt=dt,
                 )
         ctx.synchronize()
         var c_end = perf_counter_ns()
