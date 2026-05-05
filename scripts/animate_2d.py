@@ -7,16 +7,21 @@ Usage
 -----
     scripts/animate_2d.py <pvd_file>                     (infer settings)
     scripts/animate_2d.py <pvd_file> -o movie.mp4 -f rho
+    scripts/animate_2d.py <pvd_file> -f rho,p,'|v|'      (multi-panel)
     scripts/animate_2d.py <pvd_file> --list-fields       (no rendering, just print)
 
 Examples
 --------
-    ./advection_gaussian_2d_gpu                          # produces output/solution_adv2d_gpu.pvd
-    scripts/animate_2d.py output/solution_adv2d_gpu.pvd
+    ./euler_vortex_2d_gpu                                # produces output/solution_euler2d_gpu.pvd
+    scripts/animate_2d.py output/solution_euler2d_gpu.pvd \
+        -f rho,p,'|v|' -o vortex.mp4
+                                                         # 1x3 panel layout
 
 If `-f <name>` doesn't match a field in frame 0 the script lists the
 available fields and exits cleanly.  Use `--list-fields` to inspect
-without re-running the simulation.
+without re-running the simulation.  Comma-separate names to render
+multiple side-by-side panels with per-panel colourbars (per-panel
+range, so disparate-magnitude fields each show useful detail).
 
 The PVD file contains the frame list + per-frame time; if the pvd is
 missing the script falls back to sorting the VTU files in the directory
@@ -131,7 +136,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "-f", "--field", default=None,
-        help="point-data field name (default: first available)",
+        help="point-data field name(s); comma-separated for multi-panel "
+             "(e.g. `-f rho,p,|v|`).  Default: first available.",
     )
     parser.add_argument(
         "--list-fields", action="store_true",
@@ -174,39 +180,55 @@ def main(argv: list[str] | None = None) -> None:
     if args.field is None:
         if not available:
             raise SystemExit("no point data in the VTU")
-        args.field = available[0]
-    elif args.field not in mesh0.point_data:
-        raise SystemExit(
-            f"field '{args.field}' not found in {frames[0][0]}; "
-            f"available: {', '.join(available) or '(none)'}"
-        )
+        field_list = [available[0]]
+    else:
+        field_list = [name.strip() for name in args.field.split(",")]
+        for name in field_list:
+            if name not in mesh0.point_data:
+                raise SystemExit(
+                    f"field '{name}' not found in {frames[0][0]}; "
+                    f"available: {', '.join(available) or '(none)'}"
+                )
 
-    # Colour range: sweep the whole sequence once so the range is steady.
-    print(f"scanning {len(frames)} frames for colour range...", flush=True)
-    vmin = float("inf")
-    vmax = -float("inf")
+    # Colour range per field: sweep the whole sequence once so each
+    # panel's colourbar is steady across the animation.
+    print(f"scanning {len(frames)} frames for colour ranges...", flush=True)
+    vmin = {name: float("inf") for name in field_list}
+    vmax = {name: -float("inf") for name in field_list}
     for p, _ in frames:
-        v = meshio.read(p).point_data[args.field]
-        vmin = min(vmin, float(v.min()))
-        vmax = max(vmax, float(v.max()))
-    print(f"  field '{args.field}' range: [{vmin:.4g}, {vmax:.4g}]")
+        pd = meshio.read(p).point_data
+        for name in field_list:
+            v = pd[name]
+            vmin[name] = min(vmin[name], float(v.min()))
+            vmax[name] = max(vmax[name], float(v.max()))
+    for name in field_list:
+        print(f"  field '{name}' range: [{vmin[name]:.4g}, {vmax[name]:.4g}]")
 
-    fig, ax = plt.subplots(figsize=(7, 7))
-    ax.set_aspect("equal")
-    ax.set_xlim(triangulation.x.min(), triangulation.x.max())
-    ax.set_ylim(triangulation.y.min(), triangulation.y.max())
-
-    # Initial tripcolor.
-    v0 = mesh0.point_data[args.field]
-    tpc = ax.tripcolor(
-        triangulation, v0, shading="gouraud",
-        vmin=vmin, vmax=vmax, cmap=args.cmap,
+    # One panel per field, laid out 1 x N.  Per-panel colourbar uses
+    # the panel's own range so disparate-magnitude fields (e.g. rho
+    # near 1, |v| near 0.1, p near 1) all show useful detail.
+    n_fields = len(field_list)
+    fig, axes = plt.subplots(
+        1, n_fields, figsize=(7 * n_fields, 7), squeeze=False,
     )
-    cbar = fig.colorbar(tpc, ax=ax, label=args.field)
-    title = ax.set_title("")
+    axes = axes[0]  # 1 x N -> N
+    tpcs = []
+    for ax, name in zip(axes, field_list):
+        ax.set_aspect("equal")
+        ax.set_xlim(triangulation.x.min(), triangulation.x.max())
+        ax.set_ylim(triangulation.y.min(), triangulation.y.max())
+        v0 = mesh0.point_data[name]
+        tpc = ax.tripcolor(
+            triangulation, v0, shading="gouraud",
+            vmin=vmin[name], vmax=vmax[name], cmap=args.cmap,
+        )
+        fig.colorbar(tpc, ax=ax, label=name, fraction=0.046, pad=0.04)
+        tpcs.append(tpc)
+    title = fig.suptitle("")
 
     out = args.output or default_out
-    print(f"writing {out} ({args.fps} fps, {len(frames)} frames)", flush=True)
+    print(f"writing {out} ({args.fps} fps, {len(frames)} frames, "
+          f"{n_fields} panel(s))", flush=True)
     writer: FFMpegWriter | PillowWriter
     if out.suffix.lower() == ".gif":
         writer = PillowWriter(fps=args.fps)
@@ -214,8 +236,9 @@ def main(argv: list[str] | None = None) -> None:
         writer = FFMpegWriter(fps=args.fps)
     with writer.saving(fig, str(out), dpi=args.dpi):
         for i, (p, t) in enumerate(frames):
-            v = meshio.read(p).point_data[args.field]
-            tpc.set_array(v)
+            pd = meshio.read(p).point_data
+            for tpc, name in zip(tpcs, field_list):
+                tpc.set_array(pd[name])
             title.set_text(f"t = {t:g}   ({i+1}/{len(frames)})")
             writer.grab_frame()
     print("done", flush=True)
