@@ -70,10 +70,13 @@ Nine reference drivers under `examples/`:
   Lagrange basis, mass, stiffness, and lift operators at arbitrary
   order via Vandermonde inverse + analytic integration. Node ordering
   matches VTK_LAGRANGE_TETRAHEDRON and is back-compatible with
-  VTK_QUADRATIC_TETRA at P=2. `P` is now a comptime parameter on
-  every 3D struct (`Mesh[P]`, `LocalMesh[P]`, `Solver[PhysT, P]`,
-  `FrameWriter[PhysT, P]`, `DiagnosticsWriter[PhysT, P]`); `make test-p3`
-  round-trips a scalar field through the full Mesh[3] + Solver pipeline.
+  VTK_QUADRATIC_TETRA at P=2. `P` is a comptime parameter on every
+  3D struct (`Mesh[P]`, `LocalMesh[P]`, `Solver[PhysT, P]`,
+  `FrameWriter[PhysT, P]`, `DiagnosticsWriter[PhysT, P]`).  Validated
+  end-to-end at P=2, 3, 4, and 5 across all 5 smooth physics in 2D
+  (NP=21) and 3D (NP=56), plus shocked Euler at P=2/3/4/5 in both
+  dimensions, plus the BJ limiter at P=2/3/4/5 in both dimensions
+  (`make bench-p5`, `make test-quick`).
 - **Shock limiter (3D)**: `Solver.enable_cell_limiter(eps)` turns on a
   Venkatakrishnan-smoothed Barth-Jespersen slope limiter that runs
   after every RK stage.  Brings classical Sod to T=0.20 with left
