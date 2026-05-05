@@ -98,7 +98,8 @@ TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test \
                limiter_2d_gpu_test limiter_2d_gpu_test_p3 \
                limiter_3d_test limiter_3d_test_p3 \
                mhd_3d_test euler_3d_test maxwell_3d_test \
-               sw_3d_test two_fluid_3d_test
+               sw_3d_test two_fluid_3d_test \
+               vtu_2d_multi_test
 
 # Benchmark drivers live under benchmarks/.  Each runs a single
 # known-solution problem and asserts a measured metric against a
@@ -169,7 +170,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-diagnostics test-p3 test-all test-klone bench-quick bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-all test-klone bench-quick bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -295,6 +296,14 @@ test-local-mesh-2d:
 test-diagnostics: diagnostics_test
 	./diagnostics_test
 
+# Multi-field 2D VTU writer smoke test: dumps three constant scalar
+# fields to a temporary VTU and verifies the XML headers carry all
+# three DataArray entries with the first set as the default Scalars.
+# Catches gross regressions in `dump_vtu_2d_frame_multi` offset
+# arithmetic.  Host-only, no GPU kernels.
+test-vtu-2d-multi: vtu_2d_multi_test
+	./vtu_2d_multi_test
+
 # P=3 plumbing smoke test.  Builds Mesh[3] + Solver[Advection, 3],
 # fills q with a constant, downloads it back, verifies round-trip at
 # the higher-order buffer layout (NP=20).  Does NOT check physical
@@ -345,7 +354,7 @@ test-two-fluid-3d: two_fluid_3d_test
 
 # Convenience target: run every test in the suite.  Stops on the first
 # failure.  Doesn't include test-klone (that's for cluster submission).
-test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-diagnostics test-p3 test test-bc
+test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test test-bc
 	@echo '=== ALL TESTS PASSED ==='
 
 # Benchmarks: each runs a single known-solution problem and asserts
