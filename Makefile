@@ -185,7 +185,7 @@ help:
 	@echo '  make gpu                 build all GPU drivers (~30s incremental on a hot cache)'
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
 	@echo '  make bench-quick         smoke-test 12 representative benches (~60s)'
-	@echo '  make bench-p5            run 10 P=5 P-parity gates at NP=21/56 (~50s)'
+	@echo '  make bench-p5            run 12 P=5 P-parity gates at NP=21/56 (~80s)'
 	@echo '  make bench-all           build + run every analytic-solution gate (98 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -223,9 +223,10 @@ help:
 	@echo ''
 	@echo 'Bench targets (analytic-solution gates):'
 	@echo '  make bench-quick         smoke-test one bench per physics per dim + limiter (~60s)'
-	@echo '  make bench-p5            P=5 P-parity sweep -- 10 gates at NP=21 (2D) / NP=56 (3D)'
-	@echo '                           across all 5 smooth physics (~50s); the largest comptime'
-	@echo '                           configs the suite covers, where high-P regressions show first'
+	@echo '  make bench-p5            P=5 P-parity sweep -- 12 gates at NP=21 (2D) / NP=56 (3D)'
+	@echo '                           across all 5 smooth physics + limited shocked Sod (~80s);'
+	@echo '                           the largest comptime configs the suite covers, where high-P'
+	@echo '                           regressions show first.'
 	@echo '  make bench-all           build + run every gate (98 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
@@ -589,23 +590,26 @@ bench-quick: \
 	@echo '=== bench-quick: 12 representative gates PASSED ==='
 
 
-# P=5 P-parity sweep -- 10 gates at the largest comptime config
-# the suite covers (2D NP=21 + 3D NP=56 across all 5 smooth physics).
-# High-P regressions tend to surface here first since these stress
-# the comptime template + shared-memory rk_stage_kernel hardest.
-# Run-time ~30s wall.
+# P=5 P-parity sweep -- 12 gates at the largest comptime config
+# the suite covers (2D NP=21 + 3D NP=56 across all 5 smooth physics
+# + 2D and 3D limited shocked Sod).  High-P regressions tend to
+# surface here first since these stress the comptime template +
+# shared-memory rk_stage_kernel + the BJ limiter pipeline hardest.
+# Run-time ~80s wall.
 bench-p5: \
 		bench-advection-translation-2d-p5 \
 		bench-advection-3d-p5 \
 		bench-euler-smooth-wave-2d-p5 \
 		bench-euler-smooth-wave-3d-p5 \
+		bench-euler-sod-limited-2d-p5 \
+		bench-euler-sod-3d-p5 \
 		bench-maxwell-plane-wave-2d-p5 \
 		bench-maxwell-plane-wave-3d-p5 \
 		bench-shallow-water-wave-2d-p5 \
 		bench-shallow-water-wave-3d-p5 \
 		bench-mhd-alfven-glm-2d-p5 \
 		bench-mhd-alfven-3d-p5
-	@echo '=== bench-p5: 10 P=5 P-parity gates PASSED ==='
+	@echo '=== bench-p5: 12 P=5 P-parity gates PASSED ==='
 
 
 # Aggregate target -- runs every analytic benchmark.  Grouped by
