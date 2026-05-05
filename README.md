@@ -101,6 +101,10 @@ Nine reference drivers under `examples/`:
   `local_mesh_2d_gpu_maxwell.mojo`, each running 2 launches per
   SSPRK3 stage (face-flux kernel + per-(elem, node) fused
   vol+lift+RK kernel) orchestrated by `<name>_rk_stage_2d[P]`.
+  The Shu-Osher 3-stage SSPRK3 buffer-routing dance is factored
+  into `src/ssprk3.ssprk3_stage_plans` -- a non-templated helper
+  shared by all 10 example drivers + 47 benches; one compiled
+  binary regardless of how many physics modules consume it.
   The Venkat-smoothed Barth-Jespersen slope limiter lives in its own
   `local_mesh_2d_gpu_limiter.mojo`.  The parent `src/local_mesh_2d_gpu.mojo`
   holds the `LocalMesh2DGpu` struct + generic NC-templated helpers
