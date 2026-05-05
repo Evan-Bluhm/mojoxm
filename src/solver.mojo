@@ -503,7 +503,20 @@ def bj_limiter_compute_theta_kernel[NP: Int, NC: Int](
     # tolerance: for d << D (smooth flow), alpha -> 1; for d >> D
     # (shock), alpha -> D/d (classical Barth-Jespersen).  eps=0
     # recovers pure BJ, which over-limits P2 DG even in smooth regions.
+    #
+    # Hoist the loop-invariant per-component pos_D / neg_D out of the
+    # NP-inner loop -- they don't depend on nn.  Clamp at hoist time so
+    # the inner branch just picks one of two precomputed values.
     var eps2 = venkat_eps * venkat_eps
+    var pos_D = InlineArray[Float32, NC](fill=Float32(0.0))
+    var neg_D = InlineArray[Float32, NC](fill=Float32(0.0))
+    for c in range(NC):
+        var p = nbr_max[c] - own_avg[c]
+        if p < Float32(0.0): p = Float32(0.0)
+        pos_D[c] = p
+        var n = own_avg[c] - nbr_min[c]
+        if n < Float32(0.0): n = Float32(0.0)
+        neg_D[c] = n
     var base_q = elem * NP * NC
     var theta: Float32 = 1.0
     var tiny: Float32 = 1.0e-30
@@ -514,13 +527,7 @@ def bj_limiter_compute_theta_kernel[NP: Int, NC: Int](
             var d_abs = delta_s if delta_s >= Float32(0.0) else -delta_s
             if d_abs <= tiny:
                 continue
-            var D: Float32
-            if delta_s > Float32(0.0):
-                D = nbr_max[c] - own_avg[c]
-            else:
-                D = own_avg[c] - nbr_min[c]
-            if D < Float32(0.0):
-                D = Float32(0.0)   # shouldn't happen, but be safe
+            var D = pos_D[c] if delta_s > Float32(0.0) else neg_D[c]
             var D2 = D * D
             var d2 = d_abs * d_abs
             var Dd = D * d_abs

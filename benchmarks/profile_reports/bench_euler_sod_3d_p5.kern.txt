@@ -2,18 +2,18 @@
 
  Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                             Name                            
  --------  ---------------  ---------  --------  --------  --------  --------  -----------  -----------------------------------------------------------
-     87.7       3029587029       4998  606159.9  600320.0    592816   1101258      38092.5  src_solver_rk_stage_kernel_I6A6A6A6AcB6A6A_3830630ec2e1b643
-     10.4        359641805       4998   71957.1   71410.0     68329    387402       8339.3  src_solver_bj_limiter_compute_6A6A6A6A_911e93e36b5e21c8    
-      1.0         36082341       4998    7219.4    7169.0      7077     11103        214.4  src_solver_bj_limiter_apply_ke6A6A6A6A_7541910257e9bf76    
-      0.8         28109493       4998    5624.1    5613.0      4942      6284        125.5  src_solver_compute_cell_averag6A6A6A6A_270e419353092698    
-      0.0            76412          1   76412.0   76412.0     76412     76412          0.0  src_local_mesh_build_elements_6A6A6A6A_8e7b91389545e444    
-      0.0            16502          1   16502.0   16502.0     16502     16502          0.0  src_local_mesh_build_faces_ker6A6A6A6A_58ea96ffe859c057    
-      0.0            13453          1   13453.0   13453.0     13453     13453          0.0  src_local_mesh_apply_minus_y_b6A6A6A6A_e05bd727e2249699    
-      0.0            13453          1   13453.0   13453.0     13453     13453          0.0  src_local_mesh_apply_minus_z_b6A6A6A6A_c9c55544f27b9ab1    
-      0.0             8327          1    8327.0    8327.0      8327      8327          0.0  bench_euler_sod_3d_p5_sod_ic_ke6A6A_df5ed3e3659b8ee0       
-      0.0             3813          1    3813.0    3813.0      3813      3813          0.0  src_local_mesh_apply_minus_x_b6A6A6A6A_30c9801c7e7a0c7b    
-      0.0             1617          1    1617.0    1617.0      1617      1617          0.0  src_local_mesh_apply_plus_z_bc6A6A6A6A_58aa7a5ffc83f85a    
-      0.0             1616          1    1616.0    1616.0      1616      1616          0.0  src_local_mesh_apply_plus_y_bc6A6A6A6A_eb57f0e906e160d9    
-      0.0             1434          1    1434.0    1434.0      1434      1434          0.0  src_local_mesh_apply_plus_x_bc6A6A6A6A_c6994c630f35afad    
+     87.9       3042849742       4998  608813.5  603632.0    596847   1078174      37597.9  src_solver_rk_stage_kernel_I6A6A6A6AcB6A6A_3830630ec2e1b643
+     10.2        352777959       4998   70583.8   69994.0     66800    429016      10689.2  src_solver_bj_limiter_compute_6A6A6A6A_911e93e36b5e21c8    
+      1.0         36226981       4998    7248.3    7214.0      7122     10837        184.4  src_solver_bj_limiter_apply_ke6A6A6A6A_7541910257e9bf76    
+      0.8         27894561       4998    5581.1    5587.0      4881      7614        125.3  src_solver_compute_cell_averag6A6A6A6A_270e419353092698    
+      0.0            76717          1   76717.0   76717.0     76717     76717          0.0  src_local_mesh_build_elements_6A6A6A6A_8e7b91389545e444    
+      0.0            16455          1   16455.0   16455.0     16455     16455          0.0  src_local_mesh_build_faces_ker6A6A6A6A_58ea96ffe859c057    
+      0.0            13539          1   13539.0   13539.0     13539     13539          0.0  src_local_mesh_apply_minus_z_b6A6A6A6A_c9c55544f27b9ab1    
+      0.0            13507          1   13507.0   13507.0     13507     13507          0.0  src_local_mesh_apply_minus_y_b6A6A6A6A_e05bd727e2249699    
+      0.0             8043          1    8043.0    8043.0      8043      8043          0.0  bench_euler_sod_3d_p5_sod_ic_ke6A6A_df5ed3e3659b8ee0       
+      0.0             3837          1    3837.0    3837.0      3837      3837          0.0  src_local_mesh_apply_minus_x_b6A6A6A6A_30c9801c7e7a0c7b    
+      0.0             1627          1    1627.0    1627.0      1627      1627          0.0  src_local_mesh_apply_plus_y_bc6A6A6A6A_eb57f0e906e160d9    
+      0.0             1596          1    1596.0    1596.0      1596      1596          0.0  src_local_mesh_apply_plus_z_bc6A6A6A6A_58aa7a5ffc83f85a    
+      0.0             1443          1    1443.0    1443.0      1443      1443          0.0  src_local_mesh_apply_plus_x_bc6A6A6A6A_c6994c630f35afad    
 
 [7/8] Executing 'cuda_gpu_mem_time_sum' stats report
