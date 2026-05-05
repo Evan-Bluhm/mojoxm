@@ -32,6 +32,7 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_sw import sw_rk_stage_hll_2d
+from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
@@ -127,41 +128,27 @@ def main() raises:
     var inflow_hu = H0 * U0
     var inflow_hv = Float32(0.0)
 
+    var stage_plans = ssprk3_stage_plans(
+        d_q=d_q.unsafe_ptr(),
+        d_q1=d_q1.unsafe_ptr(),
+        d_q2=d_q2.unsafe_ptr(),
+    )
     for _ in range(num_steps):
-        sw_rk_stage_hll_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            GRAVITY, H_MIN,
-            Float32(1.0), Float32(0.0), Float32(1.0), dt,
-            inflow_h=inflow_h, inflow_hu=inflow_hu, inflow_hv=inflow_hv,
-        )
-        sw_rk_stage_hll_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            GRAVITY, H_MIN,
-            Float32(0.75), Float32(0.25), Float32(0.25), dt,
-            inflow_h=inflow_h, inflow_hu=inflow_hu, inflow_hv=inflow_hv,
-        )
-        sw_rk_stage_hll_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            GRAVITY, H_MIN,
-            Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-            Float32(2.0 / 3.0), dt,
-            inflow_h=inflow_h, inflow_hu=inflow_hu, inflow_hv=inflow_hv,
-        )
+        for stage in stage_plans:
+            sw_rk_stage_hll_2d[P](
+                ctx=ctx,
+                mesh=gpu_mesh,
+                Lift_ref=gpu_re.d_Lift_ref.unsafe_ptr(),
+                D_ref=gpu_re.d_D_ref.unsafe_ptr(),
+                q_in=stage.q_in,
+                q_a=stage.q_a,
+                q_b=stage.q_b,
+                q_out=stage.q_out,
+                fstar_scratch=d_fstar.unsafe_ptr(),
+                g=GRAVITY, min_h=H_MIN,
+                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                inflow_h=inflow_h, inflow_hu=inflow_hu, inflow_hv=inflow_hv,
+            )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
     ctx.synchronize()
