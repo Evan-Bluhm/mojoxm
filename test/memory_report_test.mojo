@@ -130,6 +130,19 @@ def main() raises:
         raise Error("memory_report_test: per_step_seconds non-positive")
     if tput.state_bandwidth_bytes_per_second() <= 0.0:
         raise Error("memory_report_test: state_bandwidth non-positive")
+    # Upper-bound sanity: physically plausible range.  This catches the
+    # async-enqueue-only timing bug that originally produced ~9 TB/s
+    # numbers (which is impossible on any real GPU).  Modern HBM peaks
+    # near 3 TB/s; any STATE-bandwidth lower bound exceeding 1 TB/s
+    # means we likely measured kernel enqueue, not actual GPU work.
+    var bw = tput.state_bandwidth_bytes_per_second()
+    if bw > 1.0e12:
+        raise Error(
+            "memory_report_test: state_bandwidth "
+            + String(bw)
+            + " B/s exceeds 1 TB/s sanity ceiling -- timing likely "
+            "missing a ctx.synchronize()"
+        )
     # Sanity: 8 * total_q_len * 4 bytes.
     var expected_state_bytes = 8 * solver.total_q_len * 4
     if solver.state_bytes_per_step() != expected_state_bytes:
