@@ -28,6 +28,7 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd_glm import mhd_glm_rk_stage_2d
+from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
@@ -116,38 +117,20 @@ def _run() raises -> Float64:
     # GLM disabled (c_h=0): the GLM kernels reduce to plain ideal MHD.
     var c_h_f = Float32(0.0)
 
+    var stage_plans = ssprk3_stage_plans(
+        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+    )
     for _ in range(num_steps):
-        mhd_glm_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            gamma_f, min_rho, min_p, c_h_f,
-            Float32(1.0), Float32(0.0), Float32(1.0), dt,
-        )
-        mhd_glm_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            gamma_f, min_rho, min_p, c_h_f,
-            Float32(0.75), Float32(0.25), Float32(0.25), dt,
-        )
-        mhd_glm_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            gamma_f, min_rho, min_p, c_h_f,
-            Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-            Float32(2.0 / 3.0), dt,
-        )
+        for stage in stage_plans:
+            mhd_glm_rk_stage_2d[P](
+                ctx, gpu_mesh,
+                gpu_re.d_Lift_ref.unsafe_ptr(),
+                gpu_re.d_D_ref.unsafe_ptr(),
+                stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                d_fstar.unsafe_ptr(),
+                gamma_f, min_rho, min_p, c_h_f,
+                stage.a, stage.b, stage.c, dt,
+            )
     ctx.synchronize()
 
     ctx.enqueue_copy(hbuf_q, d_q)
