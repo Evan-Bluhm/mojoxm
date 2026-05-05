@@ -170,6 +170,8 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_euler_smooth_wave_3d_p5 \
                 bench_euler_flux_coverage_3d bench_euler_hydrostatic_3d \
                 bench_euler_hydrostatic_3d_p3 \
+                bench_euler_hydrostatic_3d_p4 \
+                bench_euler_hydrostatic_3d_p5 \
                 bench_euler_inflow_3d bench_euler_vortex_3d \
                 bench_euler_vortex_3d_p3 \
                 bench_euler_sod_3d bench_euler_sod_3d_p3 \
@@ -611,6 +613,10 @@ bench-euler-hydrostatic-3d: bench_euler_hydrostatic_3d
 	./bench_euler_hydrostatic_3d
 bench-euler-hydrostatic-3d-p3: bench_euler_hydrostatic_3d_p3
 	./bench_euler_hydrostatic_3d_p3
+bench-euler-hydrostatic-3d-p4: bench_euler_hydrostatic_3d_p4
+	./bench_euler_hydrostatic_3d_p4
+bench-euler-hydrostatic-3d-p5: bench_euler_hydrostatic_3d_p5
+	./bench_euler_hydrostatic_3d_p5
 bench-euler-inflow-3d: bench_euler_inflow_3d
 	./bench_euler_inflow_3d
 bench-euler-vortex-3d: bench_euler_vortex_3d
