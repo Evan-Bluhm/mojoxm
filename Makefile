@@ -125,6 +125,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_euler_sod_limited_2d bench_euler_sod_limited_2d_p3 \
                 bench_euler_sod_limited_2d_p4 \
                 bench_euler_sod_limited_2d_p5 \
+                bench_euler_inflow_2d \
                 bench_euler_smooth_wave_2d bench_euler_hydrostatic_2d \
                 bench_euler_hydrostatic_2d_p3 \
                 bench_euler_smooth_wave_2d_p3 \
@@ -490,6 +491,8 @@ bench-euler-smooth-wave-2d-p5: bench_euler_smooth_wave_2d_p5
 	./bench_euler_smooth_wave_2d_p5
 bench-euler-channel-steady-2d: bench_euler_channel_steady_2d
 	./bench_euler_channel_steady_2d
+bench-euler-inflow-2d: bench_euler_inflow_2d
+	./bench_euler_inflow_2d
 bench-euler-hydrostatic-2d: bench_euler_hydrostatic_2d
 	./bench_euler_hydrostatic_2d
 bench-euler-hydrostatic-2d-p3: bench_euler_hydrostatic_2d_p3
@@ -667,7 +670,7 @@ bench-quick: \
 bench-bcs: \
 		bench-advection-outflow-2d bench-advection-inflow-2d \
 		bench-advection-outflow-3d bench-advection-inflow-3d \
-		bench-euler-channel-steady-2d bench-euler-inflow-3d \
+		bench-euler-channel-steady-2d bench-euler-inflow-2d bench-euler-inflow-3d \
 		bench-euler-hydrostatic-2d bench-euler-hydrostatic-2d-p3 \
 		bench-euler-hydrostatic-3d bench-euler-hydrostatic-3d-p3 \
 		bench-shallow-water-inflow-2d bench-shallow-water-inflow-3d \
