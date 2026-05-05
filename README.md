@@ -599,10 +599,10 @@ wall time is roughly an order of magnitude larger. The mean density
 drifts by ~2·10⁻⁶ over the 280-step run — well within single-precision
 round-off expectations.
 
-### 2D limiter pipeline cost split (`bench_euler_sod_limited_2d_p3`)
+### Limiter cost share scales differently in 2D vs 3D
 
-Per-kernel breakdown on the limited Sod path at P=3 / NP=10 (per
-nsys, ~5300 SSPRK3 steps × 3 launches per stage), after the
+Per-kernel breakdown on the limited Sod path at P=3 / NP=10 in 2D
+(per nsys, ~5300 SSPRK3 steps × 3 launches per stage), after the
 compute_theta + apply split (commit `cdc3210`):
 
 | kernel                     | % of GPU time |
@@ -613,16 +613,32 @@ compute_theta + apply split (commit `cdc3210`):
 | `bj_limit_apply_2d`        |  9.2%         |
 | `cell_mean_kernel_2d`      |  6.6%         |
 
-The BJ limiter pipeline still totals 44% of GPU time, but the
-apply-pass uncoalesced pattern that previously dominated has been
-neutralized -- adjacent threads now share `elem` and stride-1 writes
-to `q[]`.  The same split was mirrored to 3D in commit `0435ad6`,
-dropping 3D limiter share from 20.8% to 14.2% on shocked Sod 3D P=3.
-Possible further optimization paths (documented in
-`project_2d_limiter_perf.md` memory): pre-pack density into elem-major
-scratch for coalesced compute_theta reads; fuse cell_mean into the
-rk_stage kernel.  See the `benchmarks/profile_reports/` baselines for
-per-kernel measurements on every benchmark.
+The 2D limiter pipeline tracks ~44 / 48 / 50% of GPU time at
+P=3 / 4 / 5 -- it grows with NP because the inner per-element
+`compute_theta` loop is O(NP).  The apply-pass uncoalesced
+pattern that previously dominated has been neutralized:
+adjacent threads now share `elem` and stride-1 writes to `q[]`.
+
+The same split was mirrored to 3D in commit `0435ad6`, but the
+cost story flips: in 3D the cooperative `rk_stage_kernel` grows
+~quadratic with NP, so at the highest P the limiter is
+proportionally tiny:
+
+| kernel                  | % at 3D P=3 | % at 3D P=5 |
+|-------------------------|-------------|-------------|
+| `rk_stage_kernel`       |  82.1%      |  87.7%      |
+| `bj_limiter compute_theta` |  14.2%   |  10.4%      |
+| `bj_limiter apply`      |   2.0%      |   1.0%      |
+| `compute_cell_average`  |   1.7%      |   0.8%      |
+
+This means: 2D limiter optimization has ~3-4x the ROI of the
+same effort in 3D, where the cooperative kernel is the real
+bottleneck.  Possible 2D paths (see `project_2d_limiter_perf`):
+pre-pack density for coalesced compute_theta reads (TRIED, was a
+regression because L2 absorbs the uncoalesced cost); fuse
+cell_mean into the rk_stage kernel.  See
+`benchmarks/profile_reports/` for per-kernel measurements on every
+benchmark.
 
 ## Build & run
 
