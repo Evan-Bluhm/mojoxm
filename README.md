@@ -164,7 +164,11 @@ Nine reference drivers under `examples/`:
   (Euler / Maxwell / SW / MHD-GLM), and full P=5 P-parity coverage
   across all 5 smooth physics in both dimensions (advection / Euler
   / Maxwell / SW / IdealMHD-GLM at 2D NP=21 and 3D NP=56) -- the
-  largest comptime configuration the suite gates end-to-end.
+  largest comptime configuration the suite gates end-to-end.  When
+  iterating, pick the slice that matches what's changing:
+  `make bench-quick` (12 representative gates, ~60s),
+  `make bench-p5` (12 P=5 high-order gates, ~80s),
+  `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~70s).
   * **2D smooth (31):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
