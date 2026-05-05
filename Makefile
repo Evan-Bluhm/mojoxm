@@ -98,6 +98,7 @@ TEST_DRIVERS = mpi_advection_test mpi_bc_test diagnostics_test p3_smoke_test \
                limiter_2d_gpu_test limiter_2d_gpu_test_p3 \
                limiter_2d_gpu_test_p4 limiter_2d_gpu_test_p5 \
                limiter_3d_test limiter_3d_test_p3 \
+               limiter_3d_test_p4 limiter_3d_test_p5 \
                mhd_3d_test euler_3d_test maxwell_3d_test \
                sw_3d_test two_fluid_3d_test \
                vtu_2d_multi_test
@@ -177,7 +178,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-quick test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-quick test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -217,7 +218,7 @@ help:
 	@echo '                           2D BJ limiter smooth-passthrough + monotonicity'
 	@echo '  make test-{euler,sw,mhd,maxwell,two-fluid}-3d'
 	@echo '                           per-physics 3D constant-state preservation'
-	@echo '  make test-limiter-3d[-p3]'
+	@echo '  make test-limiter-3d[-p3,-p4,-p5]'
 	@echo '                           3D BJ limiter cell-mean conservation'
 	@echo '  make test-diagnostics    DiagnosticsWriter unit test (GPU, np=1)'
 	@echo '  make test-p3             P=3 round-trip smoke test'
@@ -373,6 +374,10 @@ test-limiter-3d: limiter_3d_test
 	./limiter_3d_test
 test-limiter-3d-p3: limiter_3d_test_p3
 	./limiter_3d_test_p3
+test-limiter-3d-p4: limiter_3d_test_p4
+	./limiter_3d_test_p4
+test-limiter-3d-p5: limiter_3d_test_p5
+	./limiter_3d_test_p5
 test-mhd-3d: mhd_3d_test
 	./mhd_3d_test
 test-euler-3d: euler_3d_test
@@ -386,7 +391,7 @@ test-two-fluid-3d: two_fluid_3d_test
 
 # Convenience target: run every test in the suite.  Stops on the first
 # failure.  Doesn't include test-klone (that's for cluster submission).
-test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test test-bc
+test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test test-bc
 	@echo '=== ALL TESTS PASSED ==='
 
 
