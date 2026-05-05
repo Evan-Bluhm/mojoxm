@@ -176,7 +176,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-all test-klone bench-quick bench-p5 bench-shocks bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -187,6 +187,7 @@ help:
 	@echo '  make bench-quick         smoke-test 12 representative benches (~60s)'
 	@echo '  make bench-p5            run 12 P=5 P-parity gates at NP=21/56 (~80s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
+	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
 	@echo '  make bench-all           build + run every analytic-solution gate (98 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -232,6 +233,10 @@ help:
 	@echo '                           (Euler Sod 2D + 3D, P=2-5), HLL SW dam-break (2D + 3D), and'
 	@echo '                           Brio-Wu MHD shock (3D P=2/3); use when iterating on Riemann'
 	@echo '                           solvers or the limiter pipeline (~70s).'
+	@echo '  make bench-rates         10 convergence-rate gates that explicitly assert log2(e_N /'
+	@echo '                           e_2N) >= P-dependent floor.  Advection 2D + 3D P=2-5 (8) +'
+	@echo '                           Euler 3D P=2/3 (2).  Catches scheme-order regressions an'
+	@echo '                           absolute-L2 sentinel would miss (~50s).'
 	@echo '  make bench-all           build + run every gate (98 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
@@ -593,6 +598,25 @@ bench-quick: \
 		bench-mhd-alfven-3d \
 		bench-maxwell-cavity-3d
 	@echo '=== bench-quick: 12 representative gates PASSED ==='
+
+
+# Convergence-rate sweep -- 10 gates that explicitly assert
+# observed log2(e_N / e_2N) >= a P-dependent floor (rather than
+# absolute-L2 sentinels).  These catch order regressions that an
+# absolute-L2 gate would miss -- a bug producing a finite but too-
+# large error at one resolution can still leave the rate intact;
+# a bug breaking the spatial discretization order gets caught here.
+# Includes advection 2D + 3D at P=2/3/4/5 (8 gates) and Euler 3D
+# at P=2/3 (2 gates -- 2D Euler / Maxwell / SW / MHD all sit at the
+# Float32 floor or A^2 nonlinear floor at our default resolutions,
+# so a rate gate doesn't fit cleanly there).  Run-time ~50s.
+bench-rates: \
+		bench-advection-translation-2d bench-advection-translation-2d-p3 \
+		bench-advection-translation-2d-p4 bench-advection-translation-2d-p5 \
+		bench-advection-3d bench-advection-3d-p3 \
+		bench-advection-3d-p4 bench-advection-3d-p5 \
+		bench-euler-smooth-wave-3d bench-euler-smooth-wave-3d-p3
+	@echo '=== bench-rates: 10 convergence-rate gates PASSED ==='
 
 
 # Shocked-flow sweep -- 13 gates exercising every Riemann solver +

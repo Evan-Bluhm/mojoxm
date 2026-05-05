@@ -168,7 +168,8 @@ Nine reference drivers under `examples/`:
   iterating, pick the slice that matches what's changing:
   `make bench-quick` (12 representative gates, ~60s),
   `make bench-p5` (12 P=5 high-order gates, ~80s),
-  `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~70s).
+  `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~70s),
+  `make bench-rates` (10 explicit convergence-rate gates, ~50s).
   * **2D smooth (31):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
