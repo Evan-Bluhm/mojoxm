@@ -342,12 +342,12 @@ Nine reference drivers under `examples/`:
   3D as a parallel NC=7 path; the existing NC=6 `mhd_rk_stage_2d`
   remains the smooth-flow workhorse.  Validated end-to-end through
   `bench_mhd_alfven_glm_2d` and `bench_mhd_glm_psi_transport_2d`.
-  Note: 2D shocked MHD hasn't been gated yet.  An earlier Brio-Wu
-  2D attempt blew up before the BJ limiter pipeline was working;
-  that pipeline is now proven on shocked Sod 2D at P=2/3/4/5, and
-  3D Brio-Wu passes with the same Rusanov+GLM+BJ combination, so
-  retrying with the current stack is the right next step before
-  investing in HLLD.
+  Note: 2D shocked MHD is not gated.  A 2D Brio-Wu retry with the
+  current BJ-limited GLM stack (2026-05-05) confirmed that HLLD is
+  genuinely needed -- the 2D Kuhn-triangle Rusanov flux produces
+  ~16x faster transverse Bx error growth than the 3D split-tet
+  pattern (Bx drift ~0.6 in 2D at T=0.005 vs ~0.3 in 3D at T=0.08).
+  See `project_2d_mhd_no_glm` memory for the full retry findings.
 
 - **Profiling**: `make profile-bench-<name>` runs a benchmark under
   `nsys profile --stats=true` and saves a per-kernel time summary
@@ -933,13 +933,15 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
   `mhd_glm_*` kernels in `src/local_mesh_2d_gpu_mhd_glm.mojo` add
   GLM as an opt-in NC=7 path (gated by alfven-via-GLM at P=2/3/4/5,
   psi-transport at P=2/3, and psi-damp at P=2/3).  Shocked 2D MHD
-  (Brio-Wu, OT vortex, ...) hasn't been gated yet.  An earlier
-  Brio-Wu 2D attempt blew up before BJ limiter integration; with
-  the BJ limiter pipeline now proven on shocked Sod 2D at NP=10/15/21
-  it's worth retrying before assuming HLLD is required.  All MHD
-  flux paths (2D + 3D) currently use Rusanov, and 3D Brio-Wu does
-  pass with that combination -- so the 2D analog should be
-  re-attempted before investing in HLLD.
+  (Brio-Wu, OT vortex, ...) is not gated.  A 2D Brio-Wu retry
+  2026-05-05 with the current BJ-limited GLM stack confirmed that
+  HLLD is genuinely needed: the run no longer NaNs immediately
+  (BJ keeps integration alive at very short T) but Bx drifts ~0.6
+  even at T=0.005 vs ~0.3 in 3D at T=0.08.  The 2D Kuhn-triangle
+  Rusanov flux produces ~16x faster transverse Bx error than the
+  3D split-tet pattern, so the Rusanov-only path can't reproduce
+  the seven-wave Brio-Wu structure cleanly enough.  HLLD is the
+  right next step if 2D shocked-MHD coverage is wanted.
 - **2D pipeline still uses 2 kernel launches per RK stage** vs 1 in
   the 3D `rk_stage_kernel`.  The vol+lift+RK fusion in commits
   f7bff49..fa4257a brought 2D from 3 launches/stage down to 2
