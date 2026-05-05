@@ -167,7 +167,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_euler_inflow_3d bench_euler_vortex_3d \
                 bench_euler_vortex_3d_p3 \
                 bench_euler_sod_3d bench_euler_sod_3d_p3 \
-                bench_euler_sod_3d_p4 \
+                bench_euler_sod_3d_p4 bench_euler_sod_3d_p5 \
                 bench_shallow_water_wave_3d bench_shallow_water_wave_3d_p3 \
                 bench_shallow_water_wave_3d_p4 \
                 bench_shallow_water_wave_3d_p5 \
@@ -186,7 +186,7 @@ help:
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
 	@echo '  make bench-quick         smoke-test 12 representative benches (~60s)'
 	@echo '  make bench-p5            run 10 P=5 P-parity gates at NP=21/56 (~50s)'
-	@echo '  make bench-all           build + run every analytic-solution gate (97 benches)'
+	@echo '  make bench-all           build + run every analytic-solution gate (98 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -226,7 +226,7 @@ help:
 	@echo '  make bench-p5            P=5 P-parity sweep -- 10 gates at NP=21 (2D) / NP=56 (3D)'
 	@echo '                           across all 5 smooth physics (~50s); the largest comptime'
 	@echo '                           configs the suite covers, where high-P regressions show first'
-	@echo '  make bench-all           build + run every gate (97 benches, ~10 min)'
+	@echo '  make bench-all           build + run every gate (98 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -548,6 +548,8 @@ bench-euler-sod-3d-p3: bench_euler_sod_3d_p3
 	./bench_euler_sod_3d_p3
 bench-euler-sod-3d-p4: bench_euler_sod_3d_p4
 	./bench_euler_sod_3d_p4
+bench-euler-sod-3d-p5: bench_euler_sod_3d_p5
+	./bench_euler_sod_3d_p5
 bench-shallow-water-wave-3d: bench_shallow_water_wave_3d
 	./bench_shallow_water_wave_3d
 bench-shallow-water-wave-3d-p3: bench_shallow_water_wave_3d_p3
@@ -643,6 +645,7 @@ bench-all: \
 		bench-advection-outflow-3d bench-advection-inflow-3d \
 		bench-euler-vortex-3d bench-euler-vortex-3d-p3 \
 		bench-euler-sod-3d bench-euler-sod-3d-p3 bench-euler-sod-3d-p4 \
+		bench-euler-sod-3d-p5 \
 		bench-euler-smooth-wave-3d bench-euler-smooth-wave-3d-p3 \
 		bench-euler-smooth-wave-3d-p4 bench-euler-smooth-wave-3d-p5 \
 		bench-euler-flux-coverage-3d \
@@ -859,6 +862,8 @@ profile-bench-euler-sod-3d-p3: bench_euler_sod_3d_p3
 	@bin=bench_euler_sod_3d_p3; $(PROFILE_BIN)
 profile-bench-euler-sod-3d-p4: bench_euler_sod_3d_p4
 	@bin=bench_euler_sod_3d_p4; $(PROFILE_BIN)
+profile-bench-euler-sod-3d-p5: bench_euler_sod_3d_p5
+	@bin=bench_euler_sod_3d_p5; $(PROFILE_BIN)
 profile-bench-shallow-water-wave-3d: bench_shallow_water_wave_3d
 	@bin=bench_shallow_water_wave_3d; $(PROFILE_BIN)
 profile-bench-shallow-water-wave-3d-p3: bench_shallow_water_wave_3d_p3
@@ -911,6 +916,7 @@ profile-bench-all: \
 		profile-bench-advection-outflow-3d profile-bench-advection-inflow-3d \
 		profile-bench-euler-vortex-3d profile-bench-euler-vortex-3d-p3 \
 		profile-bench-euler-sod-3d profile-bench-euler-sod-3d-p3 profile-bench-euler-sod-3d-p4 \
+		profile-bench-euler-sod-3d-p5 \
 		profile-bench-euler-smooth-wave-3d profile-bench-euler-smooth-wave-3d-p3 \
 		profile-bench-euler-smooth-wave-3d-p4 profile-bench-euler-smooth-wave-3d-p5 \
 		profile-bench-euler-flux-coverage-3d \

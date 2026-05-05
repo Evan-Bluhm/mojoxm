@@ -156,7 +156,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  97 analytic-solution gates tying schemes to closed-form reference
+  98 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
@@ -309,11 +309,13 @@ Nine reference drivers under `examples/`:
     17-component rest state preserved under BC_OUTFLOW / BC_WALL
     on all 6 faces),
     `bench_two_fluid_langmuir_3d`.
-  * **3D shocks (6):** `bench_euler_sod_3d` + `_p3` + `_p4` (BJ-limited,
-    bounds + mass conservation; the P=4 / NP=35 variant is the
-    highest-NP shocked-flow gate in the suite -- exercises the
-    cooperative shared-memory rk_stage_kernel + the split-kernel
-    BJ limiter at NC=5 / NP=35 / 175 q-values per tet),
+  * **3D shocks (7):** `bench_euler_sod_3d` + `_p3` + `_p4` + `_p5`
+    (BJ-limited, bounds + mass conservation; the `_p5` / NP=56
+    variant is the highest-NP shocked-flow gate in the suite --
+    exercises the cooperative shared-memory rk_stage_kernel + the
+    split-kernel BJ limiter at NC=5 / NP=56 / 280 q-values per tet,
+    the largest shocked-flow comptime config the suite covers, and
+    closes the 3D shocked-Euler P-parity sweep P=2/3/4/5),
     `bench_mhd_brio_wu_3d` + `_p3` (canonical 1D MHD Riemann embedded
     in 3D, GLM + BJ limiter; the P=3 variant is the first analytic-
     Riemann-style 3D MHD shocked gate at NP=20 / NC=9, ~408 us per
@@ -358,7 +360,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 97 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 98 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
