@@ -128,6 +128,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_euler_channel_steady_2d bench_shallow_water_wave_2d \
                 bench_shallow_water_wave_2d_p3 \
                 bench_shallow_water_wave_2d_p4 \
+                bench_shallow_water_wave_2d_p5 \
                 bench_shallow_water_wave_2d_rusanov \
                 bench_shallow_water_inflow_2d \
                 bench_shallow_water_dam_break_2d \
@@ -423,6 +424,8 @@ bench-shallow-water-wave-2d-p3: bench_shallow_water_wave_2d_p3
 	./bench_shallow_water_wave_2d_p3
 bench-shallow-water-wave-2d-p4: bench_shallow_water_wave_2d_p4
 	./bench_shallow_water_wave_2d_p4
+bench-shallow-water-wave-2d-p5: bench_shallow_water_wave_2d_p5
+	./bench_shallow_water_wave_2d_p5
 bench-shallow-water-wave-2d-rusanov: bench_shallow_water_wave_2d_rusanov
 	./bench_shallow_water_wave_2d_rusanov
 bench-shallow-water-inflow-2d: bench_shallow_water_inflow_2d
@@ -591,7 +594,8 @@ bench-all: \
 		bench-euler-channel-steady-2d \
 		bench-euler-hydrostatic-2d bench-euler-hydrostatic-2d-p3 \
 		bench-shallow-water-wave-2d bench-shallow-water-wave-2d-p3 \
-		bench-shallow-water-wave-2d-p4 bench-shallow-water-wave-2d-rusanov \
+		bench-shallow-water-wave-2d-p4 bench-shallow-water-wave-2d-p5 \
+		bench-shallow-water-wave-2d-rusanov \
 		bench-shallow-water-inflow-2d bench-shallow-water-dam-break-2d \
 		bench-mhd-alfven-2d \
 		bench-mhd-alfven-glm-2d bench-mhd-alfven-glm-2d-p3 \
@@ -708,6 +712,8 @@ profile-bench-shallow-water-wave-2d-p3: bench_shallow_water_wave_2d_p3
 	@bin=bench_shallow_water_wave_2d_p3; $(PROFILE_BIN)
 profile-bench-shallow-water-wave-2d-p4: bench_shallow_water_wave_2d_p4
 	@bin=bench_shallow_water_wave_2d_p4; $(PROFILE_BIN)
+profile-bench-shallow-water-wave-2d-p5: bench_shallow_water_wave_2d_p5
+	@bin=bench_shallow_water_wave_2d_p5; $(PROFILE_BIN)
 profile-bench-shallow-water-wave-2d-rusanov: bench_shallow_water_wave_2d_rusanov
 	@bin=bench_shallow_water_wave_2d_rusanov; $(PROFILE_BIN)
 profile-bench-shallow-water-inflow-2d: bench_shallow_water_inflow_2d
@@ -852,7 +858,8 @@ profile-bench-all: \
 		profile-bench-euler-channel-steady-2d \
 		profile-bench-euler-hydrostatic-2d profile-bench-euler-hydrostatic-2d-p3 \
 		profile-bench-shallow-water-wave-2d profile-bench-shallow-water-wave-2d-p3 \
-		profile-bench-shallow-water-wave-2d-p4 profile-bench-shallow-water-wave-2d-rusanov \
+		profile-bench-shallow-water-wave-2d-p4 profile-bench-shallow-water-wave-2d-p5 \
+		profile-bench-shallow-water-wave-2d-rusanov \
 		profile-bench-shallow-water-inflow-2d profile-bench-shallow-water-dam-break-2d \
 		profile-bench-mhd-alfven-2d \
 		profile-bench-mhd-alfven-glm-2d profile-bench-mhd-alfven-glm-2d-p3 \

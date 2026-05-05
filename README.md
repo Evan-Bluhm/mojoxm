@@ -156,17 +156,17 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  94 analytic-solution gates tying schemes to closed-form reference
+  95 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
   P=4 absolute-L2 sentinels for every core physics in 2D + 3D
   (Euler / Maxwell / SW / MHD-GLM), full 3D NP=56 P=5 coverage
   across all 4 smooth multi-component physics (Euler, Maxwell, SW,
-  IdealMHD/GLM), P=5 multi-component Euler in 2D (NP=21), P=5
-  vacuum Maxwell in 2D (NP=21), and P=4 / P=5 rate gates for
-  advection in both 2D (NP=15, NP=21) and 3D (NP=35, NP=56).
-  * **2D smooth (29):** `bench_advection_translation_2d` (rate >= 2.0)
+  IdealMHD/GLM), 2D NP=21 P=5 coverage for Euler / Maxwell / SW,
+  and P=4 / P=5 rate gates for advection in both 2D (NP=15, NP=21)
+  and 3D (NP=35, NP=56).
+  * **2D smooth (30):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
     `bench_advection_inflow_2d` (BC_INFLOW preservation gate with
@@ -185,8 +185,10 @@ Nine reference drivers under `examples/`:
     `bench_mhd_glm_psi_damp_2d` + `_p3` (alpha_d>0 decay matches A0/e
     via the 2D operator-splitting damp kernel; gated at NP=6 and
     NP=10),
-    `bench_shallow_water_wave_2d` + `_p3` + `_p4` (NP=10 / NP=15 SW
-    HLL gate) + `_rusanov` (gates the Rusanov-flux SW path used by
+    `bench_shallow_water_wave_2d` + `_p3` + `_p4` + `_p5` (NP=10 /
+    NP=15 / NP=21 SW HLL gate; closes the 2D SW P-parity sweep
+    P=2/3/4/5 at the same A/H=0.01 nonlinear floor across all P) +
+    `_rusanov` (gates the Rusanov-flux SW path used by
     `examples/shallow_water_dam_break_2d_gpu`),
     `bench_shallow_water_inflow_2d` (BC_INFLOW + BC_OUTFLOW preservation
     gate; uniform subcritical state matched to inflow ghost stays
@@ -348,7 +350,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 94 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 95 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
