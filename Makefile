@@ -128,6 +128,8 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_euler_inflow_2d \
                 bench_euler_smooth_wave_2d bench_euler_hydrostatic_2d \
                 bench_euler_hydrostatic_2d_p3 \
+                bench_euler_hydrostatic_2d_p4 \
+                bench_euler_hydrostatic_2d_p5 \
                 bench_euler_smooth_wave_2d_p3 \
                 bench_euler_smooth_wave_2d_p4 \
                 bench_euler_smooth_wave_2d_p5 \
@@ -497,6 +499,10 @@ bench-euler-hydrostatic-2d: bench_euler_hydrostatic_2d
 	./bench_euler_hydrostatic_2d
 bench-euler-hydrostatic-2d-p3: bench_euler_hydrostatic_2d_p3
 	./bench_euler_hydrostatic_2d_p3
+bench-euler-hydrostatic-2d-p4: bench_euler_hydrostatic_2d_p4
+	./bench_euler_hydrostatic_2d_p4
+bench-euler-hydrostatic-2d-p5: bench_euler_hydrostatic_2d_p5
+	./bench_euler_hydrostatic_2d_p5
 bench-shallow-water-wave-2d: bench_shallow_water_wave_2d
 	./bench_shallow_water_wave_2d
 bench-shallow-water-wave-2d-p3: bench_shallow_water_wave_2d_p3
