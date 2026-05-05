@@ -342,9 +342,12 @@ Nine reference drivers under `examples/`:
   3D as a parallel NC=7 path; the existing NC=6 `mhd_rk_stage_2d`
   remains the smooth-flow workhorse.  Validated end-to-end through
   `bench_mhd_alfven_glm_2d` and `bench_mhd_glm_psi_transport_2d`.
-  Note: GLM alone is not enough for shocked 2D MHD (Brio-Wu) without
-  HLLD or constrained-transport divB handling -- the kernels are
-  available infrastructure for that future work.
+  Note: 2D shocked MHD hasn't been gated yet.  An earlier Brio-Wu
+  2D attempt blew up before the BJ limiter pipeline was working;
+  that pipeline is now proven on shocked Sod 2D at P=2/3/4/5, and
+  3D Brio-Wu passes with the same Rusanov+GLM+BJ combination, so
+  retrying with the current stack is the right next step before
+  investing in HLLD.
 
 - **Profiling**: `make profile-bench-<name>` runs a benchmark under
   `nsys profile --stats=true` and saves a per-kernel time summary
@@ -928,12 +931,15 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
   via `make test`/`test-bc`.
 - **2D MHD shocked-Riemann problems are unsupported.** The
   `mhd_glm_*` kernels in `src/local_mesh_2d_gpu_mhd_glm.mojo` add
-  GLM as an opt-in NC=7 path (gated by 6 benches: alfven-via-GLM,
-  psi-transport, psi-damp -- each with NP=6 (P=2) and NP=10 (P=3)
-  variants), but shocked 2D MHD (Brio-Wu, OT vortex, ...) requires
-  HLLD or constrained-transport divB handling that we don't yet
-  have -- GLM alone is insufficient.  Smooth 2D MHD problems work
-  today; sharp 2D MHD shocks need HLLD.
+  GLM as an opt-in NC=7 path (gated by alfven-via-GLM at P=2/3/4/5,
+  psi-transport at P=2/3, and psi-damp at P=2/3).  Shocked 2D MHD
+  (Brio-Wu, OT vortex, ...) hasn't been gated yet.  An earlier
+  Brio-Wu 2D attempt blew up before BJ limiter integration; with
+  the BJ limiter pipeline now proven on shocked Sod 2D at NP=10/15/21
+  it's worth retrying before assuming HLLD is required.  All MHD
+  flux paths (2D + 3D) currently use Rusanov, and 3D Brio-Wu does
+  pass with that combination -- so the 2D analog should be
+  re-attempted before investing in HLLD.
 - **2D pipeline still uses 2 kernel launches per RK stage** vs 1 in
   the 3D `rk_stage_kernel`.  The vol+lift+RK fusion in commits
   f7bff49..fa4257a brought 2D from 3 launches/stage down to 2
