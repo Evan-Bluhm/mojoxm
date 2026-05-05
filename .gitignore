@@ -28,6 +28,7 @@ test/dumps_bc_np*/
 # pattern to the root, so .mojo source files are not affected.
 /bench_*
 /*_test
+/*_test_p[0-9]
 /*_2d_gpu
 /advection_gaussian
 /euler_vortex
