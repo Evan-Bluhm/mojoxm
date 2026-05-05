@@ -156,15 +156,15 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  92 analytic-solution gates tying schemes to closed-form reference
+  93 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
   P=4 absolute-L2 sentinels for every core physics in 2D + 3D
   (Euler / Maxwell / SW / MHD-GLM), P=5 multi-component Euler in
   both 2D (NP=21) and 3D (NP=56), P=5 vacuum Maxwell in both 2D
-  (NP=21) and 3D (NP=56), and P=4 / P=5 rate gates for advection
-  in both 2D (NP=15, NP=21) and 3D (NP=35, NP=56).
+  (NP=21) and 3D (NP=56), P=5 SW in 3D (NP=56), and P=4 / P=5 rate
+  gates for advection in both 2D (NP=15, NP=21) and 3D (NP=35, NP=56).
   * **2D smooth (29):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
@@ -231,7 +231,7 @@ Nine reference drivers under `examples/`:
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (41):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (42):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -287,8 +287,10 @@ Nine reference drivers under `examples/`:
     constant state matched to the inflow ghost on all six faces;
     after this gate every BC arm in every physics has a direct
     test),
-    `bench_shallow_water_wave_3d` + `_p3` + `_p4` (NP=20 / NP=35 SW
-    gates) + `_inflow` (BC_INFLOW + BC_OUTFLOW preservation),
+    `bench_shallow_water_wave_3d` + `_p3` + `_p4` + `_p5` (NP=20 /
+    NP=35 / NP=56 SW gates; the `_p5` variant closes 3D SW P-parity
+    sweep at NP=56 and sits at the same A/H=0.01 nonlinear floor as
+    P=3/P=4) + `_inflow` (BC_INFLOW + BC_OUTFLOW preservation),
     `bench_two_fluid_outflow_3d` + `_walls` (charge-balanced
     17-component rest state preserved under BC_OUTFLOW / BC_WALL
     on all 6 faces),
@@ -342,7 +344,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 92 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 93 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
