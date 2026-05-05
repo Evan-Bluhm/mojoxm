@@ -102,8 +102,14 @@ Nine reference drivers under `examples/`:
   Venkat-smoothed Barth-Jespersen cell-level limiter
   (`bj_limit_full_2d`) for shock stability.  Nine end-to-end
   drivers under `examples/*_2d_gpu.mojo` emit 21-frame VTU
-  sequences + `.pvd` collections (see
-  [`scripts/animate_2d.py`](scripts/animate_2d.py) for MP4 export):
+  sequences + `.pvd` collections.  Multi-component drivers ship
+  multiple physically meaningful scalar fields per VTU frame
+  (Euler: rho + p + |v|; SW: h + |v|; MHD: rho + |v| + |B| + By;
+  Maxwell: Ez + |E| + |B|), so users can flip between fields in
+  ParaView or render side-by-side multi-panel animations via
+  [`scripts/animate_2d.py`](scripts/animate_2d.py) -- e.g.
+  `scripts/animate_2d.py output/solution_euler2d_gpu.pvd -f rho,p,'|v|'`
+  produces a 3-panel MP4:
   * **Periodic:** `advection_gaussian_2d_gpu` (~7700 compute
     steps/sec, 0.07 % rel L2 over one period), `euler_vortex_2d_gpu`
     (~7600, isentropic vortex, 6.8 % rel L2 at P=2 / 32x32),
