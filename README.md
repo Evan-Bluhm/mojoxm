@@ -156,14 +156,14 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  90 analytic-solution gates tying schemes to closed-form reference
+  91 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
   P=4 absolute-L2 sentinels for every core physics in 2D + 3D
-  (Euler / Maxwell / SW / MHD-GLM), P=5 multi-component Euler in 2D
-  (NP=21), and P=4 / P=5 rate gates for advection in both 2D (NP=15,
-  NP=21) and 3D (NP=35, NP=56).
+  (Euler / Maxwell / SW / MHD-GLM), P=5 multi-component Euler in
+  both 2D (NP=21) and 3D (NP=56), and P=4 / P=5 rate gates for
+  advection in both 2D (NP=15, NP=21) and 3D (NP=35, NP=56).
   * **2D smooth (29):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
@@ -230,13 +230,15 @@ Nine reference drivers under `examples/`:
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (39):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (40):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
     steady-state),
-    `bench_euler_smooth_wave_3d` + `_p3` + `_p4` (NP=20 / NP=35
-    multi-component HLLEC gates at the Float32 floor),
+    `bench_euler_smooth_wave_3d` + `_p3` + `_p4` + `_p5` (NP=20 /
+    NP=35 / NP=56 multi-component HLLEC gates at the Float32 floor;
+    the `_p5` variant is the highest-order multi-component 3D gate
+    in the suite),
     `bench_euler_flux_coverage_3d` (gates the Rusanov / Roe / HLLE
     flux paths in `src/euler.mojo`; HLLEC is gated by the other
     Euler benches),
@@ -337,7 +339,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 90 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 91 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
