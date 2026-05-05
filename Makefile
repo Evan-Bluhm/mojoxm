@@ -178,7 +178,7 @@ help:
 	@echo 'Quick start:'
 	@echo '  make gpu                 build all GPU drivers (~30s incremental on a hot cache)'
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
-	@echo '  make bench-quick         smoke-test 11 representative benches (~45s)'
+	@echo '  make bench-quick         smoke-test 12 representative benches (~60s)'
 	@echo '  make bench-all           build + run every analytic-solution gate (90 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -215,7 +215,7 @@ help:
 	@echo '  make test-klone          run MPI test on Klone (requires klone-run)'
 	@echo ''
 	@echo 'Bench targets (analytic-solution gates):'
-	@echo '  make bench-quick         smoke-test one bench per physics per dim (~45s)'
+	@echo '  make bench-quick         smoke-test one bench per physics per dim + limiter (~60s)'
 	@echo '  make bench-all           build + run every gate (90 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
@@ -542,13 +542,16 @@ bench-mhd-brio-wu-3d-p3: bench_mhd_brio_wu_3d_p3
 	./bench_mhd_brio_wu_3d_p3
 
 # Quick smoke-test subset -- one representative bench per physics
-# per dimension.  Catches gross regressions in ~45s wall-time vs
-# ~10 min for `bench-all`.  Use for fast iteration; reach for
-# `bench-all` for the full P-parity matrix + shocked-flow gates.
+# per dimension, plus the 2D limited Sod gate so the BJ limiter +
+# shocked-flow path is also covered.  Catches gross regressions in
+# ~60s wall-time vs ~10 min for `bench-all`.  Use for fast
+# iteration; reach for `bench-all` for the full P-parity matrix +
+# all shocked-flow + EM source-term gates.
 bench-quick: \
 		bench-advection-translation-2d \
 		bench-euler-vortex-2d \
 		bench-euler-sod-2d \
+		bench-euler-sod-limited-2d \
 		bench-shallow-water-wave-2d \
 		bench-mhd-alfven-2d \
 		bench-maxwell-cavity-2d \
@@ -557,7 +560,7 @@ bench-quick: \
 		bench-shallow-water-wave-3d \
 		bench-mhd-alfven-3d \
 		bench-maxwell-cavity-3d
-	@echo '=== bench-quick: 11 representative gates PASSED ==='
+	@echo '=== bench-quick: 12 representative gates PASSED ==='
 
 
 # Aggregate target -- runs every analytic benchmark.  Grouped by
