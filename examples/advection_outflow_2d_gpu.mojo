@@ -26,6 +26,7 @@ from src.reference_2d import (
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_OUTFLOW
 from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
+from src.ssprk3 import ssprk3_stage_plans
 
 
 comptime P = 2
@@ -130,40 +131,22 @@ def main() raises:
 
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
+    var stage_plans = ssprk3_stage_plans(
+        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+    )
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
-            advection_rk_stage_2d[P](
-                ctx, gpu_mesh,
-                gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-                d_q.unsafe_ptr(),
-                d_q.unsafe_ptr(), d_q.unsafe_ptr(),
-                d_q1.unsafe_ptr(),
-                d_fstar.unsafe_ptr(),
-                VX, VY,
-                Float32(1.0), Float32(0.0), Float32(1.0), dt,
-            )
-            advection_rk_stage_2d[P](
-                ctx, gpu_mesh,
-                gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-                d_q1.unsafe_ptr(),
-                d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
-                d_q2.unsafe_ptr(),
-                d_fstar.unsafe_ptr(),
-                VX, VY,
-                Float32(0.75), Float32(0.25), Float32(0.25), dt,
-            )
-            advection_rk_stage_2d[P](
-                ctx, gpu_mesh,
-                gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-                d_q2.unsafe_ptr(),
-                d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
-                d_q.unsafe_ptr(),
-                d_fstar.unsafe_ptr(),
-                VX, VY,
-                Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-                Float32(2.0 / 3.0), dt,
-            )
+            for stage in stage_plans:
+                advection_rk_stage_2d[P](
+                    ctx, gpu_mesh,
+                    gpu_re.d_Lift_ref.unsafe_ptr(),
+                    gpu_re.d_D_ref.unsafe_ptr(),
+                    stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                    d_fstar.unsafe_ptr(),
+                    VX, VY,
+                    stage.a, stage.b, stage.c, dt,
+                )
         ctx.synchronize()
         var c_end = perf_counter_ns()
         compute_ns += c_end - c_start
