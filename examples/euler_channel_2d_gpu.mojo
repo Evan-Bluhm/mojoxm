@@ -27,7 +27,9 @@ from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import (
     BoundaryConditions2D, BC_WALL, BC_OUTFLOW, BC_INFLOW,
 )
-from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
+from src.vtu_2d import (
+    dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
+)
 
 
 comptime P = 2
@@ -125,21 +127,46 @@ def main() raises:
     var inflow_E    = Float32(E_inf)
 
     var density = List[Float64]()
+    var pressure = List[Float64]()
+    var vmag = List[Float64]()
     for _ in range(gpu_mesh.num_elements * NP_p):
         density.append(0.0)
+        pressure.append(0.0)
+        vmag.append(0.0)
     var paths = List[String]()
     var times = List[Float64]()
 
+    var field_names = List[String]()
+    field_names.append(String("rho"))
+    field_names.append(String("p"))
+    field_names.append(String("|v|"))
+
+    @parameter
+    def fill_derived(src: UnsafePointer[Float32, MutAnyOrigin]) raises:
+        var n_nodes = gpu_mesh.num_elements * NP_p
+        for i in range(n_nodes):
+            var rho = Float64(src[i * NC + 0])
+            var mx  = Float64(src[i * NC + 1])
+            var my  = Float64(src[i * NC + 2])
+            var E   = Float64(src[i * NC + 3])
+            var rho_safe = rho if rho > 1.0e-12 else 1.0e-12
+            var u = mx / rho_safe
+            var v = my / rho_safe
+            var ke = 0.5 * rho_safe * (u * u + v * v)
+            density[i] = rho
+            pressure[i] = (GAMMA - 1.0) * (E - ke)
+            vmag[i] = sqrt(u * u + v * v)
+
     # Frame 0: IC.
-    for elem in range(gpu_mesh.num_elements):
-        for nn in range(NP_p):
-            density[elem * NP_p + nn] = Float64(
-                host_q[(elem * NP_p + nn) * NC + 0]
-            )
+    fill_derived(hptr_q)
+    var fields = List[List[Float64]]()
+    fields.append(density.copy())
+    fields.append(pressure.copy())
+    fields.append(vmag.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
-    dump_vtu_2d_frame[P](
-        mesh_coords, density,
-        String("output/") + f0_name, String("rho"),
+    dump_vtu_2d_frame_multi[P](
+        mesh_coords, field_names, fields,
+        String("output/") + f0_name,
     )
     paths.append(f0_name)
     times.append(0.0)
@@ -193,19 +220,21 @@ def main() raises:
 
         ctx.enqueue_copy(hbuf_q, d_q)
         ctx.synchronize()
-        for elem in range(gpu_mesh.num_elements):
-            for nn in range(NP_p):
-                var rho = Float64(hptr_q[(elem * NP_p + nn) * NC + 0])
-                density[elem * NP_p + nn] = rho
-                var drift = rho - RHO_0
-                var adr = drift if drift >= 0.0 else -drift
-                if adr > rho_max_drift:
-                    rho_max_drift = adr
+        fill_derived(hptr_q)
+        for i in range(gpu_mesh.num_elements * NP_p):
+            var drift = density[i] - RHO_0
+            var adr = drift if drift >= 0.0 else -drift
+            if adr > rho_max_drift:
+                rho_max_drift = adr
+        var fi_fields = List[List[Float64]]()
+        fi_fields.append(density.copy())
+        fi_fields.append(pressure.copy())
+        fi_fields.append(vmag.copy())
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
-        dump_vtu_2d_frame[P](
-            mesh_coords, density,
-            String("output/") + fname, String("rho"),
+        dump_vtu_2d_frame_multi[P](
+            mesh_coords, field_names, fi_fields,
+            String("output/") + fname,
         )
         paths.append(fname)
         times.append(t)
