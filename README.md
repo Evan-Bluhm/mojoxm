@@ -949,9 +949,12 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
   single launch would require unifying the per-face and per-element
   parallelism (e.g. via cooperative shared-memory phases like the
   3D kernel uses).
-- **VTU writer emits one scalar per frame**; visualizing multiple
-  Euler components (momentum, pressure) requires extending the
-  writer.
+- **3D VTU writer emits one scalar per frame.** The 3D
+  `FrameWriter` writes a single rho field via `VtuWriter`.  The 2D
+  side has `dump_vtu_2d_frame_multi` for multi-field per-frame
+  output (Euler dumps rho + p + |v|, MHD dumps rho + |v| + |B| + By
+  / psi, etc.); the 3D analog would need a corresponding
+  `FrameWriter`/`AsyncWriter` extension.
 
 ## References
 
