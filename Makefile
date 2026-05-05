@@ -175,7 +175,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-all test-klone bench-quick bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-diagnostics test-p3 test-all test-klone bench-quick bench-p5 bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -184,7 +184,8 @@ help:
 	@echo '  make gpu                 build all GPU drivers (~30s incremental on a hot cache)'
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
 	@echo '  make bench-quick         smoke-test 12 representative benches (~60s)'
-	@echo '  make bench-all           build + run every analytic-solution gate (90 benches)'
+	@echo '  make bench-p5            run 10 P=5 P-parity gates at NP=21/56 (~50s)'
+	@echo '  make bench-all           build + run every analytic-solution gate (96 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -221,7 +222,10 @@ help:
 	@echo ''
 	@echo 'Bench targets (analytic-solution gates):'
 	@echo '  make bench-quick         smoke-test one bench per physics per dim + limiter (~60s)'
-	@echo '  make bench-all           build + run every gate (90 benches, ~10 min)'
+	@echo '  make bench-p5            P=5 P-parity sweep -- 10 gates at NP=21 (2D) / NP=56 (3D)'
+	@echo '                           across all 5 smooth physics (~50s); the largest comptime'
+	@echo '                           configs the suite covers, where high-P regressions show first'
+	@echo '  make bench-all           build + run every gate (96 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -578,6 +582,25 @@ bench-quick: \
 		bench-mhd-alfven-3d \
 		bench-maxwell-cavity-3d
 	@echo '=== bench-quick: 12 representative gates PASSED ==='
+
+
+# P=5 P-parity sweep -- 10 gates at the largest comptime config
+# the suite covers (2D NP=21 + 3D NP=56 across all 5 smooth physics).
+# High-P regressions tend to surface here first since these stress
+# the comptime template + shared-memory rk_stage_kernel hardest.
+# Run-time ~30s wall.
+bench-p5: \
+		bench-advection-translation-2d-p5 \
+		bench-advection-3d-p5 \
+		bench-euler-smooth-wave-2d-p5 \
+		bench-euler-smooth-wave-3d-p5 \
+		bench-maxwell-plane-wave-2d-p5 \
+		bench-maxwell-plane-wave-3d-p5 \
+		bench-shallow-water-wave-2d-p5 \
+		bench-shallow-water-wave-3d-p5 \
+		bench-mhd-alfven-glm-2d-p5 \
+		bench-mhd-alfven-3d-p5
+	@echo '=== bench-p5: 10 P=5 P-parity gates PASSED ==='
 
 
 # Aggregate target -- runs every analytic benchmark.  Grouped by
