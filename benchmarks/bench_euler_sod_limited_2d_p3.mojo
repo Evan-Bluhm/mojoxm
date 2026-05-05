@@ -37,6 +37,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_limiter import bj_limit_full_2d
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_hllc_2d
+from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
@@ -135,53 +136,25 @@ def main() raises:
     var min_p   = Float32(1.0e-6)
     var venkat_eps = Float32(VENKAT_EPS)
 
+    var stage_plans = ssprk3_stage_plans(
+        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+    )
     for _ in range(num_steps):
-        euler_rk_stage_hllc_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            gamma, min_rho, min_p,
-            Float32(1.0), Float32(0.0), Float32(1.0), dt,
-        )
-        bj_limit_full_2d[P, NC](
-            ctx, gpu_mesh, d_q1.unsafe_ptr(),
-            gpu_re.d_node_weights.unsafe_ptr(),
-            d_cell_mean.unsafe_ptr(), venkat_eps,
-        )
-        euler_rk_stage_hllc_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            gamma, min_rho, min_p,
-            Float32(0.75), Float32(0.25), Float32(0.25), dt,
-        )
-        bj_limit_full_2d[P, NC](
-            ctx, gpu_mesh, d_q2.unsafe_ptr(),
-            gpu_re.d_node_weights.unsafe_ptr(),
-            d_cell_mean.unsafe_ptr(), venkat_eps,
-        )
-        euler_rk_stage_hllc_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            gamma, min_rho, min_p,
-            Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-            Float32(2.0 / 3.0), dt,
-        )
-        bj_limit_full_2d[P, NC](
-            ctx, gpu_mesh, d_q.unsafe_ptr(),
-            gpu_re.d_node_weights.unsafe_ptr(),
-            d_cell_mean.unsafe_ptr(), venkat_eps,
-        )
+        for stage in stage_plans:
+            euler_rk_stage_hllc_2d[P](
+                ctx, gpu_mesh,
+                gpu_re.d_Lift_ref.unsafe_ptr(),
+                gpu_re.d_D_ref.unsafe_ptr(),
+                stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                d_fstar.unsafe_ptr(),
+                gamma, min_rho, min_p,
+                stage.a, stage.b, stage.c, dt,
+            )
+            bj_limit_full_2d[P, NC](
+                ctx, gpu_mesh, stage.q_out,
+                gpu_re.d_node_weights.unsafe_ptr(),
+                d_cell_mean.unsafe_ptr(), venkat_eps,
+            )
     ctx.synchronize()
 
     ctx.enqueue_copy(hbuf_q, d_q)
