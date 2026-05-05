@@ -84,7 +84,7 @@ GPU_DRIVERS  = advection_gaussian euler_vortex euler_taylor_green euler_sod \
                shallow_water_drop_2d_gpu mhd_alfven_2d_gpu \
                euler_channel_2d_gpu shallow_water_dam_break_2d_gpu \
                advection_outflow_2d_gpu euler_sod_2d_gpu \
-               maxwell_cavity_2d_gpu \
+               maxwell_cavity_2d_gpu mhd_alfven_glm_2d_gpu \
                mpi_patch_mesh mpi_halo_pingpong
 ALL_DRIVERS  = $(CPU_DRIVERS) $(GPU_DRIVERS)
 
