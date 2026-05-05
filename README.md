@@ -100,13 +100,14 @@ Nine reference drivers under `examples/`:
   (periodic / wall / outflow / inflow), two Euler Riemann solvers
   (Rusanov and HLLC) and two SW Riemann solvers (Rusanov and HLL), a
   Venkat-smoothed Barth-Jespersen cell-level limiter
-  (`bj_limit_full_2d`) for shock stability.  Nine end-to-end
+  (`bj_limit_full_2d`) for shock stability.  Ten end-to-end
   drivers under `examples/*_2d_gpu.mojo` emit 21-frame VTU
   sequences + `.pvd` collections.  Multi-component drivers ship
   multiple physically meaningful scalar fields per VTU frame
-  (Euler: rho + p + |v|; SW: h + |v|; MHD: rho + |v| + |B| + By;
-  Maxwell: Ez + |E| + |B|), so users can flip between fields in
-  ParaView or render side-by-side multi-panel animations via
+  (Euler: rho + p + |v|; SW: h + |v|; MHD plain: rho + |v| + |B| + By;
+  MHD-GLM: rho + |v| + |B| + psi; Maxwell: Ez + |E| + |B|), so
+  users can flip between fields in ParaView or render side-by-side
+  multi-panel animations via
   [`scripts/animate_2d.py`](scripts/animate_2d.py) -- e.g.
   `scripts/animate_2d.py output/solution_euler2d_gpu.pvd -f rho,p,'|v|'`
   produces a 3-panel MP4:
@@ -115,7 +116,10 @@ Nine reference drivers under `examples/`:
     (~7600, isentropic vortex, 6.8 % rel L2 at P=2 / 32x32),
     `shallow_water_drop_2d_gpu` (~6300, mean-h conservation ~4e-5),
     `mhd_alfven_2d_gpu` (~9100, 0.36 % rel L2 on a one-period
-    linear Alfven wave at P=2 / 64x4).
+    linear Alfven wave at P=2 / 64x4),
+    `mhd_alfven_glm_2d_gpu` (~12600, NC=7 GLM-MHD with c_h=1.5 +
+    alpha_d=0.5; psi cleaning visible in animation -- |psi|
+    advects at +-c_h while damping).
   * **Non-periodic (BC_WALL / BC_INFLOW / BC_OUTFLOW):**
     `advection_outflow_2d_gpu` (Gaussian drains out, mass -> 5e-7
     of IC by t=1), `euler_channel_2d_gpu` (Mach-2 wind tunnel
