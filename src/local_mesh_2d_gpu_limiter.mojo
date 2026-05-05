@@ -98,6 +98,13 @@ def bj_limit_compute_theta_kernel_2d[NP: Int, NC: Int](
         if a > nbr_max: nbr_max = a
 
     # Venkat-smoothed theta on the density component.
+    # Hoist neighbor-range differences out of the per-node loop --
+    # they don't depend on nn.  Clamp at hoist time so the branch
+    # inside the loop just picks one of two precomputed values.
+    var pos_D = nbr_max - own_mean
+    if pos_D < Float32(0.0): pos_D = Float32(0.0)
+    var neg_D = own_mean - nbr_min
+    if neg_D < Float32(0.0): neg_D = Float32(0.0)
     var theta: Float32 = 1.0
     var tiny: Float32 = 1.0e-30
     for nn in range(NP):
@@ -106,13 +113,7 @@ def bj_limit_compute_theta_kernel_2d[NP: Int, NC: Int](
         var d_abs = delta if delta >= Float32(0.0) else -delta
         if d_abs <= tiny:
             continue
-        var D: Float32
-        if delta > Float32(0.0):
-            D = nbr_max - own_mean
-        else:
-            D = own_mean - nbr_min
-        if D < Float32(0.0):
-            D = Float32(0.0)
+        var D = pos_D if delta > Float32(0.0) else neg_D
         var D2 = D * D
         var d2 = d_abs * d_abs
         var Dd = D * d_abs
