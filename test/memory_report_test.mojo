@@ -125,11 +125,24 @@ def main() raises:
     var t_end = perf_counter_ns()
     var wall_seconds = Float64(t_end - t_start) * 1.0e-9
 
-    var tput = ThroughputReport(num_steps, wall_seconds, solver.dof_count())
+    var tput = ThroughputReport(
+        num_steps, wall_seconds, solver.dof_count(),
+        solver.state_bytes_per_step(),
+    )
     if tput.dof_per_second() <= 0.0:
         raise Error("memory_report_test: dof_per_second non-positive")
     if tput.per_step_seconds() <= 0.0:
         raise Error("memory_report_test: per_step_seconds non-positive")
+    if tput.state_bandwidth_bytes_per_second() <= 0.0:
+        raise Error("memory_report_test: state_bandwidth non-positive")
+    # Sanity: 8 * total_q_len * 4 bytes.
+    var expected_state_bytes = 8 * solver.total_q_len * 4
+    if solver.state_bytes_per_step() != expected_state_bytes:
+        raise Error(
+            "memory_report_test: state_bytes_per_step "
+            + String(solver.state_bytes_per_step())
+            + " != expected " + String(expected_state_bytes)
+        )
 
     print()
     tput.print()

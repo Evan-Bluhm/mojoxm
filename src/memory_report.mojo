@@ -145,6 +145,13 @@ struct ThroughputReport(Movable):
     var num_steps:    Int
     var wall_seconds: Float64
     var dof_count:    Int
+    # Bytes that MUST move between rk_stage_kernel launches per
+    # SSPRK3 step.  The exact compute-kernel byte traffic is higher
+    # (face-flux indirection, operator reads, mesh connectivity),
+    # but those are cache-friendly so the state-buffer traffic is
+    # what dominates DRAM.  See `Solver.state_bytes_per_step()`.
+    # Defaults to 0 -- when zero, the bandwidth row is omitted.
+    var state_bytes_per_step: Int
 
     def per_step_seconds(self) -> Float64:
         if self.num_steps == 0:
@@ -156,6 +163,19 @@ struct ThroughputReport(Movable):
             return 0.0
         return Float64(self.dof_count) * Float64(self.num_steps) / self.wall_seconds
 
+    def state_bandwidth_bytes_per_second(self) -> Float64:
+        """Lower-bound estimate of the achieved DRAM bandwidth: bytes
+        of state traffic that MUST move per step (no cache assumption)
+        divided by per-step wall time.  Excludes operator + connectivity
+        reads (those are small and cache-friendly).  A pure-compute
+        kernel with no state churn would report 0; an idealised
+        memcpy-bound kernel would approach the device's peak DRAM
+        bandwidth."""
+        if self.wall_seconds <= 0.0 or self.state_bytes_per_step == 0:
+            return 0.0
+        var total_bytes = Float64(self.state_bytes_per_step) * Float64(self.num_steps)
+        return total_bytes / self.wall_seconds
+
     def print(self) raises:
         print("=== Step-loop throughput ===")
         print("  steps:                " + String(self.num_steps))
@@ -165,6 +185,13 @@ struct ThroughputReport(Movable):
               + _format_seconds(self.per_step_seconds()))
         print("  throughput:           "
               + _format_dof_per_s(self.dof_per_second()))
+        if self.state_bytes_per_step > 0:
+            print("  state bytes / step:   "
+                  + _format_bytes(self.state_bytes_per_step))
+            print("  state bandwidth:      "
+                  + _format_bytes_per_s(
+                      self.state_bandwidth_bytes_per_second()
+                  ) + "  (lower bound; excludes operator + mesh reads)")
         print("============================")
 
 
@@ -188,3 +215,18 @@ def _format_dof_per_s(dps: Float64) raises -> String:
     if dps < 1.0e9:
         return _round1(dps / 1.0e6) + " MDOF/s"
     return _round1(dps / 1.0e9) + " GDOF/s"
+
+
+def _format_bytes_per_s(bps: Float64) raises -> String:
+    """Auto-scale B/s -> KB/s -> MB/s -> GB/s."""
+    var k = Float64(1024.0)
+    if bps < k:
+        return _round1(bps) + " B/s"
+    var kbs = bps / k
+    if kbs < k:
+        return _round1(kbs) + " KB/s"
+    var mbs = kbs / k
+    if mbs < k:
+        return _round1(mbs) + " MB/s"
+    var gbs = mbs / k
+    return _round1(gbs) + " GB/s"

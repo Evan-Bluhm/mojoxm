@@ -820,6 +820,28 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         `num_owned_elements * NP * NC`."""
         return self.num_owned_elements * Self.NP * Self.NC
 
+    def state_bytes_per_step(self) -> Int:
+        """Lower-bound estimate of the bytes of solver-state traffic
+        that MUST move between rk_stage_kernel launches per SSPRK3
+        step (cache-free model).  The 3-stage SSPRK3 sequence is:
+            stage 1: q1 = q + dt*L(q)              -> 1 read  (q) + 1 write (q1)
+            stage 2: q2 = a*q + b*(q1 + dt*L(q1))  -> 2 reads (q + q1) + 1 write (q2)
+            stage 3: q  = a*q + b*(q2 + dt*L(q2))  -> 2 reads (q + q2) + 1 write (q)
+        Total per step: 8 q-buffer touches, each
+        `total_q_len * sizeof(Float32)` bytes.
+
+        Excludes operator reads (D_ref / Lift_ref, ~few KB total --
+        cache-friendly), mesh connectivity reads (face_elem etc. --
+        cache-friendly), and the limiter pipeline (skipped here since
+        it's an opt-in extra; users who want it included should add
+        the limiter pass cost manually to the report).
+
+        This is a true lower bound on DRAM traffic per step -- the
+        achievable kernel bandwidth divided by this number gives an
+        intuitive measure of how memory-bound the implementation is."""
+        comptime SZ_F = 4
+        return 8 * self.total_q_len * SZ_F
+
     def memory_report(self) raises -> MemoryReport:
         """Categorised device-memory usage summary covering every
         GPU buffer the solver / mesh / halo exchange owns.  Sizes are
