@@ -1,23 +1,28 @@
 # ======================================================================
-# memory_report_test -- smoke test for Solver.memory_report()
+# memory_report_test -- smoke test for memory + throughput reports
 # ======================================================================
 #
-# Builds a tiny Mesh + Solver[Advection], asks for the memory report,
-# checks that:
-#   (1) Every category has a positive byte count except halo (which
-#       is zero at np=1 since ring_count[d] == 0 for every dir).
+# Builds a tiny Mesh + Solver[Advection], runs a few SSPRK3 steps,
+# asks for both reports, and checks that:
+#   (1) Every memory category has a positive byte count except halo
+#       (zero at np=1 since ring_count[d] == 0 for every dir).
 #   (2) total_device_bytes() equals the per-category sum.
-#   (3) The print() method runs without raising.
+#   (3) `solver.dof_count()` matches the expected formula.
+#   (4) ThroughputReport derives a positive DOF/s after a real step
+#       loop.
+#   (5) Both `.print()` methods run without raising.
 # ======================================================================
 
 from src import mpi
 from std.math import ceildiv
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext
+from std.time import perf_counter_ns
 
 from src.partition import build_partition
 from src.reference import ReferenceElement, to_float32, num_tet_nodes
 from src.mesh import Mesh
+from src.memory_report import ThroughputReport
 from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
@@ -100,6 +105,34 @@ def main() raises:
 
     print()
     rep.print()
+    print()
+
+    # --- Throughput report after a short step loop ----------------------
+    var expected_dof = solver.num_owned_elements * num_tet_nodes(P) * 1
+    if solver.dof_count() != expected_dof:
+        raise Error(
+            "memory_report_test: dof_count "
+            + String(solver.dof_count())
+            + " != expected " + String(expected_dof)
+        )
+
+    var num_steps = 20
+    var dt = Float32(1.0e-3)
+    var t_start = perf_counter_ns()
+    for _ in range(num_steps):
+        solver.step_ssprk3(dt, nvtx)
+    solver.ctx.synchronize()
+    var t_end = perf_counter_ns()
+    var wall_seconds = Float64(t_end - t_start) * 1.0e-9
+
+    var tput = ThroughputReport(num_steps, wall_seconds, solver.dof_count())
+    if tput.dof_per_second() <= 0.0:
+        raise Error("memory_report_test: dof_per_second non-positive")
+    if tput.per_step_seconds() <= 0.0:
+        raise Error("memory_report_test: per_step_seconds non-positive")
+
+    print()
+    tput.print()
     print()
 
     print("=== memory_report_test PASSED ===")

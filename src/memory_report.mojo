@@ -104,3 +104,87 @@ def _round1(x: Float64) raises -> String:
 
 def _print_row(label: String, n: Int) raises:
     print("  " + label + " " + _format_bytes(n))
+
+
+# ======================================================================
+# ThroughputReport -- per-step wall-time + DOF/s throughput
+# ======================================================================
+#
+# Companion to MemoryReport for the runtime side of perf
+# introspection.  After running a step loop the driver constructs one
+# of these from:
+#   - num_steps        : how many SSPRK3 steps the loop ran
+#   - wall_seconds     : measured wall-time for the loop (driver
+#                        responsibility -- it knows when to start /
+#                        stop the timer)
+#   - dof_count        : DOFs being updated per step (one rank's owned
+#                        DOF total at np=1; for np>1 the driver should
+#                        MPI_Allreduce it before constructing this)
+#
+# Computed:
+#   - per_step_seconds : wall_seconds / num_steps
+#   - dof_per_second   : (dof_count * num_steps) / wall_seconds
+#                        i.e. throughput in updated-DOF / s.  WARPXM
+#                        prints this same metric as the canonical
+#                        DG-stack throughput indicator.
+#
+# Usage:
+#   var t0 = perf_counter_ns()
+#   for _ in range(num_steps):
+#       solver.step_ssprk3(dt, nvtx)
+#   solver.ctx.synchronize()
+#   var t1 = perf_counter_ns()
+#   var dofs = solver.dof_count()
+#   var tput = ThroughputReport(num_steps, Float64(t1 - t0) * 1e-9, dofs)
+#   tput.print()
+# ======================================================================
+
+
+@fieldwise_init
+struct ThroughputReport(Movable):
+    var num_steps:    Int
+    var wall_seconds: Float64
+    var dof_count:    Int
+
+    def per_step_seconds(self) -> Float64:
+        if self.num_steps == 0:
+            return 0.0
+        return self.wall_seconds / Float64(self.num_steps)
+
+    def dof_per_second(self) -> Float64:
+        if self.wall_seconds <= 0.0:
+            return 0.0
+        return Float64(self.dof_count) * Float64(self.num_steps) / self.wall_seconds
+
+    def print(self) raises:
+        print("=== Step-loop throughput ===")
+        print("  steps:                " + String(self.num_steps))
+        print("  DOF / step:           " + String(self.dof_count))
+        print("  wall time:            " + _format_seconds(self.wall_seconds))
+        print("  per-step wall:        "
+              + _format_seconds(self.per_step_seconds()))
+        print("  throughput:           "
+              + _format_dof_per_s(self.dof_per_second()))
+        print("============================")
+
+
+def _format_seconds(s: Float64) raises -> String:
+    """Auto-scale wall-time to a readable unit: ns / us / ms / s."""
+    if s < 1.0e-6:
+        return _round1(s * 1.0e9) + " ns"
+    if s < 1.0e-3:
+        return _round1(s * 1.0e6) + " us"
+    if s < 1.0:
+        return _round1(s * 1.0e3) + " ms"
+    return _round1(s) + " s"
+
+
+def _format_dof_per_s(dps: Float64) raises -> String:
+    """Auto-scale DOF/s to readable units: DOF/s, k, M, G."""
+    if dps < 1.0e3:
+        return _round1(dps) + " DOF/s"
+    if dps < 1.0e6:
+        return _round1(dps / 1.0e3) + " kDOF/s"
+    if dps < 1.0e9:
+        return _round1(dps / 1.0e6) + " MDOF/s"
+    return _round1(dps / 1.0e9) + " GDOF/s"

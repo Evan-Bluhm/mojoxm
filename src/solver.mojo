@@ -33,7 +33,7 @@
 from src.reference import num_tet_nodes, num_tri_nodes
 from src.mesh import Mesh
 from src.halo_exchange import HaloExchange
-from src.memory_report import MemoryReport
+from src.memory_report import MemoryReport, ThroughputReport
 from src.nvtx import NvtxContext
 from std.gpu import thread_idx, block_idx, barrier, global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
@@ -811,6 +811,14 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         proportionally."""
         self.cell_limiter_enabled = enabled
         self.cell_limiter_venkat_eps = venkat_eps
+
+    def dof_count(self) -> Int:
+        """Total number of degrees-of-freedom updated per SSPRK3 step
+        on this rank.  At np=1 this is the global DOF count; for np>1
+        the caller should MPI_Allreduce across ranks before passing it
+        to a `ThroughputReport`.  Computed as
+        `num_owned_elements * NP * NC`."""
+        return self.num_owned_elements * Self.NP * Self.NC
 
     def memory_report(self) raises -> MemoryReport:
         """Categorised device-memory usage summary covering every
