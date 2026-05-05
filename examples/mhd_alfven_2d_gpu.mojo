@@ -34,6 +34,7 @@ from src.reference_2d import (
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.ssprk3 import ssprk3_stage_plans
+from src.memory_report import ThroughputReport
 from src.vtu_2d import (
     dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
 )
@@ -244,10 +245,13 @@ def main() raises:
 
     var total_sec = Float64(run_end - run_start) * 1.0e-9
     var compute_sec = Float64(compute_ns) * 1.0e-9
-    print("  compute time:", compute_sec, "s")
     print("  total time  :", total_sec, "s (incl. frame I/O)")
-    print("  throughput  :", Float64(total_steps) / compute_sec,
-          "steps/s (compute only)")
+    ThroughputReport(
+        num_steps=total_steps,
+        wall_seconds=compute_sec,
+        dof_count=gpu_mesh.num_elements * NP_p * NC,
+        state_bytes_per_step=8 * n_q * 4,
+    ).print()
 
     # Final L2 vs IC (exact: one period on periodic domain -> IC).
     var sum_sq: Float64 = 0.0
