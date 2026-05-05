@@ -661,23 +661,33 @@ because each loaded byte fuels more arithmetic per element.
 
 End-to-end wall clock for a full 20-frame run at 48³ (663 K tets,
 6.6 M DOF, 2080 SSPRK3 steps, 26 MB density per VTU file):
-**~4.7 s**.
+**~5.6 s**, of which ~5.4 s is download + VTU frame I/O.
 
-The fused RK-stage kernel achieves **98% of peak L1-cache throughput**
-according to Nsight Compute at 48³ (scalar advection specialization).
+Sync'd post-run measurement (`Solver.bench_step_loop`) reports
+**3.3 GDOF/s** throughput and **~97 GB/s state bandwidth** (lower
+bound; ~10 % of the RTX 3090's ~1 TB/s peak DRAM).  The fused
+RK-stage kernel additionally achieves **98% of peak L1-cache
+throughput** according to Nsight Compute at 48³ (scalar advection
+specialization).
 
 ### euler_vortex at 32³ (RTX 3090, WSL2)
 
 End-to-end wall clock for a 10-frame run at 32³ (196 K tets, 2.0 M DOF
 × 5 components = 9.8 M unknowns, 280 SSPRK3 steps):
-**~21 s**.
+**~2.8 s** total, of which ~2.5 s is download + VTU frame I/O,
+~0.2 s is the final sync, and ~0.01 s is async kernel enqueue.
+
+Sync'd post-run measurement (`Solver.bench_step_loop`, 50 steps
+after warmup) reports **1.2 GDOF/s** throughput and **~36 GB/s
+state bandwidth** (lower bound; ~3.5 % of the RTX 3090's ~1 TB/s
+peak DRAM).  The mean density drifts by ~2·10⁻⁶ over the 280-step
+run — well within single-precision round-off expectations.
 
 Euler's RK-stage kernel is substantially heavier than advection's
 (HLLEC Riemann solver + 3×3 face rotation matrix construction per
-face node, 5-component accumulators everywhere), so the per-step
-wall time is roughly an order of magnitude larger. The mean density
-drifts by ~2·10⁻⁶ over the 280-step run — well within single-precision
-round-off expectations.
+face node, 5-component accumulators everywhere), so its bandwidth
+share is lower despite NC=5: each byte loaded fuels significantly
+more arithmetic per element.
 
 ### Limiter cost share scales differently in 2D vs 3D
 
