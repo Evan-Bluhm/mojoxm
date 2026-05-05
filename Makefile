@@ -169,7 +169,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-diagnostics test-p3 test-all test-klone bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-3d test-limiter-3d-p3 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-diagnostics test-p3 test-all test-klone bench-quick bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -177,6 +177,7 @@ help:
 	@echo 'Quick start:'
 	@echo '  make gpu                 build all GPU drivers (~30s incremental on a hot cache)'
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
+	@echo '  make bench-quick         smoke-test 11 representative benches (~45s)'
 	@echo '  make bench-all           build + run every analytic-solution gate (90 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -213,6 +214,7 @@ help:
 	@echo '  make test-klone          run MPI test on Klone (requires klone-run)'
 	@echo ''
 	@echo 'Bench targets (analytic-solution gates):'
+	@echo '  make bench-quick         smoke-test one bench per physics per dim (~45s)'
 	@echo '  make bench-all           build + run every gate (90 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
@@ -529,6 +531,25 @@ bench-mhd-brio-wu-3d: bench_mhd_brio_wu_3d
 	./bench_mhd_brio_wu_3d
 bench-mhd-brio-wu-3d-p3: bench_mhd_brio_wu_3d_p3
 	./bench_mhd_brio_wu_3d_p3
+
+# Quick smoke-test subset -- one representative bench per physics
+# per dimension.  Catches gross regressions in ~45s wall-time vs
+# ~10 min for `bench-all`.  Use for fast iteration; reach for
+# `bench-all` for the full P-parity matrix + shocked-flow gates.
+bench-quick: \
+		bench-advection-translation-2d \
+		bench-euler-vortex-2d \
+		bench-euler-sod-2d \
+		bench-shallow-water-wave-2d \
+		bench-mhd-alfven-2d \
+		bench-maxwell-cavity-2d \
+		bench-advection-3d \
+		bench-euler-sod-3d \
+		bench-shallow-water-wave-3d \
+		bench-mhd-alfven-3d \
+		bench-maxwell-cavity-3d
+	@echo '=== bench-quick: 11 representative gates PASSED ==='
+
 
 # Aggregate target -- runs every analytic benchmark.  Grouped by
 # (dim, physics) for readability; the order doesn't affect correctness
