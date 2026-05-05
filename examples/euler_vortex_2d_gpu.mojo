@@ -32,7 +32,7 @@ from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.vtu_2d import (
     dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
 )
-from src.memory_report import MemoryReport
+from src.memory_report import MemoryReport, ThroughputReport
 from src.ssprk3 import ssprk3_stage_plans
 
 
@@ -263,10 +263,19 @@ def main() raises:
 
     var total_sec = Float64(run_end - run_start) * 1.0e-9
     var compute_sec = Float64(compute_ns) * 1.0e-9
-    print("  compute time:", compute_sec, "s")
     print("  total time  :", total_sec, "s (incl. frame I/O)")
-    print("  throughput  :", Float64(total_steps) / compute_sec,
-          "steps/s (compute only)")
+    # WARPXM-style throughput summary.  compute_sec is already a
+    # sync'd measurement -- the per-frame timing block above ends in
+    # ctx.synchronize() before stopping the counter.  state_bytes_per_
+    # step = 8 * n_q * 4 mirrors the 3D `Solver.state_bytes_per_step`
+    # formula (8 q-buffer touches per SSPRK3 step from the 2-3-3
+    # read/write pattern of the three Shu-Osher stages).
+    ThroughputReport(
+        num_steps=total_steps,
+        wall_seconds=compute_sec,
+        dof_count=gpu_mesh.num_elements * NP_p * NC,
+        state_bytes_per_step=8 * n_q * 4,
+    ).print()
 
     # Final relative L2 vs IC (one period == exact IC on periodic).
     var sum_sq: Float64 = 0.0
