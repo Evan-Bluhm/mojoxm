@@ -50,17 +50,23 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh[P](
-        ctx, build_partition(rank, size, 4, 4, 4), 1.0, 1.0, 1.0,
-        BoundaryConditions.periodic(),
+        ctx=ctx,
+        part=build_partition(rank=rank, nprocs=size, nx=4, ny=4, nz=4),
+        Lx=1.0, Ly=1.0, Lz=1.0,
+        bcs=BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
+        ctx=ctx,
+        part=mesh.part,
+        nc=Advection.NUM_COMPONENTS,
+        d_perm=mesh.d_perm.unsafe_ptr(),
     )
-    var physics = Advection(Float32(1.0), Float32(0.0), Float32(0.0))
+    var physics = Advection(
+        vx=Float32(1.0), vy=Float32(0.0), vz=Float32(0.0),
+    )
     var solver = Solver[Advection, P](
-        ctx^, mesh^, halo^, physics^,
-        D_ref^, Lift_ref^, node_weights^,
+        ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^,
+        D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^,
     )
 
     var rep = solver.memory_report()

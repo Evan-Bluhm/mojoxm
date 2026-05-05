@@ -108,21 +108,29 @@ def main() raises:
         node_weights_host.append(node_weights[k])
 
     var mesh = Mesh[P](
-        ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ,
-        BoundaryConditions.periodic(),
+        ctx=ctx,
+        part=build_partition(rank=0, nprocs=1, nx=NX, ny=NY, nz=NZ),
+        Lx=LX, Ly=LY, Lz=LZ,
+        bcs=BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
+        ctx=ctx,
+        part=mesh.part,
+        nc=Euler.NUM_COMPONENTS,
+        d_perm=mesh.d_perm.unsafe_ptr(),
     )
     var physics = Euler(
-        Float32(1.4), Float32(1.0e-6), Float32(1.0e-6),
-        FLUX_HLLEC, False,
+        gamma=Float32(1.4),
+        min_density=Float32(1.0e-6),
+        min_pressure=Float32(1.0e-6),
+        flux_type=FLUX_HLLEC,
+        entropy_fix=False,
     )
     var solver = Solver[Euler, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^,
+        D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^,
     )
-    solver.enable_cell_limiter(True, Float32(0.0))   # raw BJ, eps=0
+    solver.enable_cell_limiter(enabled=True, venkat_eps=Float32(0.0))   # raw BJ, eps=0
 
     var num_owned = solver.num_owned_elements
     var n_dof = num_owned * NP

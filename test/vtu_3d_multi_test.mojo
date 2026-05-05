@@ -41,7 +41,10 @@ def main() raises:
     var Nz = 2
     var ctx = DeviceContext()
     var mesh = LocalMesh[P](
-        ctx, Nx, Ny, Nz, 1.0, 1.0, 1.0, BoundaryConditions.periodic(),
+        ctx=ctx,
+        Nx=Nx, Ny=Ny, Nz=Nz,
+        Lx=1.0, Ly=1.0, Lz=1.0,
+        bcs=BoundaryConditions.periodic(),
     )
     var NP = num_tet_nodes(P)
     var n_total = mesh.num_elements * NP

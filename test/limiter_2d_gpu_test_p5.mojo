@@ -48,11 +48,11 @@ def main() raises:
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NC = 4
 
-    var host = LocalMesh2D[P](Nx, Ny, 1.0, 1.0)
+    var host = LocalMesh2D[P](Nx=Nx, Ny=Ny, Lx=1.0, Ly=1.0)
     var ctx = DeviceContext()
-    var gpu = LocalMesh2DGpu[P](ctx, host^)
+    var gpu = LocalMesh2DGpu[P](ctx=ctx, host=host^)
     var re_host = ReferenceElement2D[P]()
-    var re_gpu = ReferenceElement2DGpu[P](ctx, re_host)
+    var re_gpu = ReferenceElement2DGpu[P](ctx=ctx, host=re_host)
 
     var n_q = gpu.num_elements * NP_p * NC
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
