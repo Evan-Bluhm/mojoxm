@@ -146,7 +146,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  89 analytic-solution gates tying schemes to closed-form reference
+  90 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
@@ -188,7 +188,7 @@ Nine reference drivers under `examples/`:
     exercise the same physics at NP=6 and NP=10.  Hydrostatic
     equilibrium preserves the rest state to ~Float32 epsilon
     over T=1).
-  * **2D shocks + EM (15):** `bench_euler_sod_2d`,
+  * **2D shocks + EM (16):** `bench_euler_sod_2d`,
     `bench_euler_sod_limited_2d` + `_p3` + `_p4` (HLLC + BJ limiter
     at P=2 / P=3 / P=4; the P=2 variant lands the shock within 0.2
     cells of Rankine-Hugoniot, the P=3 variant within 0.3, the P=4
@@ -202,10 +202,11 @@ Nine reference drivers under `examples/`:
     propagation + zero-component leakage),
     `bench_maxwell_te_plane_wave_2d` (TE-polarization dual: gates
     the previously-untested Bz / Ey flux paths in the same kernel),
-    `bench_maxwell_plane_wave_2d_p3` + `_p4` (NP=10 / NP=15 Maxwell
-    gates -- close the P-parity gap; rel L2 ~5e-5 at NX=NY=12 / P=3
-    and ~2e-5 at NX=NY=8 / P=4, both at Float32 floor vs the P=2
-    bench's 6e-4 floor),
+    `bench_maxwell_plane_wave_2d_p3` + `_p4` + `_p5` (NP=10/15/21
+    Maxwell gates -- close the P-parity gap up to P=5; rel L2 at
+    Float32 floor (~5e-5 / 2e-5 / 1.8e-5 respectively) vs the P=2
+    bench's 6e-4 floor; the `_p5` variant is the highest-order
+    vacuum-Maxwell gate in the suite),
     `bench_maxwell_outflow_2d` + `_inflow` (uniform-state
     preservation under BC_OUTFLOW / BC_INFLOW on all four faces;
     closes the BC_INFLOW dispatch arm of
@@ -326,7 +327,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 89 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 90 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
