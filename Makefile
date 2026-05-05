@@ -224,7 +224,7 @@ help:
 	@echo '                           3D BJ limiter cell-mean conservation'
 	@echo '  make test-diagnostics    DiagnosticsWriter unit test (GPU, np=1)'
 	@echo '  make test-p3             P=3 round-trip smoke test'
-	@echo '  make test-quick          run 7 representative tests (~30s with cached binaries)'
+	@echo '  make test-quick          run 8 representative tests (~30s with cached binaries)'
 	@echo '  make test-limiter        run 8 BJ-limiter unit tests (2D + 3D, P=2/3/4/5; ~20s cached)'
 	@echo '  make test-all            run every test above (~3 min wall)'
 	@echo '  make test-klone          run MPI test on Klone (requires klone-run)'
@@ -405,15 +405,16 @@ test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d
 	@echo '=== ALL TESTS PASSED ==='
 
 
-# Quick test smoke -- 7 representative tests covering host operator
+# Quick test smoke -- 8 representative tests covering host operator
 # construction (reference, reference-2d), one 2D physics + one 3D
 # physics constant-state preservation (euler-2d-gpu, euler-3d), the
-# 2D + 3D limiter pipelines, and the P=3 round-trip parametrization.
+# 2D + 3D limiter pipelines, the P=3 round-trip parametrization, and
+# the 3D multi-field VTU writer (the visualization-output path).
 # Catches the broadest class of regressions in ~30s wall with cached
 # binaries (~1-2 min cold), vs ~3 min for full test-all.
 test-quick: test-reference test-reference-2d test-euler-2d-gpu test-euler-3d \
-            test-limiter-2d-gpu test-limiter-3d test-p3
-	@echo '=== test-quick: 7 representative tests PASSED ==='
+            test-limiter-2d-gpu test-limiter-3d test-p3 test-vtu-3d-multi
+	@echo '=== test-quick: 8 representative tests PASSED ==='
 
 
 # Limiter unit-test sweep -- 8 tests covering the BJ slope limiter
