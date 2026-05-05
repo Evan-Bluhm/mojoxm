@@ -38,6 +38,7 @@ from src.nvtx import NvtxContext
 from std.gpu import thread_idx, block_idx, barrier, global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu.host.device_context import DevicePassable
+from std.time import perf_counter_ns
 from std.gpu.memory import AddressSpace
 from std.math import ceildiv
 from std.memory import memcpy, stack_allocation
@@ -819,6 +820,56 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         to a `ThroughputReport`.  Computed as
         `num_owned_elements * NP * NC`."""
         return self.num_owned_elements * Self.NP * Self.NC
+
+    def bench_step_loop(
+        mut self,
+        dt: Float32,
+        mut nvtx: NvtxContext,
+        warmup_steps: Int = 5,
+        measure_steps: Int = 50,
+    ) raises -> ThroughputReport:
+        """Run a sync'd warmup-and-measure step loop and return the
+        resulting `ThroughputReport`.  This is the recommended way to
+        measure throughput on a Solver -- a hand-rolled loop without
+        a trailing `ctx.synchronize()` only times host enqueue
+        overhead, not GPU compute.
+
+        State pollution: advances the solution by
+        `(warmup_steps + measure_steps) * dt`.  Callers that care
+        about the final state should run this AFTER their production
+        loop / frame writes, or reset IC afterwards.
+
+        Use the returned report immediately:
+            var rep = solver.bench_step_loop(dt, nvtx)
+            rep.print()
+        Returned wall_seconds covers only the measurement loop, with
+        `solver.ctx.synchronize()` at both endpoints to flush async
+        kernels."""
+        # Warmup: stabilise CUDA caches and let the device JIT settle.
+        nvtx.push_range("bench_step_loop_warmup")
+        for _ in range(warmup_steps):
+            self.step_ssprk3(dt, nvtx)
+        self.ctx.synchronize()
+        nvtx.pop_range()
+
+        # Measurement: time the enqueue + final synchronize.  All
+        # kernels are flushed by the time perf_counter_ns at the end
+        # is read, so the elapsed wall covers GPU compute.
+        nvtx.push_range("bench_step_loop_measure")
+        var t0 = perf_counter_ns()
+        for _ in range(measure_steps):
+            self.step_ssprk3(dt, nvtx)
+        self.ctx.synchronize()
+        var t1 = perf_counter_ns()
+        nvtx.pop_range()
+
+        var wall_seconds = Float64(t1 - t0) * 1.0e-9
+        return ThroughputReport(
+            measure_steps,
+            wall_seconds,
+            self.dof_count(),
+            self.state_bytes_per_step(),
+        )
 
     def state_bytes_per_step(self) -> Int:
         """Lower-bound estimate of the bytes of solver-state traffic

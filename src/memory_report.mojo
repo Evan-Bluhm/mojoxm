@@ -143,6 +143,13 @@ def _print_row(label: String, n: Int) raises:
 @fieldwise_init
 struct ThroughputReport(Movable):
     var num_steps:    Int
+    # IMPORTANT: must be a `ctx.synchronize()`-flushed wall time, not
+    # an enqueue-only measurement.  `Solver.step_ssprk3` is async; if
+    # `wall_seconds` is timed without a trailing synchronize the
+    # bandwidth and DOF/s numbers reflect host enqueue overhead, not
+    # GPU compute.  `Solver.bench_step_loop()` does this correctly --
+    # callers should prefer it over hand-rolling a step loop unless
+    # they have a specific reason.
     var wall_seconds: Float64
     var dof_count:    Int
     # Bytes that MUST move between rk_stage_kernel launches per
@@ -230,3 +237,5 @@ def _format_bytes_per_s(bps: Float64) raises -> String:
         return _round1(mbs) + " MB/s"
     var gbs = mbs / k
     return _round1(gbs) + " GB/s"
+
+

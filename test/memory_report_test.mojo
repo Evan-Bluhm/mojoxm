@@ -17,12 +17,10 @@ from src import mpi
 from std.math import ceildiv
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext
-from std.time import perf_counter_ns
 
 from src.partition import build_partition
 from src.reference import ReferenceElement, to_float32, num_tet_nodes
 from src.mesh import Mesh
-from src.memory_report import ThroughputReport
 from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
@@ -116,18 +114,9 @@ def main() raises:
             + " != expected " + String(expected_dof)
         )
 
-    var num_steps = 20
     var dt = Float32(1.0e-3)
-    var t_start = perf_counter_ns()
-    for _ in range(num_steps):
-        solver.step_ssprk3(dt, nvtx)
-    solver.ctx.synchronize()
-    var t_end = perf_counter_ns()
-    var wall_seconds = Float64(t_end - t_start) * 1.0e-9
-
-    var tput = ThroughputReport(
-        num_steps, wall_seconds, solver.dof_count(),
-        solver.state_bytes_per_step(),
+    var tput = solver.bench_step_loop(
+        dt, nvtx, warmup_steps=2, measure_steps=10,
     )
     if tput.dof_per_second() <= 0.0:
         raise Error("memory_report_test: dof_per_second non-positive")
