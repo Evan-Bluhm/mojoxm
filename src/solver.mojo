@@ -33,6 +33,7 @@
 from src.reference import num_tet_nodes, num_tri_nodes
 from src.mesh import Mesh
 from src.halo_exchange import HaloExchange
+from src.memory_report import MemoryReport
 from src.nvtx import NvtxContext
 from std.gpu import thread_idx, block_idx, barrier, global_idx
 from std.gpu.host import DeviceContext, DeviceBuffer
@@ -810,6 +811,96 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         proportionally."""
         self.cell_limiter_enabled = enabled
         self.cell_limiter_venkat_eps = venkat_eps
+
+    def memory_report(self) raises -> MemoryReport:
+        """Categorised device-memory usage summary covering every
+        GPU buffer the solver / mesh / halo exchange owns.  Sizes are
+        computed from each allocation's known shape rather than from a
+        runtime DeviceBuffer accessor (Mojo doesn't expose a reliable
+        one), so the report is exact -- no probe / sampling involved.
+
+        Returns: a `MemoryReport` whose `.print()` prints a 6-row
+        WARPXM-Kokkos-style breakdown with auto-scaled units."""
+        comptime NP = Self.NP
+        comptime NFP = num_tri_nodes(Self.P)
+        comptime NC = Self.NC
+        comptime NF = 4   # tet faces, P-independent
+        comptime ND = 3   # spatial dims
+        comptime SZ_F = 4 # Float32 byte size
+        comptime SZ_I = 4 # Int32 byte size
+
+        var num_local = self.num_local_elements
+        var num_owned = self.num_owned_elements
+        var num_faces = self.mesh.local.num_faces
+
+        # 1. RK-stage state buffers: d_q + d_q1 + d_q2.
+        var rk_stage_bytes = 3 * self.total_q_len * SZ_F
+
+        # 2. Reference DG operators: D_ref, Lift_ref, node_weights.
+        var d_ref_bytes        = ND * NP * NP * SZ_F
+        var lift_ref_bytes     = NF * NP * NFP * SZ_F
+        var node_weights_bytes = NP * SZ_F
+        var dg_operators_bytes = (
+            d_ref_bytes + lift_ref_bytes + node_weights_bytes
+        )
+
+        # 3. Limiter scratch: d_cell_avg + d_bj_theta.
+        var theta_count = num_owned if num_owned > 0 else 1
+        var limiter_bytes = (num_local * NC * SZ_F) + (theta_count * SZ_F)
+
+        # 4. Mesh connectivity -- LocalMesh d_* buffers + Mesh d_*
+        # buffers.  Sizes mirror the allocation calls in
+        # `LocalMesh.__init__` and `Mesh.__init__`.
+        var elem_node_xyz_bytes      = num_local * NP * 3 * SZ_F
+        var elem_invJ_bytes          = num_local * 9 * SZ_F
+        var elem_inv_6V_bytes        = num_local * SZ_F
+        var elem_faces_bytes         = num_local * NF * SZ_I
+        var elem_face_side_bytes     = num_local * NF * SZ_I
+        var elem_canon_to_ref_bytes  = num_local * NF * NFP * SZ_I
+        var face_elem_bytes          = num_faces * 2 * SZ_I
+        var face_elem_node_bytes     = num_faces * 2 * NFP * SZ_I
+        var face_normal_bytes        = num_faces * 3 * SZ_F
+        var face_area_bytes          = num_faces * SZ_F
+        var face_bc_type_bytes       = num_faces * SZ_I
+        var owned_elem_ids_bytes     = num_owned * SZ_I
+        var perm_bytes               = num_local * SZ_I
+        var inv_perm_bytes           = num_local * SZ_I
+        var mesh_connectivity_bytes = (
+            elem_node_xyz_bytes + elem_invJ_bytes + elem_inv_6V_bytes
+            + elem_faces_bytes + elem_face_side_bytes + elem_canon_to_ref_bytes
+            + face_elem_bytes + face_elem_node_bytes
+            + face_normal_bytes + face_area_bytes + face_bc_type_bytes
+            + owned_elem_ids_bytes + perm_bytes + inv_perm_bytes
+        )
+
+        # 5. Halo exchange (device side): pack/unpack indices +
+        # send/recv buffers per neighbour direction.  Each direction
+        # holds ring_count[d] tets; pack/unpack indices store one
+        # int32 per tet, send/recv buffers store NP * NC float32 per
+        # tet.
+        var halo_device_bytes = 0
+        for d in range(len(self.halo.ring_count)):
+            var rc = self.halo.ring_count[d]
+            halo_device_bytes += 2 * (rc * SZ_I)            # pack + unpack
+            halo_device_bytes += 2 * (rc * NP * NC * SZ_F)  # send + recv
+
+        # 6. Halo exchange (pinned host side): only allocated when
+        # MPI is not CUDA-aware.  Same per-direction sizing as the
+        # send/recv buffers above.
+        var halo_pinned_bytes = 0
+        if not self.halo.cuda_aware:
+            for d in range(len(self.halo.ring_count)):
+                var rc = self.halo.ring_count[d]
+                halo_pinned_bytes += 2 * (rc * NP * NC * SZ_F)
+
+        return MemoryReport(
+            rk_stage_bytes,
+            dg_operators_bytes,
+            limiter_bytes,
+            mesh_connectivity_bytes,
+            halo_device_bytes,
+            halo_pinned_bytes,
+        )
 
     def _launch_cell_limiter(
         mut self,
