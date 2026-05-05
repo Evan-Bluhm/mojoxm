@@ -156,14 +156,15 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  91 analytic-solution gates tying schemes to closed-form reference
+  92 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
   P=4 absolute-L2 sentinels for every core physics in 2D + 3D
   (Euler / Maxwell / SW / MHD-GLM), P=5 multi-component Euler in
-  both 2D (NP=21) and 3D (NP=56), and P=4 / P=5 rate gates for
-  advection in both 2D (NP=15, NP=21) and 3D (NP=35, NP=56).
+  both 2D (NP=21) and 3D (NP=56), P=5 vacuum Maxwell in both 2D
+  (NP=21) and 3D (NP=56), and P=4 / P=5 rate gates for advection
+  in both 2D (NP=15, NP=21) and 3D (NP=35, NP=56).
   * **2D smooth (29):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
@@ -230,7 +231,7 @@ Nine reference drivers under `examples/`:
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (40):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (41):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -267,9 +268,11 @@ Nine reference drivers under `examples/`:
     `_p3` damp + transport pair completes 3D GLM P-parity at P=3
     with the existing 2D _p3 analogs,
     `bench_maxwell_cavity_3d`,
-    `bench_maxwell_plane_wave_3d` + `_p3` + `_p4` (TM plane wave on
-    triply-periodic cube; the P=3 variant brings 3D Maxwell into
-    NP=20 parity, the P=4 variant brings it into NP=35 parity),
+    `bench_maxwell_plane_wave_3d` + `_p3` + `_p4` + `_p5` (TM plane
+    wave on triply-periodic cube; NP=10 / NP=20 / NP=35 / NP=56;
+    the `_p5` variant is the highest-order vacuum-Maxwell gate in
+    the 3D suite, rel L2 ~2.3e-5 + zero-component leakage ~6e-6
+    under the Kuhn-tet asymmetry floor),
     `bench_maxwell_uniform_j_3d` + `_p3` + `_m` + `_m_p3` (uniform-J /
     uniform-M source-term gates: Ex / Bz grow linearly under the
     source while flux divergences stay zero on uniform fields; both
@@ -339,7 +342,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 91 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 92 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
