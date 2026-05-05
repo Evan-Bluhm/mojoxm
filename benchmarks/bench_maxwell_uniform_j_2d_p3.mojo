@@ -25,6 +25,7 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
+from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
     ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
 )
@@ -90,41 +91,27 @@ def main() raises:
     var dt = Float32(T_FINAL / Float64(num_steps))
     print("  dt=", dt, "  steps=", num_steps)
 
+    var stage_plans = ssprk3_stage_plans(
+        d_q=d_q.unsafe_ptr(),
+        d_q1=d_q1.unsafe_ptr(),
+        d_q2=d_q2.unsafe_ptr(),
+    )
     for _ in range(num_steps):
-        maxwell_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            C_LIGHT,
-            Float32(1.0), Float32(0.0), Float32(1.0), dt,
-            Jx=JX,
-        )
-        maxwell_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q1.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            C_LIGHT,
-            Float32(0.75), Float32(0.25), Float32(0.25), dt,
-            Jx=JX,
-        )
-        maxwell_rk_stage_2d[P](
-            ctx, gpu_mesh,
-            gpu_re.d_Lift_ref.unsafe_ptr(), gpu_re.d_D_ref.unsafe_ptr(),
-            d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
-            d_q.unsafe_ptr(),
-            d_fstar.unsafe_ptr(),
-            C_LIGHT,
-            Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-            Float32(2.0 / 3.0), dt,
-            Jx=JX,
-        )
+        for stage in stage_plans:
+            maxwell_rk_stage_2d[P](
+                ctx=ctx,
+                mesh=gpu_mesh,
+                Lift_ref=gpu_re.d_Lift_ref.unsafe_ptr(),
+                D_ref=gpu_re.d_D_ref.unsafe_ptr(),
+                q_in=stage.q_in,
+                q_a=stage.q_a,
+                q_b=stage.q_b,
+                q_out=stage.q_out,
+                fstar_scratch=d_fstar.unsafe_ptr(),
+                c=C_LIGHT,
+                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                Jx=JX,
+            )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
     ctx.synchronize()
