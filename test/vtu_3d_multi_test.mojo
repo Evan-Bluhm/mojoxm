@@ -16,6 +16,11 @@
 # Catches gross regressions in `dump_vtu_3d_frame_multi`'s offset
 # arithmetic + XML emission + appended-blob layout.
 #
+# Parameterised over P in {2, 3, 4, 5} so an offset-arithmetic
+# regression that only surfaces at NP=20/35/56 (3 - 24x larger
+# byte budget than the P=2 NP=10 case) gets caught at test-quick
+# latency rather than only by ParaView opening a higher-P frame.
+#
 # Requires GPU: `LocalMesh[P]` is built via DeviceContext (its
 # elem_node_xyz host buffer is downloaded from the GPU build kernel).
 # ======================================================================
@@ -30,12 +35,8 @@ from src.reference import num_tet_nodes
 from src.vtu import dump_vtu_3d_frame_multi
 
 
-def main() raises:
-    comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    print("vtu_3d_multi_test (multi-field 3D VTU smoke test)")
-
-    comptime P = 2
+def check[P: Int]() raises:
+    print("  P=", P)
     var Nx = 2
     var Ny = 2
     var Nz = 2
@@ -53,7 +54,7 @@ def main() raises:
     var NP = num_tet_nodes(P)
     var n_total = mesh.num_elements * NP
     print(
-        "  mesh:",
+        "    mesh:",
         mesh.num_elements,
         "elements x",
         NP,
@@ -81,7 +82,7 @@ def main() raises:
     fields.append(p.copy())
     fields.append(vmag.copy())
 
-    var path = String("/tmp/vtu_3d_multi_test.vtu")
+    var path = String("/tmp/vtu_3d_multi_test_p") + String(P) + String(".vtu")
     dump_vtu_3d_frame_multi(
         mesh.num_elements,
         NP,
@@ -95,19 +96,43 @@ def main() raises:
 
     var blob = Path(path).read_bytes()
     if len(blob) == 0:
-        raise Error("vtu_3d_multi_test: output file is empty")
-    print("  wrote", len(blob), "bytes to", path)
+        raise Error(
+            "vtu_3d_multi_test P=" + String(P) + ": output file is empty"
+        )
+    print("    wrote", len(blob), "bytes to", path)
 
     var s = String(StringSlice[origin_of(blob)](unsafe_from_utf8=blob))
     if not (String('Scalars="rho"') in s):
-        raise Error('vtu_3d_multi_test: missing Scalars="rho" attribute')
+        raise Error(
+            "vtu_3d_multi_test P="
+            + String(P)
+            + ': missing Scalars="rho" attribute'
+        )
     if not (String('Name="rho"') in s):
-        raise Error("vtu_3d_multi_test: missing rho DataArray header")
+        raise Error(
+            "vtu_3d_multi_test P="
+            + String(P)
+            + ": missing rho DataArray header"
+        )
     if not (String('Name="p"') in s):
-        raise Error("vtu_3d_multi_test: missing p DataArray header")
+        raise Error(
+            "vtu_3d_multi_test P=" + String(P) + ": missing p DataArray header"
+        )
     if not (String('Name="|v|"') in s):
-        raise Error("vtu_3d_multi_test: missing |v| DataArray header")
-    print("  XML headers OK: rho, p, |v| all present + rho is default")
+        raise Error(
+            "vtu_3d_multi_test P="
+            + String(P)
+            + ": missing |v| DataArray header"
+        )
 
+
+def main() raises:
+    comptime assert has_accelerator(), "Requires GPU"
+    mpi.init()
+    print("vtu_3d_multi_test (multi-field 3D VTU smoke test, P=2..5)")
+    check[2]()
+    check[3]()
+    check[4]()
+    check[5]()
     print("=== vtu_3d_multi_test PASSED ===")
     mpi.finalize()
