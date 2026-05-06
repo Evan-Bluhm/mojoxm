@@ -197,7 +197,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -212,6 +212,7 @@ help:
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
 	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
+	@echo '  make bench-mhd           run 33 MHD-focused gates (Alfven + GLM rates + Brio-Wu + BCs, ~110s)'
 	@echo '  make bench-all           build + run every analytic-solution gate (121 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -804,6 +805,33 @@ bench-shocks: \
 		bench-shallow-water-dam-break-2d bench-shallow-water-dam-break-3d \
 		bench-mhd-brio-wu-3d bench-mhd-brio-wu-3d-p3
 	@echo '=== bench-shocks: 13 shocked-flow gates PASSED ==='
+
+
+# MHD-focused regression suite -- 33 gates covering every MHD bench
+# in the suite: smooth Alfven (2D plain + 2D GLM + 3D, full P-parity),
+# GLM rate gates (transport + damp, 2D + 3D, full P-parity), Brio-Wu
+# shocks (3D P=2/3), BCs (inflow + wall, 2D plain + 2D GLM + 3D).
+# Run when iterating on any MHD code path: physics module, GLM stack,
+# BJ limiter on MHD, Riemann solver.  Run-time ~110s w/ cached
+# binaries.
+bench-mhd: \
+		bench-mhd-alfven-2d bench-mhd-alfven-glm-2d \
+		bench-mhd-alfven-glm-2d-p3 bench-mhd-alfven-glm-2d-p4 \
+		bench-mhd-alfven-glm-2d-p5 \
+		bench-mhd-alfven-3d bench-mhd-alfven-3d-p3 \
+		bench-mhd-alfven-3d-p4 bench-mhd-alfven-3d-p5 \
+		bench-mhd-glm-psi-transport-2d bench-mhd-glm-psi-transport-2d-p3 \
+		bench-mhd-glm-psi-transport-2d-p4 bench-mhd-glm-psi-transport-2d-p5 \
+		bench-mhd-glm-psi-transport-3d bench-mhd-glm-psi-transport-3d-p3 \
+		bench-mhd-glm-psi-transport-3d-p4 bench-mhd-glm-psi-transport-3d-p5 \
+		bench-mhd-glm-psi-damp-2d bench-mhd-glm-psi-damp-2d-p3 \
+		bench-mhd-glm-psi-damp-2d-p4 bench-mhd-glm-psi-damp-2d-p5 \
+		bench-mhd-glm-psi-damp-3d bench-mhd-glm-psi-damp-3d-p3 \
+		bench-mhd-glm-psi-damp-3d-p4 bench-mhd-glm-psi-damp-3d-p5 \
+		bench-mhd-brio-wu-3d bench-mhd-brio-wu-3d-p3 \
+		bench-mhd-inflow-2d bench-mhd-inflow-2d-glm bench-mhd-inflow-3d \
+		bench-mhd-wall-2d bench-mhd-wall-2d-glm bench-mhd-wall-3d
+	@echo '=== bench-mhd: 33 MHD-focused gates PASSED ==='
 
 
 # P=5 P-parity sweep -- 19 gates at the largest comptime config
