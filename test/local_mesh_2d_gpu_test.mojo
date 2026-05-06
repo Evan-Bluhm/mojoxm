@@ -37,6 +37,9 @@ from src.local_mesh_2d_gpu_advection import (
 )
 from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
+from src.boundary import (
+    BoundaryConditions2D, BC_INTERIOR, BC_WALL, BC_OUTFLOW, BC_INFLOW,
+)
 
 
 def _abs32(x: Float32) -> Float32:
@@ -99,6 +102,66 @@ def check[P: Int]() raises:
         if hptr_bc[k] != 0:
             raise Error("periodic mesh has non-zero face_bc_type")
     print("    face_bc_type all zeros (periodic mesh OK)")
+
+    # face_bc_type with non-periodic BCs (BC_INFLOW on -x, BC_OUTFLOW on
+    # +x, BC_WALL on -y, BC_INTERIOR/periodic on +y).  Verify the BC
+    # type at each boundary face matches its outward-normal direction.
+    var bcs_nonper = BoundaryConditions2D(
+        BC_INFLOW, BC_OUTFLOW, BC_WALL, BC_INTERIOR,
+    )
+    var host_np = LocalMesh2D[P](Nx=Nx, Ny=Ny, Lx=1.0, Ly=1.0, bcs=bcs_nonper)
+    var gpu_np = LocalMesh2DGpu[P](ctx=ctx, host=host_np^)
+    var n_bc_np = gpu_np.num_faces
+    var hbuf_bc_np = ctx.enqueue_create_host_buffer[DType.int32](n_bc_np)
+    var hbuf_n_np  = ctx.enqueue_create_host_buffer[DType.float32](n_bc_np * 2)
+    ctx.enqueue_copy(hbuf_bc_np, gpu_np.d_face_bc_type)
+    ctx.enqueue_copy(hbuf_n_np,  gpu_np.d_face_normal)
+    ctx.synchronize()
+    var bc_np_p = hbuf_bc_np.unsafe_ptr()
+    var n_np_p  = hbuf_n_np.unsafe_ptr()
+    var n_inflow:   Int = 0
+    var n_outflow:  Int = 0
+    var n_wall:     Int = 0
+    var n_interior: Int = 0
+    for f in range(n_bc_np):
+        var bt = Int(bc_np_p[f])
+        var nx = n_np_p[f * 2 + 0]
+        var ny = n_np_p[f * 2 + 1]
+        if bt == 0:                    # BC_INTERIOR
+            n_interior += 1
+        elif bt == 3:                  # BC_INFLOW: should be on -x boundary
+            if nx >= -Float32(0.5):
+                raise Error(
+                    "BC_INFLOW face does not point in -x direction (nx="
+                    + String(nx) + ")"
+                )
+            n_inflow += 1
+        elif bt == 2:                  # BC_OUTFLOW: should be on +x
+            if nx <= Float32(0.5):
+                raise Error(
+                    "BC_OUTFLOW face does not point in +x direction (nx="
+                    + String(nx) + ")"
+                )
+            n_outflow += 1
+        elif bt == 1:                  # BC_WALL: should be on -y
+            if ny >= -Float32(0.5):
+                raise Error(
+                    "BC_WALL face does not point in -y direction (ny="
+                    + String(ny) + ")"
+                )
+            n_wall += 1
+        else:
+            raise Error("unexpected face_bc_type " + String(bt))
+    if n_inflow == 0 or n_outflow == 0 or n_wall == 0:
+        raise Error(
+            "non-periodic mesh missing one or more BC kinds: "
+            "inflow=" + String(n_inflow)
+            + " outflow=" + String(n_outflow)
+            + " wall=" + String(n_wall)
+        )
+    print("    non-periodic face_bc_type: inflow=", n_inflow,
+          " outflow=", n_outflow, " wall=", n_wall,
+          " interior=", n_interior)
 
     # Reference-element upload round-trip.  Done before cell_mean test
     # because that kernel needs node_weights from re_gpu.
