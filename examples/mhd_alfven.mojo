@@ -41,8 +41,7 @@ from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.mhd import IdealMHD
 from src.nvtx import NvtxContext
-from src.frame_writer import FrameWriter
-from src.vtu import dump_vtu_3d_frame_multi
+from src.frame_writer import FrameWriter, write_snapshot_3d_multi
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
 from src.diagnostics import DiagnosticsWriter, NamedComponent
 
@@ -237,7 +236,6 @@ def main() raises:
     # owned slab.
     var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
     if nprocs == 1:
-        nvtx.push_range("snapshot_t_final")
         var n_owned_dof = solver.num_owned_elements * N_P
         var snap_bx  = List[Float32]()
         var snap_by  = List[Float32]()
@@ -270,17 +268,10 @@ def main() raises:
         names.append(String("By"))
         names.append(String("|B|"))
         names.append(String("psi"))
-        dump_vtu_3d_frame_multi(
-            num_elements=solver.num_owned_elements,
-            nodes_per_elem=N_P,
-            elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](
-                solver.mesh.owned_node_xyz_f32_ptr
-            ),
-            field_names=names,
-            field_data=fields,
-            path=String("output/snapshot_t_final.vtu"),
+        write_snapshot_3d_multi(
+            solver=solver, field_names=names, field_data=fields,
+            path=String("output/snapshot_t_final.vtu"), nvtx=nvtx,
         )
-        nvtx.pop_range()
         if rank == 0:
             print("  wrote output/snapshot_t_final.vtu (By + |B| + psi, t=", T_FINAL, ")")
 
