@@ -121,6 +121,34 @@ def validate_one(path: Path) -> list[str]:
             f"{path}: point coords have {m.points.shape[1]} components, expected 3"
         )
 
+    # Per-cell invariants: scan up to 32 cells (covers small-mesh test
+    # fixtures fully; samples driver output cheaply).
+    import numpy as np
+
+    n_cells_check = min(32, cells.data.shape[0])
+    for ci in range(n_cells_check):
+        row = cells.data[ci]
+        # Connectivity uniqueness within a cell -- a duplicated index
+        # would cause rendering glitches and indicates a writer bug.
+        if len(set(int(x) for x in row)) != len(row):
+            failures.append(
+                f"{path}: cell {ci} has duplicate connectivity indices "
+                f"(only {len(set(int(x) for x in row))} unique of {len(row)})"
+            )
+            break  # stop after first to keep noise down
+        # First 4 nodes must be the 4 vertices -- distinct physical
+        # positions.  VTK_LAGRANGE_TETRAHEDRON puts the corners first;
+        # if they coincide the writer is mis-ordering nodes.
+        corners = m.points[row[:4]]
+        for a in range(4):
+            for b in range(a + 1, 4):
+                if np.allclose(corners[a], corners[b], atol=1e-9):
+                    failures.append(
+                        f"{path}: cell {ci} corner nodes {a} and {b} "
+                        f"coincide at {tuple(corners[a])}"
+                    )
+                    break
+
     return failures
 
 
