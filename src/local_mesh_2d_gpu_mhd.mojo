@@ -13,7 +13,7 @@
 
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.reference_2d import num_tri_nodes_2d, num_edge_nodes
-from src.boundary import BC_INTERIOR, BC_WALL
+from src.boundary import BC_INTERIOR, BC_WALL, BC_INFLOW
 from std.gpu import global_idx
 from std.gpu.host import DeviceContext
 from std.math import ceildiv, sqrt
@@ -200,6 +200,12 @@ def mhd_face_flux_kernel_2d[NP: Int, NFP: Int](
     gamma:          Float32,
     min_density:    Float32,
     min_pressure:   Float32,
+    inflow_rho:  Float32,
+    inflow_rhou: Float32,
+    inflow_rhov: Float32,
+    inflow_Bx:   Float32,
+    inflow_By:   Float32,
+    inflow_E:    Float32,
     fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
 ):
     var tid = Int(global_idx.x)
@@ -248,6 +254,13 @@ def mhd_face_flux_kernel_2d[NP: Int, NFP: Int](
         qR3 = qL3 - Float32(2.0) * B_n * nx
         qR4 = qL4 - Float32(2.0) * B_n * ny
         qR5 = qL5
+    elif bc_type == BC_INFLOW:
+        qR0 = inflow_rho
+        qR1 = inflow_rhou
+        qR2 = inflow_rhov
+        qR3 = inflow_Bx
+        qR4 = inflow_By
+        qR5 = inflow_E
     else:
         qR0 = qL0
         qR1 = qL1
@@ -352,6 +365,12 @@ def launch_mhd_face_flux_2d[NP: Int, NFP: Int](
     gamma:          Float32,
     min_density:    Float32,
     min_pressure:   Float32,
+    inflow_rho:  Float32,
+    inflow_rhou: Float32,
+    inflow_rhov: Float32,
+    inflow_Bx:   Float32,
+    inflow_By:   Float32,
+    inflow_E:    Float32,
     fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     var total = num_faces * NFP
@@ -360,6 +379,8 @@ def launch_mhd_face_flux_2d[NP: Int, NFP: Int](
         q, face_elem, face_elem_node, face_normal, face_bc_type,
         num_faces,
         gamma, min_density, min_pressure,
+        inflow_rho, inflow_rhou, inflow_rhov,
+        inflow_Bx, inflow_By, inflow_E,
         fstar_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
@@ -378,6 +399,12 @@ def mhd_rk_stage_2d[P: Int](
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
     gamma: Float32, min_density: Float32, min_pressure: Float32,
     a: Float32, b: Float32, cc: Float32, dt: Float32,
+    inflow_rho:  Float32 = Float32(0.0),
+    inflow_rhou: Float32 = Float32(0.0),
+    inflow_rhov: Float32 = Float32(0.0),
+    inflow_Bx:   Float32 = Float32(0.0),
+    inflow_By:   Float32 = Float32(0.0),
+    inflow_E:    Float32 = Float32(0.0),
 ) raises:
     # Two launches per stage: face flux + fused vol+lift+RK.
     comptime NP = num_tri_nodes_2d(P)
@@ -390,6 +417,8 @@ def mhd_rk_stage_2d[P: Int](
         mesh.d_face_bc_type.unsafe_ptr(),
         mesh.num_faces,
         gamma, min_density, min_pressure,
+        inflow_rho, inflow_rhou, inflow_rhov,
+        inflow_Bx, inflow_By, inflow_E,
         fstar_scratch,
     )
     launch_mhd_vol_lift_2d[NP, NFP](
