@@ -1016,6 +1016,16 @@ ncu --kernel-name regex:rk_stage --launch-count 3 --launch-skip 10 \
 
 The fused RK-stage kernel dominates execution time in both drivers.
 
+### Cached cross-bench summaries
+
+`make profile-bench-<name>` and `make profile-bench-all` save
+nsys's `cuda_gpu_kern_sum` output into `benchmarks/profile_reports/
+<name>.kern.txt` (committed to git as a baseline).  `make
+profile-summary` (or `scripts/profile_summary.py`) ranks the cached
+reports by avg us/launch / total ms / instance count.  See the
+"Cross-bench profile summary" subsection above under Performance
+for sample output.
+
 ## Design decisions worth knowing
 
 ### Physics as a trait, not a virtual-call interface
