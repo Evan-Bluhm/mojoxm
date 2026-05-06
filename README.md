@@ -457,30 +457,30 @@ Nine reference drivers under `examples/`:
 
 ## System architecture
 
-Roughly 12.9k lines of Mojo + a thin MPI shim in C. Core components live
+Roughly 16k lines of Mojo + a thin MPI shim in C. Core components live
 under `src/`; problem-specific drivers live under `examples/`.
 
 | file                                | lines | role                                                                                   |
 |-------------------------------------|-------|----------------------------------------------------------------------------------------|
-| `src/reference.mojo`                |   744 | Reference element: arbitrary-order equispaced Lagrange (Vandermonde inverse + analytic integration), `D_ref`, `Lift_ref`, `face_to_elem` table |
-| `src/local_mesh.mojo`               |  1406 | Raw periodic Kuhn-tet mesh builder + BC overlay kernels, **GPU-resident**              |
-| `src/mesh.mojo`                     |   875 | Patch-aware `Mesh`: `LocalMesh` + partition / ghost ring / permutation + BC filtering  |
-| `src/boundary.mojo`                 |    83 | `BoundaryConditions` + BC_WALL / BC_OUTFLOW / BC_INFLOW constants + 2D variant         |
-| `src/partition.mojo`                |   192 | `(PX, PY, PZ)` factorisation of nprocs, minimising ghost-exchange surface              |
-| `src/halo_exchange.mojo`            |   476 | MPI pack / Isend / Irecv / unpack + per-direction BC skip flag                         |
-| `src/solver.mojo`                   |   954 | `Physics` trait, cooperative `rk_stage_kernel`, `Solver[PhysT, P]`, SSPRK3 stepper, BJ limiter pipeline |
-| `src/advection.mojo`                |   145 | `Advection`: scalar upwind flux + wall / outflow / inflow BC                           |
-| `src/euler.mojo`                    |   841 | `Euler`: 5-moment, 4 Riemann solvers, entropy fix, face rotation, gravity source       |
-| `src/maxwell.mojo`                  |   255 | `Maxwell`: vacuum E+B, Rusanov, full BC menu, uniform J / M source                     |
-| `src/shallow_water.mojo`            |   194 | `ShallowWater`: 2D shallow water embedded in 3D                                        |
-| `src/mhd.mojo`                      |   388 | `IdealMHD`: single-fluid MHD + Dedner GLM div(B) cleaning                              |
-| `src/two_fluid.mojo`                |   552 | `FiveMomentTwoFluid`: electron + ion + Maxwell + GLM, 17 components                    |
-| `src/vtu.mojo`                      |   312 | Zero-copy binary-appended VTU writer (one scalar field per frame)                      |
-| `src/async_writer.mojo`             |   174 | pthread-based `writev()` scatter-gather file writer                                    |
-| `src/frame_writer.mojo`             |   177 | Per-rank frame output: `FrameWriter[PhysT, P]`, auto rank-subdir + `mkdir -p` at init  |
-| `src/diagnostics.mojo`              |   197 | `DiagnosticsWriter[PhysT, P]`: domain-integrated linear / squared / max-abs per-frame with allreduce |
-| `src/time_integrator.mojo`          |   177 | `run_ssprk3_loop` and `run_ssprk3_loop_with_diagnostics`                               |
-| `src/nvtx.mojo`                     |    84 | Runtime-loaded NVTX shim for Nsight Systems timelines                                  |
+| `src/reference.mojo`                |   826 | Reference element: arbitrary-order equispaced Lagrange (Vandermonde inverse + analytic integration), `D_ref`, `Lift_ref`, `face_to_elem` table |
+| `src/local_mesh.mojo`               |  1649 | Raw periodic Kuhn-tet mesh builder + BC overlay kernels, **GPU-resident**              |
+| `src/mesh.mojo`                     |  1015 | Patch-aware `Mesh`: `LocalMesh` + partition / ghost ring / permutation + BC filtering  |
+| `src/boundary.mojo`                 |    93 | `BoundaryConditions` + BC_WALL / BC_OUTFLOW / BC_INFLOW constants + 2D variant         |
+| `src/partition.mojo`                |   226 | `(PX, PY, PZ)` factorisation of nprocs, minimising ghost-exchange surface              |
+| `src/halo_exchange.mojo`            |   517 | MPI pack / Isend / Irecv / unpack + per-direction BC skip flag                         |
+| `src/solver.mojo`                   |  1291 | `Physics` trait, cooperative `rk_stage_kernel`, `Solver[PhysT, P]`, SSPRK3 stepper, BJ limiter pipeline |
+| `src/advection.mojo`                |   151 | `Advection`: scalar upwind flux + wall / outflow / inflow BC                           |
+| `src/euler.mojo`                    |   989 | `Euler`: 5-moment, 4 Riemann solvers, entropy fix, face rotation, gravity source       |
+| `src/maxwell.mojo`                  |   281 | `Maxwell`: vacuum E+B, Rusanov, full BC menu, uniform J / M source                     |
+| `src/shallow_water.mojo`            |   200 | `ShallowWater`: 2D shallow water embedded in 3D                                        |
+| `src/mhd.mojo`                      |   461 | `IdealMHD`: single-fluid MHD + Dedner GLM div(B) cleaning                              |
+| `src/two_fluid.mojo`                |   627 | `FiveMomentTwoFluid`: electron + ion + Maxwell + GLM, 17 components                    |
+| `src/vtu.mojo`                      |   599 | Zero-copy binary-appended VTU writer (one scalar field per frame)                      |
+| `src/async_writer.mojo`             |   182 | pthread-based `writev()` scatter-gather file writer                                    |
+| `src/frame_writer.mojo`             |   286 | Per-rank frame output: `FrameWriter[PhysT, P]`, auto rank-subdir + `mkdir -p` at init  |
+| `src/diagnostics.mojo`              |   202 | `DiagnosticsWriter[PhysT, P]`: domain-integrated linear / squared / max-abs per-frame with allreduce |
+| `src/time_integrator.mojo`          |   180 | `run_ssprk3_loop` and `run_ssprk3_loop_with_diagnostics`                               |
+| `src/nvtx.mojo`                     |    81 | Runtime-loaded NVTX shim for Nsight Systems timelines                                  |
 | `src/mpi.mojo` + `src/mpi_shim.c`   |   ~300| Mojo / C-shim bindings for OpenMPI (init, point-to-point, allreduce, request handling) |
 
 The 2D GPU stack lives in a separate set of modules (single-rank, no
@@ -488,21 +488,21 @@ HaloExchange):
 
 | file                                          | lines | role                                                                            |
 |-----------------------------------------------|-------|---------------------------------------------------------------------------------|
-| `src/reference_2d.mojo`                       |   299 | 2D reference triangle: equispaced Lagrange, `D_ref`, `Lift_ref`, edge node maps |
-| `src/reference_2d_gpu.mojo`                   |    77 | Float32 device mirror of `ReferenceElement2D` + `device_bytes()` helper         |
-| `src/local_mesh_2d.mojo`                      |   400 | Periodic Kuhn-2-tri (per cube halved on diagonal) mesh + BC overlay             |
-| `src/local_mesh_2d_gpu.mojo`                  |   224 | `LocalMesh2DGpu[P]` upload + mass-matrix-weighted `cell_mean_kernel_2d` + `device_bytes()` helper |
-| `src/local_mesh_2d_gpu_advection.mojo`        |   340 | 2D scalar advection (NC=1)                                                      |
-| `src/local_mesh_2d_gpu_euler.mojo`            |   653 | 2D Euler (NC=4): Rusanov + HLLC, gravity (gx,gy) source                         |
-| `src/local_mesh_2d_gpu_sw.mojo`               |   521 | 2D Shallow Water (NC=3): Rusanov + HLL                                          |
-| `src/local_mesh_2d_gpu_mhd.mojo`              |   408 | 2D plain ideal MHD (NC=6, no GLM)                                               |
-| `src/local_mesh_2d_gpu_mhd_glm.mojo`          |   482 | 2D MHD + Dedner GLM divB cleaning (NC=7)                                        |
-| `src/local_mesh_2d_gpu_maxwell.mojo`          |   372 | 2D Maxwell (NC=6 EM): Rusanov + PEC reflection + J/M source                     |
-| `src/local_mesh_2d_gpu_limiter.mojo`          |   226 | 2D Barth-Jespersen slope limiter (Venkat-smoothed): split into `cell_mean` + `compute_theta` + coalesced `apply` kernels |
-| `src/vtu_2d.mojo`                             |   406 | 2D VTU frame writer (incl. `dump_vtu_2d_frame_multi`) + `dump_pvd_collection` + `vtu_frame_name` helpers |
+| `src/reference_2d.mojo`                       |   324 | 2D reference triangle: equispaced Lagrange, `D_ref`, `Lift_ref`, edge node maps |
+| `src/reference_2d_gpu.mojo`                   |    80 | Float32 device mirror of `ReferenceElement2D` + `device_bytes()` helper         |
+| `src/local_mesh_2d.mojo`                      |   433 | Periodic Kuhn-2-tri (per cube halved on diagonal) mesh + BC overlay             |
+| `src/local_mesh_2d_gpu.mojo`                  |   231 | `LocalMesh2DGpu[P]` upload + mass-matrix-weighted `cell_mean_kernel_2d` + `device_bytes()` helper |
+| `src/local_mesh_2d_gpu_advection.mojo`        |   422 | 2D scalar advection (NC=1)                                                      |
+| `src/local_mesh_2d_gpu_euler.mojo`            |   777 | 2D Euler (NC=4): Rusanov + HLLC, gravity (gx,gy) source                         |
+| `src/local_mesh_2d_gpu_sw.mojo`               |   636 | 2D Shallow Water (NC=3): Rusanov + HLL                                          |
+| `src/local_mesh_2d_gpu_mhd.mojo`              |   518 | 2D plain ideal MHD (NC=6, no GLM)                                               |
+| `src/local_mesh_2d_gpu_mhd_glm.mojo`          |   611 | 2D MHD + Dedner GLM divB cleaning (NC=7)                                        |
+| `src/local_mesh_2d_gpu_maxwell.mojo`          |   470 | 2D Maxwell (NC=6 EM): Rusanov + PEC reflection + J/M source                     |
+| `src/local_mesh_2d_gpu_limiter.mojo`          |   259 | 2D Barth-Jespersen slope limiter (Venkat-smoothed): split into `cell_mean` + `compute_theta` + coalesced `apply` kernels |
+| `src/vtu_2d.mojo`                             |   475 | 2D VTU frame writer (incl. `dump_vtu_2d_frame_multi`) + `dump_pvd_collection` + `vtu_frame_name` helpers |
 | `src/sod_exact_riemann.mojo`                  |   197 | Toro-style analytic Riemann solver for the rare+contact+shock structure (zero initial velocities); used by the 5 Sod benches and unit-tested against canonical Sod (Toro 2009 Test 1) and strong-shock (Toro 2009 Test 3) reference values |
-| `src/ssprk3.mojo`                             |    92 | Non-templated SSPRK3 stage-plan helper shared by every 2D-GPU example + bench   |
-| `src/memory_report.mojo`                      |   241 | `MemoryReport` + `ThroughputReport` for WARPXM-style perf-introspection output  |
+| `src/ssprk3.mojo`                             |   112 | Non-templated SSPRK3 stage-plan helper shared by every 2D-GPU example + bench   |
+| `src/memory_report.mojo`                      |   253 | `MemoryReport` + `ThroughputReport` for WARPXM-style perf-introspection output  |
 
 Example drivers exercise various combinations of physics, BC kind,
 and diagnostics; see the list at the top of this README.
