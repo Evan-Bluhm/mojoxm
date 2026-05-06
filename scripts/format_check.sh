@@ -39,13 +39,24 @@ fi
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
-bad=()
+# Stage every file into a parallel tree under $tmpdir, run a single
+# `mojo format` over the whole batch (one JIT-warmup amortised across
+# all files -- ~25x faster than per-file invocations), then diff each
+# pair.  In-place rewrite of the temp copies leaves the working tree
+# untouched.
+copies=()
 for f in "${files[@]}"; do
     tmp="$tmpdir/$f"
     mkdir -p "$(dirname "$tmp")"
     cp "$f" "$tmp"
-    "${mojo_cmd[@]}" format -q "$tmp"
-    if ! diff -q "$f" "$tmp" >/dev/null 2>&1; then
+    copies+=("$tmp")
+done
+
+"${mojo_cmd[@]}" format -q "${copies[@]}"
+
+bad=()
+for f in "${files[@]}"; do
+    if ! diff -q "$f" "$tmpdir/$f" >/dev/null 2>&1; then
         bad+=("$f")
     fi
 done
