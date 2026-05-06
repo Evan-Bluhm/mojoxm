@@ -760,6 +760,35 @@ cell_mean into the rk_stage kernel.  See
 `benchmarks/profile_reports/` for per-kernel measurements on every
 benchmark.
 
+### Cross-bench profile summary
+
+`make profile-summary` (or `scripts/profile_summary.py`) parses the
+121 cached profile reports and ranks every bench by dominant-kernel
+cost.  Use the default `avg us/launch` view to spot kernel-level
+optimisation targets; switch to `--sort total` to see where the
+suite-wide kernel budget actually sits (top of the avg list isn't
+always top of the total list).
+
+Sample top-5 (RTX 3090, current baselines):
+
+```
+top 5 benches, sorted by avg us/launch:
+  bench                            kernel        avg us    inst   total ms
+  -------------------------------- ----------    ------ ------- ----------
+  bench_mhd_alfven_3d_p5           rk_stage       659.1    4953     3264.5
+  bench_maxwell_plane_wave_3d_p5   rk_stage       621.3    3303     2052.1
+  bench_euler_sod_3d_p5            rk_stage       608.8    4998     3042.8
+  bench_mhd_brio_wu_3d_p3          rk_stage       408.9    3807     1556.8
+  bench_euler_vortex_3d_p3         rk_stage       392.3   11403     4473.2
+  -> shown 5 benches: 14.39 s of dominant-kernel time;
+     full suite (62.28 s across all benches dominant-kernel-only)
+```
+
+The full-suite footer (`62.28 s`) is the irreducible compute budget
+for `make profile-bench-all` (excluding nsys profile + launch
+overhead which dominates wall time).  3D dominates (58.7 s) over 2D
+(3.6 s) by ~16x.
+
 ## Build & run
 
 ### Prerequisites
