@@ -269,6 +269,41 @@ def validate_one(path: Path) -> list[str]:
             if cell_face_failed:
                 break
 
+        # Volume interior nodes (P >= 4 only): (P-1)(P-2)(P-3)/6
+        # nodes that should be STRICTLY interior to the tet, i.e.
+        # every barycentric coordinate > 0.  Computed by inverting
+        # T = [v1-v0, v2-v0, v3-v0] and applying to (X - v0).
+        if p_eff is not None and p_eff >= 4:
+            n_vol_interior = (p_eff - 1) * (p_eff - 2) * (p_eff - 3) // 6
+            vol_base = (
+                4 + 6 * (p_eff - 1)
+                + 4 * ((p_eff - 1) * (p_eff - 2) // 2)
+            )
+            T = np.column_stack([e1, e2, e3])
+            try:
+                T_inv = np.linalg.inv(T)
+            except np.linalg.LinAlgError:
+                T_inv = None
+            cell_vol_failed = False
+            if T_inv is not None:
+                for vk in range(n_vol_interior):
+                    interior = m.points[row[vol_base + vk]]
+                    bary123 = T_inv @ (interior - v0)
+                    bary0 = 1.0 - float(bary123.sum())
+                    bary = [bary0, float(bary123[0]),
+                            float(bary123[1]), float(bary123[2])]
+                    eps = 1e-6
+                    if any(b <= eps for b in bary):
+                        failures.append(
+                            f"{path}: cell {ci} volume-interior node {vk} "
+                            f"is not strictly inside tet "
+                            f"(barycentric = {[f'{b:.4f}' for b in bary]})"
+                        )
+                        cell_vol_failed = True
+                        break
+            if cell_vol_failed:
+                break
+
     return failures
 
 
