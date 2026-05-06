@@ -30,8 +30,6 @@ from src.two_fluid import FiveMomentTwoFluid
 from src.nvtx import NvtxContext
 
 
-comptime P = 2
-comptime NP = num_tet_nodes(P)
 comptime NC = 17
 
 comptime NX = 4
@@ -65,11 +63,14 @@ comptime P_I0: Float32 = 0.01
 comptime CONST_TOL: Float32 = Float32(1.0e-4)
 
 
-def fill_constant_kernel(
+def fill_constant_kernel[
+    P: Int
+](
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
     num_owned: Int,
 ):
+    comptime NP = num_tet_nodes(P)
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -106,19 +107,9 @@ def fill_constant_kernel(
     q[base + 16] = Float32(0.0)
 
 
-def main() raises:
-    comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var size = mpi.world_size()
-    if size > 1:
-        mpi.finalize()
-        print("two_fluid_3d_test: runs at np=1 only")
-        return
-    print(
-        "two_fluid_3d_test: 3D FiveMomentTwoFluid constant-state preservation"
-    )
-
-    var nvtx = NvtxContext()
+def check[P: Int](mut nvtx: NvtxContext) raises:
+    print("  P=", P)
+    comptime NP = num_tet_nodes(P)
     var ctx = DeviceContext()
     var re = ReferenceElement[P]()
     var D_ref = to_float32(re.D_ref)
@@ -166,7 +157,8 @@ def main() raises:
     var num_owned = solver.num_owned_elements
     var n_dof = num_owned * NP
 
-    solver.ctx.enqueue_function[fill_constant_kernel, fill_constant_kernel](
+    comptime fill_kernel = fill_constant_kernel[P]
+    solver.ctx.enqueue_function[fill_kernel, fill_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         num_owned,
@@ -218,7 +210,9 @@ def main() raises:
             var v = scratch[k]
             if isnan(v) or isinf(v):
                 raise Error(
-                    "two_fluid_3d_test: non-finite at component "
+                    "two_fluid_3d_test P="
+                    + String(P)
+                    + ": non-finite at component "
                     + String(c_idx)
                 )
             var d = v - ic_vals[c_idx]
@@ -227,7 +221,7 @@ def main() raises:
                 max_err = ad
 
     print(
-        "  max |q - IC| over",
+        "    max |q - IC| over",
         NUM_STEPS,
         "steps =",
         max_err,
@@ -237,12 +231,29 @@ def main() raises:
     )
     if max_err > CONST_TOL:
         raise Error(
-            "two_fluid_3d_test FAILED: constant state shifted by "
+            "two_fluid_3d_test P="
+            + String(P)
+            + " FAILED: constant state shifted by "
             + String(max_err)
             + " over "
             + String(NUM_STEPS)
             + " steps"
         )
 
+
+def main() raises:
+    comptime assert has_accelerator(), "Requires GPU"
+    mpi.init()
+    var size = mpi.world_size()
+    if size > 1:
+        mpi.finalize()
+        print("two_fluid_3d_test: runs at np=1 only")
+        return
+    print("two_fluid_3d_test: 3D FiveMomentTwoFluid constant-state, P=2..5")
+    var nvtx = NvtxContext()
+    check[2](nvtx)
+    check[3](nvtx)
+    check[4](nvtx)
+    check[5](nvtx)
     print("=== two_fluid_3d_test PASSED ===")
     mpi.finalize()
