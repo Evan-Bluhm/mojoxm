@@ -244,6 +244,125 @@ def print_table(
         )
 
 
+SELF_TEST_FIXTURE = """\
+[6/8] Executing 'cuda_gpu_kern_sum' stats report
+
+ Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                             Name
+ --------  ---------------  ---------  --------  --------  --------  --------  -----------  -----------------------------------------------------------
+     99.8         87479447       4680   18692.2   12896.0      6528     30753       9595.0  src_solver_rk_stage_kernel_I6A6A6A6AcB6A6A_3c8d0c8e9d13eed8
+      0.1           100128          3   33376.0   21728.0     21312     57088      20536.2  src_local_mesh_build_elements_6A6A6A6A_b4fb09db0125e176
+      0.0            31745          3   10581.7    8768.0      5856     17121       5847.4  src_local_mesh_build_faces_ker6A6A6A6A_3680e9f99a1681d1
+
+[7/8] Executing 'cuda_gpu_mem_time_sum' stats report
+"""
+
+
+def run_self_test() -> int:
+    """Validates the parser + classifiers against a hardcoded fixture
+    snapshot of nsys cuda_gpu_kern_sum output.  Returns 0 on pass,
+    1 on any assertion failure (with a description on stderr)."""
+    failures: list[str] = []
+
+    def expect(cond: bool, msg: str) -> None:
+        if not cond:
+            failures.append(msg)
+
+    # Parse the fixture by writing it to a temp file (parse_file works on
+    # Path inputs; that's the codepath we want to exercise).
+    import tempfile
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".kern.txt", prefix="bench_self_test_", delete=False
+    ) as f:
+        f.write(SELF_TEST_FIXTURE)
+        tmp_path = Path(f.name)
+    try:
+        rows = parse_file(tmp_path)
+    finally:
+        tmp_path.unlink()
+
+    expect(len(rows) == 3, f"expected 3 rows, got {len(rows)}")
+    if rows:
+        expect(rows[0].time_pct == 99.8, f"row[0].time_pct = {rows[0].time_pct}")
+        expect(rows[0].total_ns == 87479447, f"row[0].total_ns = {rows[0].total_ns}")
+        expect(rows[0].instances == 4680, f"row[0].instances = {rows[0].instances}")
+        expect(
+            abs(rows[0].avg_ns - 18692.2) < 1e-6,
+            f"row[0].avg_ns = {rows[0].avg_ns}",
+        )
+        expect(
+            abs(rows[0].stddev_ns - 9595.0) < 1e-6,
+            f"row[0].stddev_ns = {rows[0].stddev_ns}",
+        )
+        expect(
+            "rk_stage_kernel" in rows[0].name,
+            f"row[0].name = {rows[0].name}",
+        )
+        expect(
+            abs(rows[0].avg_us - 18.6922) < 1e-3,
+            f"row[0].avg_us = {rows[0].avg_us}",
+        )
+        # cv_pct = 100 * 9595 / 18692.2 = 51.331
+        expect(
+            abs(rows[0].cv_pct - 51.33) < 0.01,
+            f"row[0].cv_pct = {rows[0].cv_pct}",
+        )
+
+    # dominant_per_bench: row[0] has 99.8% time_pct, should win.
+    if len(rows) == 3:
+        dom = dominant_per_bench(rows)
+        expect(len(dom) == 1, f"expected 1 dominant row, got {len(dom)}")
+        if dom:
+            expect(
+                "rk_stage_kernel" in dom[0].name,
+                f"dominant kernel = {dom[0].name}",
+            )
+
+    # kernel_kind classifier sanity:
+    test_cases_kk = [
+        ("src_solver_rk_stage_kernel_I6_3c8d0c8e9d13eed8", "rk_stage"),
+        ("src_local_mesh_build_elements_6A_b4fb09db0125e176", "build_elem"),
+        ("src_local_mesh_build_faces_ker6A_3680e9f99a1681d1", "build_face"),
+        ("src_local_mesh_2d_gpu_advectio6A_aaaaaaaaaaaaaaaa", "2d_advect"),
+        ("src_local_mesh_2d_gpu_mhd_glm6A_bbbbbbbbbbbbbbbb", "2d_mhd_glm"),
+        ("src_local_mesh_2d_gpu_mhd6A_cccccccccccccccc", "2d_mhd"),
+    ]
+    for name, expected_kind in test_cases_kk:
+        got = kernel_kind(name)
+        expect(
+            got == expected_kind,
+            f"kernel_kind({name!r}) = {got!r}, expected {expected_kind!r}",
+        )
+
+    # bench_physics classifier sanity:
+    test_cases_phys = [
+        ("bench_advection_translation_2d", "advection"),
+        ("bench_euler_smooth_wave_3d_p5", "euler"),
+        ("bench_mhd_alfven_3d_p5", "mhd"),
+        ("bench_mhd_glm_psi_damp_3d", "mhd"),
+        ("bench_mhd_brio_wu_3d_p3", "mhd"),
+        ("bench_shallow_water_dam_break_2d", "shallow_water"),
+        ("bench_maxwell_plane_wave_3d_p5", "maxwell"),
+        ("bench_two_fluid_walls_3d_p5", "two_fluid"),
+        ("bench_unknown_physics", "other"),
+    ]
+    for bench, expected_phys in test_cases_phys:
+        got = bench_physics(bench)
+        expect(
+            got == expected_phys,
+            f"bench_physics({bench!r}) = {got!r}, expected {expected_phys!r}",
+        )
+
+    if failures:
+        print("profile_summary.py self-test FAILED:", file=sys.stderr)
+        for msg in failures:
+            print(f"  * {msg}", file=sys.stderr)
+        return 1
+    print(
+        f"profile_summary.py self-test PASSED ({3 + len(test_cases_kk) + len(test_cases_phys)} assertions)"
+    )
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
@@ -308,7 +427,20 @@ def main() -> int:
             "for sizing where the suite-wide compute budget actually sits."
         ),
     )
+    ap.add_argument(
+        "--self-test",
+        action="store_true",
+        help=(
+            "Run a small in-script self-test of the parser + classifiers "
+            "against hardcoded fixture rows.  Exits 0 if all assertions "
+            "pass.  Use as a CI gate after editing this script (or the "
+            "regex), or to detect a future nsys-output-format change."
+        ),
+    )
     args = ap.parse_args()
+
+    if args.self_test:
+        return run_self_test()
 
     if not PROFILE_DIR.is_dir():
         print(f"profile_summary.py: {PROFILE_DIR} not found", file=sys.stderr)
