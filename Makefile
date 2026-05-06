@@ -189,7 +189,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -199,6 +199,7 @@ help:
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
 	@echo '  make test-quick          smoke 8 representative tests (~30s w/ cached binaries)'
 	@echo '  make bench-quick         smoke 12 representative benches (~60s)'
+	@echo '  make smoke               test-quick + bench-quick combined (~90s; one-command sanity check)'
 	@echo '  make bench-p5            run 12 P=5 P-parity gates at NP=21/56 (~80s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
@@ -436,6 +437,16 @@ test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d
 test-quick: test-reference test-reference-2d test-euler-2d-gpu test-euler-3d \
             test-limiter-2d-gpu test-limiter-3d test-p3 test-vtu-3d-multi
 	@echo '=== test-quick: 8 representative tests PASSED ==='
+
+
+# One-command smoke aggregate: test-quick + bench-quick.  Use this
+# right after pulling, after a non-trivial refactor, or before
+# committing to catch the broadest class of regressions in ~90s
+# wall (cached binaries).  Runs sequentially: a test failure stops
+# the bench sweep early so you don't wait through 12 benches when
+# the foundation is already broken.
+smoke: test-quick bench-quick
+	@echo '=== smoke: test-quick + bench-quick PASSED ==='
 
 
 # Limiter unit-test sweep -- 8 tests covering the BJ slope limiter
