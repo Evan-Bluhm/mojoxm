@@ -446,7 +446,10 @@ Nine reference drivers under `examples/`:
   inverse + analytic Dirichlet-formula integration in
   `src/reference.mojo`.  P=2 emits `VTK_QUADRATIC_TETRA` (cell type 24)
   for direct ParaView compatibility; P>=3 emits `VTK_LAGRANGE_TETRAHEDRON`
-  (cell type 71).
+  (cell type 71).  `make test-vtu-meshio` (or `scripts/validate_vtu.py`)
+  validates VTK-spec node ordering at every P: corners distinct,
+  edge interiors at parametric `(j+1)/P` spacing, face interiors on
+  face planes, volume interiors strictly inside.
 - **Kuhn 6-tet decomposition** of a Cartesian cell grid. Each cube
   owns 12 uniquely numbered faces (6 interior diagonal + 6 external on
   its +x/+y/+z boundaries). Face IDs are `owner_cell * 12 + face_type`,
