@@ -176,7 +176,7 @@ def check[P: Int]() raises:
 
 def main() raises:
     print("sizes: num_tri_nodes_2d, num_edge_nodes")
-    for P in range(1, 5):
+    for P in range(1, 6):
         var NP_P = num_tri_nodes_2d(P)
         var NFP_edge = num_edge_nodes(P)
         print("  P=", P, " NP=", NP_P, " NFP_edge=", NFP_edge)
@@ -185,4 +185,5 @@ def main() raises:
     check[2]()
     check[3]()
     check[4]()
+    check[5]()
     print("=== reference_element_2d_test PASSED ===")

@@ -149,9 +149,69 @@ def _test_face_to_elem_coverage(re: ReferenceElement) raises:
     print("  face_to_elem coverage OK")
 
 
+def _test_node_weights_partition(re: ReferenceElement, P: Int, np: Int) raises:
+    """The mass-matrix-weighted cell-mean weights must sum to 1
+    (partition of unity over the reference tet of volume 1/6,
+    normalised so cell_mean = sum_i w_i q_i is exact for any
+    P=P Lagrange expansion).  At P=2 this is a load-bearing
+    invariant -- the BJ limiter relies on it for conservation,
+    and the vertex weights are -1/20 (NEGATIVE) while the
+    edge-midpoint weights are 1/5; a regression that swapped to
+    a uniform 1/N_P nodal average would silently break
+    conservation but pass every existing rate gate.
+
+    P=2 spot check uses the closed-form: w[vertex] = -1/20,
+    w[edge_midpoint] = 1/5; vertices are nodes 0..3, edge
+    midpoints are nodes 4..9.  At P>=2 we don't require
+    positivity (vertex weight is negative even at P=2)."""
+    if len(re.node_weights) != np:
+        raise Error("node_weights length mismatch")
+    var wsum: Float64 = 0.0
+    for i in range(np):
+        wsum += re.node_weights[i]
+    var wsum_err = wsum - 1.0
+    var a_wsum_err = wsum_err if wsum_err >= 0.0 else -wsum_err
+    if a_wsum_err > 1.0e-12:
+        raise Error(
+            "P="
+            + String(P)
+            + ": node_weights sum "
+            + String(wsum)
+            + " != 1 (partition of unity broken)"
+        )
+    if P == 2:
+        var v_target = -1.0 / 20.0
+        var e_target = 1.0 / 5.0
+        for i in range(4):
+            var w = re.node_weights[i]
+            var err = w - v_target
+            var a_err = err if err >= 0.0 else -err
+            if a_err > 1.0e-12:
+                raise Error(
+                    "P=2 vertex "
+                    + String(i)
+                    + " weight "
+                    + String(w)
+                    + " expected -1/20"
+                )
+        for i in range(4, 10):
+            var w = re.node_weights[i]
+            var err = w - e_target
+            var a_err = err if err >= 0.0 else -err
+            if a_err > 1.0e-12:
+                raise Error(
+                    "P=2 edge-midpoint "
+                    + String(i)
+                    + " weight "
+                    + String(w)
+                    + " expected 1/5"
+                )
+    print("  node_weights partition-of-unity OK (sum=", wsum, ")")
+
+
 def main() raises:
     # Size sanity.
-    for P in [1, 2, 3, 4]:
+    for P in [1, 2, 3, 4, 5]:
         _test_sizes(P)
 
     # Operator sanity for each supported order.
@@ -160,23 +220,34 @@ def main() raises:
     _test_spd_mass_inverse(re1)
     _test_node_positions(re1, 1)
     _test_face_to_elem_coverage(re1)
+    _test_node_weights_partition(re1, 1, num_tet_nodes(1))
 
     print("P=2 reference element...")
     var re2 = ReferenceElement[2]()
     _test_spd_mass_inverse(re2)
     _test_node_positions(re2, 2)
     _test_face_to_elem_coverage(re2)
+    _test_node_weights_partition(re2, 2, num_tet_nodes(2))
 
     print("P=3 reference element...")
     var re3 = ReferenceElement[3]()
     _test_spd_mass_inverse(re3)
     _test_node_positions(re3, 3)
     _test_face_to_elem_coverage(re3)
+    _test_node_weights_partition(re3, 3, num_tet_nodes(3))
 
     print("P=4 reference element...")
     var re4 = ReferenceElement[4]()
     _test_spd_mass_inverse(re4)
     _test_node_positions(re4, 4)
     _test_face_to_elem_coverage(re4)
+    _test_node_weights_partition(re4, 4, num_tet_nodes(4))
+
+    print("P=5 reference element...")
+    var re5 = ReferenceElement[5]()
+    _test_spd_mass_inverse(re5)
+    _test_node_positions(re5, 5)
+    _test_face_to_elem_coverage(re5)
+    _test_node_weights_partition(re5, 5, num_tet_nodes(5))
 
     print("=== reference_element_test PASSED ===")
