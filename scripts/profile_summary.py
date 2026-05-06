@@ -150,7 +150,11 @@ def dominant_per_bench(rows: list[KernelRow]) -> list[KernelRow]:
     return list(by_bench.values())
 
 
-def print_table(rows: list[KernelRow], header: str) -> None:
+def print_table(
+    rows: list[KernelRow],
+    header: str,
+    total_ms_all_benches: float | None = None,
+) -> None:
     if not rows:
         print("(no rows)")
         return
@@ -160,10 +164,29 @@ def print_table(rows: list[KernelRow], header: str) -> None:
         f"{'total ms':>10}"
     )
     print(f"  {'-' * 48} {'-' * 14} {'-' * 9} {'-' * 7} {'-' * 10}")
+    shown_ms_sum = 0.0
     for r in rows:
+        shown_ms_sum += r.total_ms
         print(
             f"  {r.bench:<48} {kernel_kind(r.name):<14} "
             f"{r.avg_us:>9.1f} {r.instances:>7d} {r.total_ms:>10.1f}"
+        )
+    # Footer: total kernel time across the displayed benches, plus the
+    # full-suite total when only a slice is shown.  Useful for sizing
+    # how long `make profile-bench-all` will take to re-baseline.
+    if total_ms_all_benches is not None and total_ms_all_benches > shown_ms_sum + 0.5:
+        print(
+            f"  -> shown {len(rows)} benches: {shown_ms_sum / 1000:.2f} s "
+            f"of dominant-kernel time;"
+        )
+        print(
+            f"     full suite ({total_ms_all_benches / 1000:.2f} s "
+            f"across all benches dominant-kernel-only)"
+        )
+    else:
+        print(
+            f"  -> {len(rows)} benches, "
+            f"{shown_ms_sum / 1000:.2f} s of dominant-kernel time"
         )
 
 
@@ -229,7 +252,8 @@ def main() -> int:
     label += ", sorted by avg us/launch:"
 
     show = dom if args.all else dom[: args.top]
-    print_table(show, label)
+    total_ms_all = sum(r.total_ms for r in dom)
+    print_table(show, label, total_ms_all_benches=total_ms_all)
     return 0
 
 
