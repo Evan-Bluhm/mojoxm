@@ -346,7 +346,7 @@ def write_pvd(path: String, vtu_paths: List[String], times: List[Float64]) raise
 #                 this).
 # ----------------------------------------------------------------------
 
-def _u32_le_3d(
+def _u32_le(
     buf: UnsafePointer[UInt8, MutAnyOrigin], offset: Int, v: UInt32,
 ):
     buf[offset + 0] = UInt8(v & 0xFF)
@@ -458,7 +458,7 @@ def dump_vtu_3d_frame_multi(
     cur += hdr.byte_length()
 
     for i in range(n_fields):
-        _u32_le_3d(
+        _u32_le(
             rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur,
             UInt32(field_bytes),
         )
@@ -469,7 +469,7 @@ def dump_vtu_3d_frame_multi(
         cur += field_bytes
 
     # Points: copy bulk x/y/z directly (already 3-component Float32).
-    _u32_le_3d(
+    _u32_le(
         rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(points_bytes)
     )
     cur += 4
@@ -480,7 +480,7 @@ def dump_vtu_3d_frame_multi(
     )
     cur += points_bytes
 
-    _u32_le_3d(
+    _u32_le(
         rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(conn_bytes)
     )
     cur += 4
@@ -489,7 +489,7 @@ def dump_vtu_3d_frame_multi(
         conn_i32[k] = Int32(k)
     cur += conn_bytes
 
-    _u32_le_3d(
+    _u32_le(
         rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(off_bytes)
     )
     cur += 4
@@ -498,7 +498,7 @@ def dump_vtu_3d_frame_multi(
         off_i32[e] = Int32((e + 1) * nodes_per_elem)
     cur += off_bytes
 
-    _u32_le_3d(
+    _u32_le(
         rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(typ_bytes)
     )
     cur += 4
