@@ -111,6 +111,14 @@ def main() raises:
         nvtx=nvtx,
     )
 
+    # --- Check num_frames_written tracks the writes ---
+    if writer.num_frames_written() != 2:
+        raise Error(
+            "frame_writer_multi_test: num_frames_written="
+            + String(writer.num_frames_written())
+            + " after 2 write_frame_multi calls (expected 2)"
+        )
+
     var pvd_path = output_dir + "/solution.pvd"
     writer.finalize(pvd_path=pvd_path, nvtx=nvtx)
 
