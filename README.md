@@ -361,7 +361,9 @@ Nine reference drivers under `examples/`:
     `bench_mhd_brio_wu_3d` + `_p3` (canonical 1D MHD Riemann embedded
     in 3D, GLM + BJ limiter; the P=3 variant is the first analytic-
     Riemann-style 3D MHD shocked gate at NP=20 / NC=9, ~408 us per
-    rk_stage launch -- the heaviest 3D bench in the suite),
+    rk_stage launch -- previously the heaviest 3D bench, since
+    overtaken by `bench_mhd_alfven_3d_p5` at ~659 us / launch on
+    NC=9 NP=56),
     `bench_shallow_water_dam_break_3d` (closed-pool h_L=2 / h_R=1
     Riemann in a 3D box with BC_WALL on all 6 faces and the BJ
     limiter -- first 3D SW shocked-flow gate, mirrors the 2D
