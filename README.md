@@ -188,9 +188,12 @@ Nine reference drivers under `examples/`:
   `make bench-p5` (19 P=5 high-order gates, ~95s),
   `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~70s),
   `make bench-rates` (10 explicit convergence-rate gates, ~50s),
-  `make bench-bcs` (26 BC + source-term gates, ~95s).  Or
-  `make smoke` for a one-command `test-quick + bench-quick`
-  combined sanity check (~90s wall).
+  `make bench-bcs` (26 BC + source-term gates, ~95s).  When iterating
+  on a single physics module, the per-physics aggregators run only
+  the gates exercising that module: `make bench-mhd` (33), `bench-euler`
+  (33), `bench-maxwell` (23), `bench-sw` (14), `bench-advection` (12),
+  `bench-two-fluid` (6).  Or `make smoke` for a one-command
+  `test-quick + bench-quick` combined sanity check (~90s wall).
   * **2D smooth (31):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
