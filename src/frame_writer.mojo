@@ -237,6 +237,29 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
 # `num_owned_elements * num_tet_nodes(P)` per field in `field_data`,
 # names in the same order as fields, first field becomes the
 # PointData `Scalars` default.
+#
+# Example (pulled from examples/euler_vortex.mojo):
+#
+#   var f_rho  = List[Float64]()
+#   var f_p    = List[Float64]()
+#   var f_vmag = List[Float64]()
+#   # ... download components, compute derived fields, fill the lists ...
+#   var fields = List[List[Float64]]()
+#   fields.append(f_rho^)
+#   fields.append(f_p^)
+#   fields.append(f_vmag^)
+#   var names = List[String]()
+#   names.append(String("rho"))
+#   names.append(String("p"))
+#   names.append(String("|v|"))
+#   write_snapshot_3d_multi(
+#       solver=solver, field_names=names, field_data=fields,
+#       path=String("output/snapshot_t_final.vtu"), nvtx=nvtx,
+#   )
+#
+# Gate on np=1 in the calling driver (this helper does NOT) -- at
+# np>1 each rank would dump only its owned slab to the same path
+# and stomp on the other ranks' output.
 def write_snapshot_3d_multi[
     PhysT: Physics, P: Int = 2,
 ](
