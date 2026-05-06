@@ -168,8 +168,10 @@ Nine reference drivers under `examples/`:
   (8-test ~30s smoke covering host operator construction, 2D + 3D
   physics constant-state, the limiter pipelines, and the 3D multi-
   field VTU writer); `make test-limiter` (8 BJ-limiter unit tests
-  at P=2/3/4/5 in 2D + 3D); `make test-utils` (5 host-only utility
-  tests, ~3s cached).  The full inventory:
+  at P=2/3/4/5 in 2D + 3D); `make test-utils` (5 helper-module
+  tests covering perf-introspection, VTU multi-field, SSPRK3
+  stage-plan, MPI partition factorisation, Sod Riemann solver --
+  3 host-only + 2 small GPU-using; ~5s cached).  The full inventory:
   * 2D pipeline -- `local_mesh_2d_gpu_test` (upload round-trips +
     constant-state at P=1..5), `euler_2d_gpu_test` /
     `sw_2d_gpu_test` / `mhd_2d_gpu_test` / `mhd_glm_2d_gpu_test` /

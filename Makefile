@@ -260,7 +260,7 @@ help:
 	@echo '  make test-sod-exact-riemann'
 	@echo '                           Toro 2009 reference values for the analytic Sod solver'
 	@echo '  make test-quick          run 8 representative tests (~30s with cached binaries)'
-	@echo '  make test-utils          run 5 host-only utility tests (~5s; perf, VTU, ssprk3, partition, Sod)'
+	@echo '  make test-utils          run 5 helper-module tests (~5s; 3 host-only + 2 small GPU)'
 	@echo '  make test-limiter        run 8 BJ-limiter unit tests (2D + 3D, P=2/3/4/5; ~20s cached)'
 	@echo '  make test-all            run every test above (~3 min wall)'
 	@echo '  make test-klone          run MPI test on Klone (requires klone-run)'
@@ -507,14 +507,16 @@ profile-summary-test:
 	@scripts/profile_summary.py --self-test
 
 
-# Utility / host-only test aggregator -- 5 sub-second tests covering
-# the non-physics infrastructure (perf-introspection accounting,
-# multi-field VTU writer, SSPRK3 stage-plan helper, MPI partition
-# factorisation, analytic Sod Riemann solver).  No GPU work, no
-# step loop -- pure data plumbing + reference values.  Use when
-# touching any of the helper modules in `src/` to catch regressions
-# without paying for the 2D/3D physics test compile times (~5s wall
-# total cached, vs ~30s for test-quick).
+# Utility test aggregator -- 5 sub-second tests covering the non-
+# physics infrastructure (perf-introspection accounting, multi-field
+# VTU writer, SSPRK3 stage-plan helper, MPI partition factorisation,
+# analytic Sod Riemann solver).  Three are host-only (test-ssprk3,
+# test-partition, test-sod-exact-riemann); two are GPU-using but
+# very small (test-memory-report builds a 4^3 mesh and runs ~10
+# SSPRK3 steps; test-frame-writer-multi writes 2 frames at NP=10).
+# Use when touching any of the helper modules in `src/` to catch
+# regressions without paying for the 2D/3D physics-test compile
+# times (~5s wall total cached, vs ~30s for test-quick).
 test-utils: test-memory-report test-frame-writer-multi test-ssprk3 \
             test-partition test-sod-exact-riemann
 	@echo '=== test-utils: 5 utility tests PASSED ==='
