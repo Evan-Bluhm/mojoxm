@@ -26,8 +26,10 @@ from std.memory import alloc, memcpy, memset
 from src.local_mesh_2d import LocalMesh2D
 from src.reference_2d import num_tri_nodes_2d
 # Re-exported so the 2D example drivers can emit `.pvd` collections
-# through the same code path as 3D `FrameWriter.finalize`.
-from src.vtu import write_pvd as dump_pvd_collection
+# through the same code path as 3D `FrameWriter.finalize`.  `_u32_le`
+# packs a UInt32 into 4 little-endian bytes -- shared with the 3D
+# VTU writer (used to be a duplicate 5-line copy here).
+from src.vtu import write_pvd as dump_pvd_collection, _u32_le
 
 
 comptime VTK_TRIANGLE = 5
@@ -41,13 +43,6 @@ def _cell_type_for(nodes_per_elem: Int) -> Int:
     if nodes_per_elem == 6:
         return VTK_QUADRATIC_TRIANGLE
     return VTK_LAGRANGE_TRIANGLE
-
-
-def _u32_le(buf: UnsafePointer[UInt8, MutAnyOrigin], offset: Int, v: UInt32):
-    buf[offset + 0] = UInt8(v & 0xFF)
-    buf[offset + 1] = UInt8((v >> 8) & 0xFF)
-    buf[offset + 2] = UInt8((v >> 16) & 0xFF)
-    buf[offset + 3] = UInt8((v >> 24) & 0xFF)
 
 
 def dump_vtu_2d_frame[P: Int](
