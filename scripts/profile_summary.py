@@ -409,6 +409,14 @@ def main() -> int:
         ),
     )
     ap.add_argument(
+        "--markdown",
+        action="store_true",
+        help=(
+            "Emit a markdown table instead of the human-readable text "
+            "table -- useful for pasting into PRs / issues / docs."
+        ),
+    )
+    ap.add_argument(
         "--show-cv",
         action="store_true",
         help=(
@@ -505,6 +513,16 @@ def main() -> int:
                 share = 100.0 * t_ms / suite_total_ms if suite_total_ms > 0 else 0.0
                 print(f"{phys},{n_benches},{n_inst},{t_ms:.3f},{share:.2f}")
             return 0
+        if args.markdown:
+            print("| physics | benches | launches | total ms | share |")
+            print("|---|---:|---:|---:|---:|")
+            for phys, n_benches, n_inst, t_ms in groups:
+                share = 100.0 * t_ms / suite_total_ms if suite_total_ms > 0 else 0.0
+                print(
+                    f"| {phys} | {n_benches} | {n_inst} | "
+                    f"{t_ms:.1f} | {share:.1f}% |"
+                )
+            return 0
         # Different label semantics in --by-physics: --top is irrelevant
         # since we're aggregating, and the rows are sorted by group total
         # not the per-bench --sort key.
@@ -538,6 +556,23 @@ def main() -> int:
             print(
                 f"{r.bench},{kernel_kind(r.name)},{r.avg_us:.3f},"
                 f"{r.instances},{r.total_ms:.3f},{r.cv_pct:.3f}"
+            )
+        return 0
+    if args.markdown:
+        cv_col = " CV % |" if args.show_cv else ""
+        cv_sep = " ---: |" if args.show_cv else ""
+        print(
+            f"| bench | kernel | avg us | inst | total ms |{cv_col}"
+        )
+        print(
+            f"|---|---|---:|---:|---:|{cv_sep}"
+        )
+        for r in show:
+            cv_cell = f" {r.cv_pct:.1f} |" if args.show_cv else ""
+            print(
+                f"| `{r.bench}` | {kernel_kind(r.name)} | "
+                f"{r.avg_us:.1f} | {r.instances} | "
+                f"{r.total_ms:.1f} |{cv_cell}"
             )
         return 0
     total_ms_all = sum(r.total_ms for r in dom)
