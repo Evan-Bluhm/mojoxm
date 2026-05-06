@@ -103,7 +103,7 @@ Nine reference drivers under `examples/`:
   vol+lift+RK kernel) orchestrated by `<name>_rk_stage_2d[P]`.
   The Shu-Osher 3-stage SSPRK3 buffer-routing dance is factored
   into `src/ssprk3.ssprk3_stage_plans` -- a non-templated helper
-  shared by all 10 example drivers + 56 benches; one compiled
+  shared by all 10 example drivers + 60 benches (every 2D bench); one compiled
   binary regardless of how many physics modules consume it.
   The Venkat-smoothed Barth-Jespersen slope limiter lives in its own
   `local_mesh_2d_gpu_limiter.mojo`.  The parent `src/local_mesh_2d_gpu.mojo`
