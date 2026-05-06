@@ -197,7 +197,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -214,6 +214,9 @@ help:
 	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
 	@echo '  make bench-mhd           run 33 MHD-focused gates (Alfven + GLM rates + Brio-Wu + BCs, ~110s)'
 	@echo '  make bench-euler         run 33 Euler-focused gates (vortex + smooth + Sod + hydrostatic + BCs, ~110s)'
+	@echo '  make bench-maxwell       run 23 Maxwell-focused gates (cavity + plane wave + J/M + BCs, ~80s)'
+	@echo '  make bench-sw            run 14 SW-focused gates (wave + dam-break + inflow, ~50s)'
+	@echo '  make bench-advection     run 12 advection-focused gates (translation + BCs, ~25s)'
 	@echo '  make bench-all           build + run every analytic-solution gate (121 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -861,6 +864,60 @@ bench-euler: \
 		bench-euler-inflow-2d bench-euler-inflow-3d \
 		bench-euler-flux-coverage-3d
 	@echo '=== bench-euler: 33 Euler-focused gates PASSED ==='
+
+
+# Maxwell-focused regression suite -- 23 gates covering every Maxwell
+# bench in the suite: cavity (2D + 3D), plane wave (2D + 3D, P=2-5),
+# TE plane wave (2D), uniform-J / uniform-M sources (2D + 3D, P=2/3),
+# inflow + outflow (2D + 3D).  Run when iterating on Maxwell internals:
+# linear-flux face kernel, J/M source coupling, BC dispatch.  Run-time
+# ~80s w/ cached binaries.
+bench-maxwell: \
+		bench-maxwell-cavity-2d bench-maxwell-cavity-3d \
+		bench-maxwell-plane-wave-2d bench-maxwell-plane-wave-2d-p3 \
+		bench-maxwell-plane-wave-2d-p4 bench-maxwell-plane-wave-2d-p5 \
+		bench-maxwell-plane-wave-3d bench-maxwell-plane-wave-3d-p3 \
+		bench-maxwell-plane-wave-3d-p4 bench-maxwell-plane-wave-3d-p5 \
+		bench-maxwell-te-plane-wave-2d \
+		bench-maxwell-uniform-j-2d bench-maxwell-uniform-j-2d-p3 \
+		bench-maxwell-uniform-j-3d bench-maxwell-uniform-j-3d-p3 \
+		bench-maxwell-uniform-m-2d bench-maxwell-uniform-m-2d-p3 \
+		bench-maxwell-uniform-m-3d bench-maxwell-uniform-m-3d-p3 \
+		bench-maxwell-inflow-2d bench-maxwell-inflow-3d \
+		bench-maxwell-outflow-2d bench-maxwell-outflow-3d
+	@echo '=== bench-maxwell: 23 Maxwell-focused gates PASSED ==='
+
+
+# ShallowWater-focused regression suite -- 14 gates covering every
+# SW bench: linear wave (2D + 3D, P=2-5 + Rusanov flux variant for
+# 2D), dam-break shocks (2D + 3D), inflow BCs (2D HLL + 2D Rusanov +
+# 3D).  Run when iterating on SW internals: HLL / Rusanov face flux,
+# wet/dry handling, inflow ghost.  Run-time ~50s w/ cached binaries.
+bench-sw: \
+		bench-shallow-water-wave-2d bench-shallow-water-wave-2d-p3 \
+		bench-shallow-water-wave-2d-p4 bench-shallow-water-wave-2d-p5 \
+		bench-shallow-water-wave-2d-rusanov \
+		bench-shallow-water-wave-3d bench-shallow-water-wave-3d-p3 \
+		bench-shallow-water-wave-3d-p4 bench-shallow-water-wave-3d-p5 \
+		bench-shallow-water-dam-break-2d bench-shallow-water-dam-break-3d \
+		bench-shallow-water-inflow-2d bench-shallow-water-inflow-2d-rusanov \
+		bench-shallow-water-inflow-3d
+	@echo '=== bench-sw: 14 ShallowWater-focused gates PASSED ==='
+
+
+# Advection-focused regression suite -- 12 gates covering scalar
+# advection at full P-parity (2D + 3D, P=2/3/4/5) plus inflow +
+# outflow BCs in both dimensions.  Run when iterating on the linear
+# upwind kernel or BC ghost handling on the simplest physics path
+# (NC=1).  Run-time ~25s w/ cached binaries.
+bench-advection: \
+		bench-advection-translation-2d bench-advection-translation-2d-p3 \
+		bench-advection-translation-2d-p4 bench-advection-translation-2d-p5 \
+		bench-advection-3d bench-advection-3d-p3 \
+		bench-advection-3d-p4 bench-advection-3d-p5 \
+		bench-advection-outflow-2d bench-advection-inflow-2d \
+		bench-advection-outflow-3d bench-advection-inflow-3d
+	@echo '=== bench-advection: 12 Advection-focused gates PASSED ==='
 
 
 # P=5 P-parity sweep -- 19 gates at the largest comptime config

@@ -1,0 +1,14 @@
+{
+    // Make `from src.foo import ...` resolve in benchmarks/ and examples/.
+    // This is the LSP equivalent of the `-I .` flag in the build commands
+    // (see Makefile -- every `mojo build` line passes `-I .`).
+    //
+    // NOTE: the Mojo extension does NOT expand ${workspaceFolder} in this
+    // setting -- entries are passed verbatim to the LSP as `-I <entry>`.
+    // We rely on the LSP being launched with cwd = workspace root, in
+    // which case `.` resolves to the right place.  If that ever stops
+    // working, fall back to an absolute path.
+    "mojo.lsp.includeDirs": [
+        "."
+    ]
+}
