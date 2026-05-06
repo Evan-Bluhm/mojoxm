@@ -16,6 +16,11 @@
 # Runs Rusanov and HLLC back-to-back.  The same IC should come back
 # bit-identical from both since the state is constant and the jump
 # terms vanish either way.
+#
+# Parameterised over P in {2, 3, 4, 5} so a P-specific regression in
+# the comptime-templated euler_rk_stage_kernel_2d (e.g. a shared-mem
+# index that broke at NP=15 / NP=21 but happened to work at NP=6) is
+# caught at test-quick latency rather than only by bench-p5.
 # ======================================================================
 
 from std.sys import has_accelerator
@@ -79,17 +84,8 @@ def _check_constant(
         )
 
 
-def main() raises:
-    comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var size = mpi.world_size()
-    if size > 1:
-        mpi.finalize()
-        print("euler_2d_gpu_test: runs at np=1 only")
-        return
-    print("euler_2d_gpu_test (constant-state preservation, Rusanov + HLLC)")
-
-    comptime P = 2
+def check[P: Int]() raises:
+    print("  P=", P)
     comptime Nx = 5
     comptime Ny = 4
     comptime NP_p = num_tri_nodes_2d(P)
@@ -276,5 +272,22 @@ def main() raises:
         E0,
     )
 
+
+def main() raises:
+    comptime assert has_accelerator(), "Requires GPU"
+    mpi.init()
+    var size = mpi.world_size()
+    if size > 1:
+        mpi.finalize()
+        print("euler_2d_gpu_test: runs at np=1 only")
+        return
+    print(
+        "euler_2d_gpu_test (constant-state preservation, Rusanov + HLLC,"
+        " P=2..5)"
+    )
+    check[2]()
+    check[3]()
+    check[4]()
+    check[5]()
     print("=== euler_2d_gpu_test PASSED ===")
     mpi.finalize()

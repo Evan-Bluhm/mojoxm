@@ -6,6 +6,11 @@
 # state (h=2, u=0.4, v=0.2), the volume divergence cancels exactly
 # and face fluxes cancel pairwise -- one SSPRK3 step must leave the
 # state unchanged to Float32 roundoff.  Covers both Rusanov and HLL.
+#
+# Parameterised over P in {2, 3, 4, 5} so a P-specific regression in
+# the comptime-templated kernels (e.g. a shared-mem index that broke
+# at NP=15 / NP=21 but happened to work at NP=6) gets caught at
+# test-quick latency rather than only by bench-p5.
 # ======================================================================
 
 from std.sys import has_accelerator
@@ -59,17 +64,8 @@ def _check_constant(
         )
 
 
-def main() raises:
-    comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var size = mpi.world_size()
-    if size > 1:
-        mpi.finalize()
-        print("sw_2d_gpu_test: runs at np=1 only")
-        return
-    print("sw_2d_gpu_test (constant-state preservation, Rusanov + HLL)")
-
-    comptime P = 2
+def check[P: Int]() raises:
+    print("  P=", P)
     comptime Nx = 5
     comptime Ny = 4
     comptime NP_p = num_tri_nodes_2d(P)
@@ -226,5 +222,19 @@ def main() raises:
     ctx.synchronize()
     _check_constant(String("SW HLL"), hptr, n_q, h0, hu0, hv0)
 
+
+def main() raises:
+    comptime assert has_accelerator(), "Requires GPU"
+    mpi.init()
+    var size = mpi.world_size()
+    if size > 1:
+        mpi.finalize()
+        print("sw_2d_gpu_test: runs at np=1 only")
+        return
+    print("sw_2d_gpu_test (constant-state preservation, Rusanov + HLL, P=2..5)")
+    check[2]()
+    check[3]()
+    check[4]()
+    check[5]()
     print("=== sw_2d_gpu_test PASSED ===")
     mpi.finalize()

@@ -7,10 +7,14 @@
 # spatial derivative vanishes), so q must equal q_IC to Float32
 # roundoff after one step.
 #
-# Catches sign / direction bugs in the new maxwell_face_flux_kernel_2d
-# and maxwell_vol_lift_combine_rk_kernel_2d that would inject spurious
+# Catches sign / direction bugs in maxwell_face_flux_kernel_2d and
+# maxwell_vol_lift_combine_rk_kernel_2d that would inject spurious
 # wave activity from a uniform field (e.g. a misrouted curl term or a
 # normal-direction sign flip on the Faraday equation).
+#
+# Parameterised over P in {2, 3, 4, 5} to catch a P-specific
+# regression in the comptime-templated kernels (e.g. a shared-mem
+# index that broke at NP=15 / NP=21 but happened to work at NP=6).
 # ======================================================================
 
 from std.sys import has_accelerator
@@ -32,17 +36,8 @@ def _abs32(x: Float32) -> Float32:
     return x if x >= Float32(0.0) else -x
 
 
-def main() raises:
-    comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var size = mpi.world_size()
-    if size > 1:
-        mpi.finalize()
-        print("maxwell_2d_gpu_test: runs at np=1 only")
-        return
-    print("maxwell_2d_gpu_test (constant-state preservation)")
-
-    comptime P = 2
+def check[P: Int]() raises:
+    print("  P=", P)
     comptime Nx = 5
     comptime Ny = 4
     comptime NP_p = num_tri_nodes_2d(P)
@@ -156,13 +151,29 @@ def main() raises:
             var err = _abs32(v - ic[c_idx])
             if err > max_err:
                 max_err = err
-    print("  Maxwell max |q - q_IC| =", max_err)
+    print("    Maxwell max |q - q_IC| =", max_err)
     if max_err > Float32(1.0e-4):
         raise Error(
-            "Maxwell: constant state not preserved (max err "
+            "Maxwell P="
+            + String(P)
+            + ": constant state not preserved (max err "
             + String(max_err)
             + ")"
         )
 
+
+def main() raises:
+    comptime assert has_accelerator(), "Requires GPU"
+    mpi.init()
+    var size = mpi.world_size()
+    if size > 1:
+        mpi.finalize()
+        print("maxwell_2d_gpu_test: runs at np=1 only")
+        return
+    print("maxwell_2d_gpu_test (constant-state preservation, P=2..5)")
+    check[2]()
+    check[3]()
+    check[4]()
+    check[5]()
     print("=== maxwell_2d_gpu_test PASSED ===")
     mpi.finalize()

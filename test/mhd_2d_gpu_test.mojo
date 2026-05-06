@@ -6,6 +6,11 @@
 # (rho, u, v, Bx, By, E) state, the MHD volume flux divergence cancels
 # exactly and face fluxes cancel pairwise -- one SSPRK3 step must
 # leave the state unchanged to Float32 roundoff.
+#
+# Parameterised over P in {2, 3, 4, 5} so a P-specific regression in
+# the comptime-templated kernels (e.g. a shared-mem index that broke
+# at NP=15 / NP=21 but happened to work at NP=6) gets caught at
+# test-quick latency rather than only by bench-p5.
 # ======================================================================
 
 from std.sys import has_accelerator
@@ -27,17 +32,8 @@ def _abs32(x: Float32) -> Float32:
     return x if x >= Float32(0.0) else -x
 
 
-def main() raises:
-    comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var size = mpi.world_size()
-    if size > 1:
-        mpi.finalize()
-        print("mhd_2d_gpu_test: runs at np=1 only")
-        return
-    print("mhd_2d_gpu_test (constant-state preservation)")
-
-    comptime P = 2
+def check[P: Int]() raises:
+    print("  P=", P)
     comptime Nx = 5
     comptime Ny = 4
     comptime NP_p = num_tri_nodes_2d(P)
@@ -167,13 +163,29 @@ def main() raises:
             local_max = err5
         if local_max > max_err:
             max_err = local_max
-    print("  MHD Rusanov max |q - q_IC| =", max_err)
+    print("    MHD Rusanov max |q - q_IC| =", max_err)
     if max_err > Float32(1.0e-4):
         raise Error(
-            "MHD: constant state not preserved (max err "
+            "MHD P="
+            + String(P)
+            + ": constant state not preserved (max err "
             + String(max_err)
             + ")"
         )
 
+
+def main() raises:
+    comptime assert has_accelerator(), "Requires GPU"
+    mpi.init()
+    var size = mpi.world_size()
+    if size > 1:
+        mpi.finalize()
+        print("mhd_2d_gpu_test: runs at np=1 only")
+        return
+    print("mhd_2d_gpu_test (constant-state preservation, P=2..5)")
+    check[2]()
+    check[3]()
+    check[4]()
+    check[5]()
     print("=== mhd_2d_gpu_test PASSED ===")
     mpi.finalize()
