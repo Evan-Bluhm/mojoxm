@@ -109,8 +109,10 @@ Nine reference drivers under `examples/`:
   `local_mesh_2d_gpu_limiter.mojo`.  The parent `src/local_mesh_2d_gpu.mojo`
   holds the `LocalMesh2DGpu` struct + generic NC-templated helpers
   (cell-avg / cell-mean / rk-update).  Five physics
-  (Advection / Euler / ShallowWater / IdealMHD / Maxwell), full BC menu
-  (periodic / wall / outflow / inflow), two Euler Riemann solvers
+  (Advection / Euler / ShallowWater / IdealMHD / Maxwell), with the
+  full periodic / wall / outflow / inflow BC menu in 2D Euler / SW /
+  Maxwell and a 2D MHD subset (interior + wall + zero-gradient
+  fallback; BC_INFLOW is 3D-only); two Euler Riemann solvers
   (Rusanov and HLLC) and two SW Riemann solvers (Rusanov and HLL), a
   Venkat-smoothed Barth-Jespersen cell-level limiter
   (`bj_limit_full_2d`) for shock stability.  Ten end-to-end
