@@ -62,6 +62,7 @@ from src.nvtx import NvtxContext
 from src.frame_writer import FrameWriter
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
 from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.vtu import dump_vtu_3d_frame_multi
 
 # Mesh: long in x, short in y/z so the cells stay roughly cubic.
 # dx = LX/NX = 1/200 = 0.005; dy = dz = LY/NY = 0.04/8 = 0.005.
@@ -249,6 +250,63 @@ def main() raises:
     )
 
     writer.finalize("output/solution.pvd", nvtx)
+
+    # Final-state multi-field snapshot (rho + p + |v|) for richer
+    # ParaView inspection.  Independent of the per-frame async pipeline.
+    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
+    if nprocs == 1:
+        nvtx.push_range("snapshot_t_final")
+        var n_owned_dof = solver.num_owned_elements * N_P
+        var snap_rho = List[Float32]()
+        var snap_rhou = List[Float32]()
+        var snap_rhov = List[Float32]()
+        var snap_rhow = List[Float32]()
+        var snap_E = List[Float32]()
+        for _ in range(n_owned_dof):
+            snap_rho.append(Float32(0.0))
+            snap_rhou.append(Float32(0.0))
+            snap_rhov.append(Float32(0.0))
+            snap_rhow.append(Float32(0.0))
+            snap_E.append(Float32(0.0))
+        solver.download_owned_component(0, snap_rho,  nvtx)
+        solver.download_owned_component(1, snap_rhou, nvtx)
+        solver.download_owned_component(2, snap_rhov, nvtx)
+        solver.download_owned_component(3, snap_rhow, nvtx)
+        solver.download_owned_component(4, snap_E,    nvtx)
+        var f_rho  = List[Float64]()
+        var f_p    = List[Float64]()
+        var f_vmag = List[Float64]()
+        for k in range(n_owned_dof):
+            var rho = snap_rho[k]
+            var u = snap_rhou[k] / rho
+            var v = snap_rhov[k] / rho
+            var w = snap_rhow[k] / rho
+            var ke = Float32(0.5) * rho * (u*u + v*v + w*w)
+            var p = (GAMMA - Float32(1.0)) * (snap_E[k] - ke)
+            f_rho.append(Float64(rho))
+            f_p.append(Float64(p))
+            f_vmag.append(Float64(sqrt(u*u + v*v + w*w)))
+        var fields = List[List[Float64]]()
+        fields.append(f_rho^)
+        fields.append(f_p^)
+        fields.append(f_vmag^)
+        var names = List[String]()
+        names.append(String("rho"))
+        names.append(String("p"))
+        names.append(String("|v|"))
+        dump_vtu_3d_frame_multi(
+            num_elements=solver.num_owned_elements,
+            nodes_per_elem=N_P,
+            elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                solver.mesh.owned_node_xyz_f32_ptr
+            ),
+            field_names=names,
+            field_data=fields,
+            path=String("output/snapshot_t_final.vtu"),
+        )
+        nvtx.pop_range()
+        if rank == 0:
+            print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
 
     if rank == 0:
         print("  final sync:", result.final_sync_sec, "s")
