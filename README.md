@@ -66,8 +66,9 @@ Nine reference drivers under `examples/`:
   Kokkos-style categorised device-memory breakdown; `Solver.bench_
   step_loop()` runs a sync'd warmup + measurement loop and returns a
   `ThroughputReport` with per-step wall time, DOF/s, and a state-
-  bandwidth lower bound.  Every 3D example driver prints both at
-  startup / shutdown; see [Performance](#performance) for a sample.
+  bandwidth lower bound.  Every 2D-GPU and 3D example driver prints
+  both at startup / shutdown; see [Performance](#performance) for a
+  sample.
 - **Animated dashboard**: `scripts/animate_dashboard.py` reads the VTU
   frames + diagnostics CSV and emits a 2×2 animated GIF (density
   field + auto-grouped time-series panels). Lazy frame loader scales
@@ -629,10 +630,11 @@ pixi run python scripts/animate_dashboard.py
 
 ### Built-in perf introspection
 
-Every 3D example driver prints two reports per run -- a WARPXM-Kokkos-
-style device-memory table at startup and a sync'd throughput summary
-at the end -- so users can see where GPU memory goes and how fast the
-compute kernels are running without reaching for an external profiler.
+Every 2D-GPU and 3D example driver prints two reports per run -- a
+WARPXM-Kokkos-style device-memory table at startup and a sync'd
+throughput summary at the end -- so users can see where GPU memory
+goes and how fast the compute kernels are running without reaching
+for an external profiler.
 
 Sample output from `./euler_vortex` at 32³ (RTX 3090):
 
