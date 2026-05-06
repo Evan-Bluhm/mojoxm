@@ -170,17 +170,18 @@ Nine reference drivers under `examples/`:
   at P=2/3/4/5 in 2D + 3D); `make test-utils` (5 host-only utility
   tests, ~3s cached).  The full inventory:
   * 2D pipeline -- `local_mesh_2d_gpu_test` (upload round-trips +
-    constant-state at P=1/2/3), `euler_2d_gpu_test` /
+    constant-state at P=1..5), `euler_2d_gpu_test` /
     `sw_2d_gpu_test` / `mhd_2d_gpu_test` / `mhd_glm_2d_gpu_test` /
     `maxwell_2d_gpu_test` (constant-state per physics, including the
-    NC=7 GLM-MHD path), `limiter_2d_gpu_test` + `_p3` (smooth passthrough +
-    within-cell spike monotonicity).
+    NC=7 GLM-MHD path), `limiter_2d_gpu_test` + `_p3` + `_p4` + `_p5`
+    (smooth passthrough + within-cell spike monotonicity at every
+    supported order).
   * 3D pipeline -- `euler_3d_test` / `maxwell_3d_test` /
     `sw_3d_test` / `mhd_3d_test` / `two_fluid_3d_test` (constant-
     state preservation per physics through Solver[PhysT, P]),
-    `limiter_3d_test` + `_p3` (BJ slope-limiter cell-mean conservation
-    invariant, drift = 0 exactly), `p3_smoke_test` (Mesh[3] +
-    Solver[Advection, 3] round-trip).
+    `limiter_3d_test` + `_p3` + `_p4` + `_p5` (BJ slope-limiter cell-
+    mean conservation invariant, drift = 0 exactly at every supported
+    order), `p3_smoke_test` (Mesh[3] + Solver[Advection, 3] round-trip).
   * MPI -- `mpi_advection_test` / `mpi_bc_test` (np=1 vs np=4
     bit-identical periodic / non-periodic).
   * Misc -- `reference_element_test`, `reference_element_2d_test`,
