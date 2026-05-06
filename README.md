@@ -173,13 +173,13 @@ Nine reference drivers under `examples/`:
   * 2D pipeline -- `local_mesh_2d_gpu_test` (upload round-trips +
     constant-state at P=1..5), `euler_2d_gpu_test` /
     `sw_2d_gpu_test` / `mhd_2d_gpu_test` / `mhd_glm_2d_gpu_test` /
-    `maxwell_2d_gpu_test` (constant-state per physics, including the
-    NC=7 GLM-MHD path), `limiter_2d_gpu_test` + `_p3` + `_p4` + `_p5`
-    (smooth passthrough + within-cell spike monotonicity at every
-    supported order).
+    `maxwell_2d_gpu_test` (constant-state per physics, P=2..5,
+    including the NC=7 GLM-MHD path), `limiter_2d_gpu_test` + `_p3`
+    + `_p4` + `_p5` (smooth passthrough + within-cell spike
+    monotonicity at every supported order).
   * 3D pipeline -- `euler_3d_test` / `maxwell_3d_test` /
     `sw_3d_test` / `mhd_3d_test` / `two_fluid_3d_test` (constant-
-    state preservation per physics through Solver[PhysT, P]),
+    state preservation per physics through Solver[PhysT, P], P=2..5),
     `limiter_3d_test` + `_p3` + `_p4` + `_p5` (BJ slope-limiter cell-
     mean conservation invariant, drift = 0 exactly at every supported
     order), `p3_smoke_test` (Mesh[3] + Solver[Advection, 3] round-trip).
