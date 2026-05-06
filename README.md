@@ -1119,6 +1119,11 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
   Conservation Laws", ICASE 97-65.
 - **Roe / HLLE / HLLEC**: LeVeque, *Finite Volume Methods for
   Hyperbolic Problems*, Cambridge 2002.
+- **Riemann problems / analytic Sod solver**: Toro,
+  *Riemann Solvers and Numerical Methods for Fluid Dynamics*
+  (3rd ed.), Springer 2009.  Sec 4.3 / Table 4.1 + 4.3 give the
+  canonical Sod (Test 1) and strong-shock (Test 3) reference
+  values gated by `test/sod_exact_riemann_test.mojo`.
 - **WARPXM**: the reference implementation whose `advection_t` and
   `euler_t` numerical formulas were the starting point here.
 - **VTK appended binary format**: Kitware's VTK File Formats
