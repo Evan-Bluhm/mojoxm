@@ -293,6 +293,7 @@ help:
 	@echo '  make profile-bench-<name>'
 	@echo '                           profile one bench under nsys, save kernel summary'
 	@echo '                           to benchmarks/profile_reports/<name>.kern.txt'
+	@echo '  make profile-bench-quick refresh profiles for the 13 bench-quick gates (~10-15 min)'
 	@echo '  make profile-bench-all   profile every bench (slow; for baselining)'
 	@echo '  make profile-summary     rank every cached profile by us/launch'
 	@echo '                           (also: scripts/profile_summary.py --top N / --filter <substr>)'
@@ -1322,6 +1323,30 @@ profile-bench-two-fluid-walls-3d-p4: bench_two_fluid_walls_3d_p4
 	@bin=bench_two_fluid_walls_3d_p4; $(PROFILE_BIN)
 profile-bench-two-fluid-walls-3d-p5: bench_two_fluid_walls_3d_p5
 	@bin=bench_two_fluid_walls_3d_p5; $(PROFILE_BIN)
+
+# Profile-bench-quick: refresh the kern.txt baselines for just the
+# 13 bench-quick gates -- one representative bench per physics per
+# dim + the 2D limited Sod gate.  Use after a kernel-level change
+# to refresh the most-used profile baselines without paying for the
+# full 121-bench `profile-bench-all` sweep.  Run-time scales as
+# 13 * (~30-60 s nsys-profile overhead per bench), so ~10-15 min
+# wall vs ~90 min for the full all-bench sweep.
+profile-bench-quick: \
+		profile-bench-advection-translation-2d \
+		profile-bench-euler-vortex-2d \
+		profile-bench-euler-sod-2d \
+		profile-bench-euler-sod-limited-2d \
+		profile-bench-shallow-water-wave-2d \
+		profile-bench-mhd-alfven-2d \
+		profile-bench-maxwell-cavity-2d \
+		profile-bench-advection-3d \
+		profile-bench-euler-sod-3d \
+		profile-bench-shallow-water-wave-3d \
+		profile-bench-mhd-alfven-3d \
+		profile-bench-maxwell-cavity-3d \
+		profile-bench-two-fluid-walls-3d
+	@echo '=== profile-bench-quick: 13 representative profiles refreshed ==='
+
 
 # Aggregate profile target -- captures kernel summaries for every
 # bench under nsys.  Same per-physics grouping as `bench-all`.
