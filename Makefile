@@ -43,6 +43,12 @@ SHELL := /bin/bash
 MOJO        ?= pixi run mojo
 MPICC       ?= mpicc
 
+# Python invocation -- defaults to `pixi run python` so the helper
+# scripts (validate_vtu.py, profile_summary.py, animate_*.py) pick
+# up the pixi-managed env with meshio + numpy + matplotlib already
+# installed.  Override PYTHON= for a specific interpreter.
+PYTHON      ?= pixi run python
+
 # Default MPI_LIBDIR picks up the system convention for each platform:
 #   * Linux (WSL2, Klone): Debian/Ubuntu multiarch path for OpenMPI.
 #   * macOS: Homebrew's `open-mpi` cellar under /opt/homebrew on Apple
@@ -397,14 +403,17 @@ test-vtu-2d-multi: vtu_2d_multi_test
 test-vtu-3d-multi: vtu_3d_multi_test
 	./vtu_3d_multi_test
 
-# meshio-roundtrip sanity check on the P=2..5 VTU fixtures produced
-# by vtu_3d_multi_test (which writes to /tmp/vtu_3d_multi_test_pN.vtu
-# at each P).  Catches regressions where the binary VTU format breaks
-# meshio's parser -- the in-Mojo XML-string check in vtu_3d_multi_test
-# would not see this.  Depends on test-vtu-3d-multi to produce the
-# fixtures first.
+# meshio-roundtrip + VTK_LAGRANGE_TETRAHEDRON spec validation on the
+# P=2..5 VTU fixtures produced by vtu_3d_multi_test (which writes to
+# /tmp/vtu_3d_multi_test_pN.vtu at each P).  Catches regressions
+# where the binary VTU format breaks meshio's parser, or where the
+# writer's node positions drift off the equispaced-Lagrange spec.
+# The in-Mojo XML-string check in vtu_3d_multi_test would not see
+# either failure.  Depends on test-vtu-3d-multi to produce the
+# fixtures first.  Goes through `pixi run python` so meshio + numpy
+# come from the pixi-managed env (matches README convention).
 test-vtu-meshio: test-vtu-3d-multi
-	@scripts/validate_vtu.py \
+	@$(PYTHON) scripts/validate_vtu.py \
 		/tmp/vtu_3d_multi_test_p2.vtu \
 		/tmp/vtu_3d_multi_test_p3.vtu \
 		/tmp/vtu_3d_multi_test_p4.vtu \
