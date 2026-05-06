@@ -250,7 +250,7 @@ help:
 	@echo '  make test-klone          run MPI test on Klone (requires klone-run)'
 	@echo ''
 	@echo 'Bench targets (analytic-solution gates):'
-	@echo '  make bench-quick         smoke-test one bench per physics per dim + limiter (~60s)'
+	@echo '  make bench-quick         smoke-test one bench per physics per dim + limiter (13 gates, ~65s)'
 	@echo '  make bench-p5            P=5 P-parity sweep -- 12 gates at NP=21 (2D) / NP=56 (3D)'
 	@echo '                           across all 5 smooth physics + limited shocked Sod (~80s);'
 	@echo '                           the largest comptime configs the suite covers, where high-P'
