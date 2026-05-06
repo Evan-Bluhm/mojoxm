@@ -853,7 +853,7 @@ make cpu           # just the MPI drivers that don't touch the GPU
 make <driver>      # e.g. `make mpi_hello`
 make test          # periodic MPI correctness: np=1 vs np=4 (bit-identical)
 make test-bc       # non-periodic BC correctness: np=1 vs np=4 (bit-identical)
-make test-reference  # host-side reference-element unit test (P=1..4)
+make test-reference  # host-side reference-element unit test (P=1..5)
 make test-klone    # test dispatched through scripts/klone-run on the cluster
 make clean
 make help

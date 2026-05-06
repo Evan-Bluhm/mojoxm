@@ -357,9 +357,10 @@ test-bc: $(TEST_DRIVERS)
 
 # Host-side reference-element unit test: validates the 3D Lagrange
 # basis construction (Vandermonde + analytic integration) at orders
-# P=1..4 via SPD mass matrix + node-position + face-to-element map
-# checks.  Host math only, but the same tables are uploaded to the
-# GPU by ReferenceElement[P].
+# P=1..5 via SPD mass matrix + node-position + face-to-element map
+# + node_weights partition-of-unity (with P=2 closed-form spot
+# check) checks.  Host math only, but the same tables are uploaded
+# to the GPU by ReferenceElement[P].
 test-reference:
 	$(MOJO) run -I . test/reference_element_test.mojo
 
