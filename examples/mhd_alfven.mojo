@@ -42,6 +42,7 @@ from src.solver import Solver
 from src.mhd import IdealMHD
 from src.nvtx import NvtxContext
 from src.frame_writer import FrameWriter
+from src.vtu import dump_vtu_3d_frame_multi
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
 from src.diagnostics import DiagnosticsWriter, NamedComponent
 
@@ -226,6 +227,62 @@ def main() raises:
     )
 
     writer.finalize("output/solution.pvd", nvtx)
+
+    # Final-state multi-field snapshot for richer ParaView inspection
+    # (the per-frame async pipeline above writes one psi field per
+    # frame for performance).  Emits By + |B| + psi at t=T_FINAL --
+    # By is the dominant Alfven-wave perturbation, |B| shows the
+    # magnetic-field magnitude, and psi exposes any GLM cleaning
+    # residual.  Gated on np=1 since each rank dumps only its
+    # owned slab.
+    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
+    if nprocs == 1:
+        nvtx.push_range("snapshot_t_final")
+        var n_owned_dof = solver.num_owned_elements * N_P
+        var snap_bx  = List[Float32]()
+        var snap_by  = List[Float32]()
+        var snap_bz  = List[Float32]()
+        var snap_psi = List[Float32]()
+        for _ in range(n_owned_dof):
+            snap_bx.append(Float32(0.0))
+            snap_by.append(Float32(0.0))
+            snap_bz.append(Float32(0.0))
+            snap_psi.append(Float32(0.0))
+        solver.download_owned_component(5, snap_bx,  nvtx)
+        solver.download_owned_component(6, snap_by,  nvtx)
+        solver.download_owned_component(7, snap_bz,  nvtx)
+        solver.download_owned_component(8, snap_psi, nvtx)
+        var f_by   = List[Float64]()
+        var f_bmag = List[Float64]()
+        var f_psi  = List[Float64]()
+        for k in range(n_owned_dof):
+            var bx = snap_bx[k]
+            var by = snap_by[k]
+            var bz = snap_bz[k]
+            f_by.append(Float64(by))
+            f_bmag.append(Float64(sqrt(bx*bx + by*by + bz*bz)))
+            f_psi.append(Float64(snap_psi[k]))
+        var fields = List[List[Float64]]()
+        fields.append(f_by^)
+        fields.append(f_bmag^)
+        fields.append(f_psi^)
+        var names = List[String]()
+        names.append(String("By"))
+        names.append(String("|B|"))
+        names.append(String("psi"))
+        dump_vtu_3d_frame_multi(
+            num_elements=solver.num_owned_elements,
+            nodes_per_elem=N_P,
+            elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                solver.mesh.owned_node_xyz_f32_ptr
+            ),
+            field_names=names,
+            field_data=fields,
+            path=String("output/snapshot_t_final.vtu"),
+        )
+        nvtx.pop_range()
+        if rank == 0:
+            print("  wrote output/snapshot_t_final.vtu (By + |B| + psi, t=", T_FINAL, ")")
 
     # The round-trip L2 and max-|psi| diagnostics below sum over this
     # rank's owned elements only; at np>1 the globally-correct numbers
