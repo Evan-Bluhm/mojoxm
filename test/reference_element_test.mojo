@@ -23,6 +23,7 @@
 
 from src.reference import (
     ReferenceElement,
+    mat_inv,
     num_tet_nodes,
     num_tri_nodes,
 )
@@ -209,10 +210,112 @@ def _test_node_weights_partition(re: ReferenceElement, P: Int, np: Int) raises:
     print("  node_weights partition-of-unity OK (sum=", wsum, ")")
 
 
+def _test_mat_inv() raises:
+    """Exercises `mat_inv` (the Gauss-Jordan helper that ReferenceElement
+    uses to invert the Vandermonde matrix) against three small cases:
+
+      (1) 2x2 with known closed-form inverse.  Catches sign / formula
+          bugs in the Gauss-Jordan column elimination.
+      (2) 3x3 IDENTITY.  Inverting I should give I back to roundoff.
+      (3) Pivoting case: A=[[0, 2], [3, 4]].  The (0,0) entry is zero,
+          so naive Gauss-Jordan would divide by zero -- exercises the
+          partial-pivoting branch (the helper picks the largest-abs
+          row in column 0 to pivot up).  Closed-form inverse is
+          [[-2/3, 1/3], [1/2, 0]].
+
+    Builds + checks the inverses with absolute Float64 tolerance 1e-12
+    (Gauss-Jordan on integer-valued small matrices is essentially exact)."""
+    var tol = 1.0e-12
+
+    # (1) [[1, 2], [3, 4]] -> inverse = (1/det) * [[4, -2], [-3, 1]]
+    #                                  = [[-2, 1], [1.5, -0.5]]
+    var a = List[Float64]()
+    a.append(1.0)
+    a.append(2.0)
+    a.append(3.0)
+    a.append(4.0)
+    var ainv = mat_inv(a, 2)
+    var expect_a = List[Float64]()
+    expect_a.append(-2.0)
+    expect_a.append(1.0)
+    expect_a.append(1.5)
+    expect_a.append(-0.5)
+    for k in range(4):
+        var d = ainv[k] - expect_a[k]
+        if d < 0.0:
+            d = -d
+        if d > tol:
+            raise Error(
+                "mat_inv 2x2 mismatch at index "
+                + String(k)
+                + ": got "
+                + String(ainv[k])
+                + " expected "
+                + String(expect_a[k])
+            )
+
+    # (2) Identity of size 3.
+    var ident = List[Float64]()
+    for i in range(3):
+        for j in range(3):
+            ident.append(1.0 if i == j else 0.0)
+    var ident_inv = mat_inv(ident, 3)
+    for i in range(3):
+        for j in range(3):
+            var got = ident_inv[i * 3 + j]
+            var exp = 1.0 if i == j else 0.0
+            var d = got - exp
+            if d < 0.0:
+                d = -d
+            if d > tol:
+                raise Error(
+                    "mat_inv I3 mismatch at ("
+                    + String(i)
+                    + ","
+                    + String(j)
+                    + "): got "
+                    + String(got)
+                )
+
+    # (3) Pivoting required: [[0, 2], [3, 4]].  Inverse is
+    #     [[-2/3, 1/3], [1/2, 0]].  The (0,0) zero forces a row swap
+    #     so the partial-pivot path runs.
+    var b = List[Float64]()
+    b.append(0.0)
+    b.append(2.0)
+    b.append(3.0)
+    b.append(4.0)
+    var binv = mat_inv(b, 2)
+    var expect_b = List[Float64]()
+    expect_b.append(-2.0 / 3.0)
+    expect_b.append(1.0 / 3.0)
+    expect_b.append(1.0 / 2.0)
+    expect_b.append(0.0)
+    for k in range(4):
+        var d = binv[k] - expect_b[k]
+        if d < 0.0:
+            d = -d
+        if d > tol:
+            raise Error(
+                "mat_inv pivot 2x2 mismatch at index "
+                + String(k)
+                + ": got "
+                + String(binv[k])
+                + " expected "
+                + String(expect_b[k])
+            )
+
+    print("  mat_inv direct invariants OK (2x2, I3, pivoting case)")
+
+
 def main() raises:
     # Size sanity.
     for P in [1, 2, 3, 4, 5]:
         _test_sizes(P)
+
+    # Direct math test for the Gauss-Jordan helper before exercising
+    # it through the bigger ReferenceElement Vandermonde path.
+    _test_mat_inv()
 
     # Operator sanity for each supported order.
     print("P=1 reference element...")
