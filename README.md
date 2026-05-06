@@ -152,10 +152,12 @@ Nine reference drivers under `examples/`:
 
   **Tests:** GPU kernels are validated by self-consistent invariants
   rather than CPU reference code.  33 tests run under `make test-all`,
-  each gating a hard regression (or `make test-quick` for an 8-test
-  ~30s smoke covering host operator construction, 2D + 3D physics
-  constant-state, the limiter pipelines, and the 3D multi-field VTU
-  writer):
+  each gating a hard regression.  Quick aggregators: `make test-quick`
+  (8-test ~30s smoke covering host operator construction, 2D + 3D
+  physics constant-state, the limiter pipelines, and the 3D multi-
+  field VTU writer); `make test-limiter` (8 BJ-limiter unit tests
+  at P=2/3/4/5 in 2D + 3D); `make test-utils` (5 host-only utility
+  tests, ~3s cached).  The full inventory:
   * 2D pipeline -- `local_mesh_2d_gpu_test` (upload round-trips +
     constant-state at P=1/2/3), `euler_2d_gpu_test` /
     `sw_2d_gpu_test` / `mhd_2d_gpu_test` / `mhd_glm_2d_gpu_test` /
