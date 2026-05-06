@@ -201,7 +201,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help format format-check install-hooks profile-summary test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help format format-check install-hooks profile-summary pre-push test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -212,6 +212,7 @@ help:
 	@echo '  make test-quick          smoke 8 representative tests (~30s w/ cached binaries)'
 	@echo '  make bench-quick         smoke 13 representative benches (~65s)'
 	@echo '  make smoke               test-utils + test-quick + bench-quick combined (~95s; one-command sanity check)'
+	@echo '  make pre-push            format-check + smoke (~100s; routine pre-push gate)'
 	@echo '  make bench-p5            run 19 P=5 P-parity gates at NP=21/56 (~95s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
@@ -481,6 +482,16 @@ test-quick: test-reference test-reference-2d test-euler-2d-gpu test-euler-3d \
 # the foundation is already broken.
 smoke: test-utils test-quick bench-quick
 	@echo '=== smoke: test-utils + test-quick + bench-quick PASSED ==='
+
+
+# Pre-push check: format-check (~3s) + smoke (~95s).  Catches the
+# common pre-push regressions: format drift (which the pre-commit
+# hook only sees on staged files, not the working tree at large)
+# plus the broad smoke aggregator.  Use as a routine "is this safe
+# to push?" gate before `git push`.  Run-time ~100s wall on the
+# cached path.
+pre-push: format-check smoke
+	@echo '=== pre-push: format-check + smoke PASSED ==='
 
 
 # Utility / host-only test aggregator -- 5 sub-second tests covering
