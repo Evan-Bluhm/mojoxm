@@ -148,6 +148,22 @@ def validate_one(path: Path) -> list[str]:
                         f"coincide at {tuple(corners[a])}"
                     )
                     break
+        # Tet volume = (1/6) |det(v1-v0, v2-v0, v3-v0)|.  A near-zero
+        # determinant means the 4 corners are coplanar -- a degenerate
+        # tet that ParaView can't render meaningfully.  Threshold
+        # 1e-12 is loose; the physical mesh has volumes ~h^3 / 6 with
+        # h >> 1e-4, so a real cell never gets close.
+        v0 = corners[0]
+        e1 = corners[1] - v0
+        e2 = corners[2] - v0
+        e3 = corners[3] - v0
+        det = float(np.linalg.det(np.column_stack([e1, e2, e3])))
+        if abs(det) < 1e-12:
+            failures.append(
+                f"{path}: cell {ci} corners are coplanar "
+                f"(det = {det:g}); degenerate tet"
+            )
+            break
 
     return failures
 
