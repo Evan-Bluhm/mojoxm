@@ -791,6 +791,26 @@ for `make profile-bench-all` (excluding nsys profile + launch
 overhead which dominates wall time).  3D dominates (58.7 s) over 2D
 (3.6 s) by ~16x.
 
+Other useful flags:
+
+* `--by-physics` rolls up per-physics totals (Euler 60% / MHD 15% /
+  Two-Fluid 9% / Advection 7% / Maxwell 5% / SW 3% on the current
+  baselines) -- size where the suite-wide compute budget actually
+  sits across the 121 benches.
+* `--show-cv` adds a CV% column (stddev / avg).  Distinguishes
+  refinement-sweep benches (CV ~50-66%, expected) from single-
+  resolution benches (CV <1%).
+* `--csv` emits machine-readable output for downstream tooling
+  (`bench,kernel,avg_us,instances,total_ms,cv_pct`).
+* `--filter <substr>` narrows by bench-name substring; `--kernel
+  <substr>` narrows by kernel-name substring; `--sort
+  {avg,total,inst}` picks the ranking key.
+
+For refresh-then-rank workflows, `make profile-bench-quick`
+re-baselines just the 13 bench-quick gates (~10-15 min) -- much
+faster than `profile-bench-all` (~90 min) when the goal is a
+sanity-check re-rank after a kernel-level change.
+
 ## Build & run
 
 ### Prerequisites
