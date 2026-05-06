@@ -817,9 +817,15 @@ Other useful flags:
   resolution benches (CV <1%).
 * `--csv` emits machine-readable output for downstream tooling
   (`bench,kernel,avg_us,instances,total_ms,cv_pct`).
+* `--markdown` emits a markdown table -- handy for pasting into PR
+  descriptions / issues / docs.  Composes with `--show-cv` and
+  `--by-physics`.
 * `--filter <substr>` narrows by bench-name substring; `--kernel
   <substr>` narrows by kernel-name substring; `--sort
   {avg,total,inst}` picks the ranking key.
+* `--self-test` (also `make profile-summary-test`) runs an in-script
+  parser + classifier check (18 assertions, sub-second) -- catches a
+  future nsys-output-format change.  Wired into `make pre-push`.
 
 For refresh-then-rank workflows, `make profile-bench-quick`
 re-baselines just the 13 bench-quick gates (~10-15 min) -- much
