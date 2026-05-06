@@ -165,6 +165,59 @@ def validate_one(path: Path) -> list[str]:
             )
             break
 
+        # VTK_LAGRANGE_TETRAHEDRON edge-interior nodes (only for P >= 3,
+        # where there ARE edge interiors).  Each of the 6 edges has
+        # (P-1) interior nodes, in this VTK ordering:
+        #   Edge 0: v0 -> v1   Edge 1: v1 -> v2   Edge 2: v2 -> v0
+        #   Edge 3: v0 -> v3   Edge 4: v1 -> v3   Edge 5: v2 -> v3
+        # Each interior must lie on the line from its start corner
+        # to its end corner -- so (interior - start) and
+        # (end - start) must be parallel.  We check the perpendicular
+        # component shrinks linearly with edge length: |perp| /
+        # |edge| < 1e-5 (loose, accommodates Float32 round-trip in
+        # the VTU's Float32 binary appended data block).
+        if p_eff is not None and p_eff >= 3:
+            n_edge_interior = p_eff - 1
+            edge_pairs = [(0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3)]
+            cell_edge_failed = False
+            for ek, (a, b) in enumerate(edge_pairs):
+                ca = corners[a]
+                cb = corners[b]
+                edge_vec = cb - ca
+                edge_len = float(np.linalg.norm(edge_vec))
+                base = 4 + ek * n_edge_interior
+                for j in range(n_edge_interior):
+                    interior = m.points[row[base + j]]
+                    rel = interior - ca
+                    # Project rel onto edge_vec.  The parametric
+                    # position t should be (j+1)/p_eff for equispaced
+                    # Lagrange (VTK spec for cell type 71).  The
+                    # perpendicular component should be zero.
+                    proj = float(np.dot(rel, edge_vec)) / (edge_len * edge_len)
+                    perp = rel - proj * edge_vec
+                    perp_norm = float(np.linalg.norm(perp))
+                    if perp_norm > 1e-5 * edge_len:
+                        failures.append(
+                            f"{path}: cell {ci} edge {ek} interior node {j} "
+                            f"is off the edge axis "
+                            f"(|perp|/|edge| = {perp_norm / edge_len:.2e})"
+                        )
+                        cell_edge_failed = True
+                        break
+                    # Spec compliance: parametric position must be
+                    # (j+1)/p_eff (equispaced Lagrange).
+                    expected_t = (j + 1) / p_eff
+                    if abs(proj - expected_t) > 1e-5:
+                        failures.append(
+                            f"{path}: cell {ci} edge {ek} interior node {j} "
+                            f"at parametric t={proj:.4f}, expected {expected_t:.4f} "
+                            f"(equispaced Lagrange spec)"
+                        )
+                        cell_edge_failed = True
+                        break
+                if cell_edge_failed:
+                    break
+
     return failures
 
 
