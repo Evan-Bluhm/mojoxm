@@ -42,13 +42,23 @@ fi
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
-bad=()
+# Stage all files first, then run a single `mojo format` over the
+# whole batch -- amortises the JIT-warmup over the staged set.  For
+# 1-3 staged files the speedup is minor (one JIT either way), but a
+# refactor touching 20+ files goes from N * (single JIT) to one.
+copies=()
 for f in "${files[@]}"; do
     tmp="$tmpdir/$f"
     mkdir -p "$(dirname "$tmp")"
     git show ":$f" > "$tmp"
-    "${mojo_cmd[@]}" format -q "$tmp"
-    if ! git show ":$f" | diff -q - "$tmp" >/dev/null 2>&1; then
+    copies+=("$tmp")
+done
+
+"${mojo_cmd[@]}" format -q "${copies[@]}"
+
+bad=()
+for f in "${files[@]}"; do
+    if ! git show ":$f" | diff -q - "$tmpdir/$f" >/dev/null 2>&1; then
         bad+=("$f")
     fi
 done
