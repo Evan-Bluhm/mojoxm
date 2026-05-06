@@ -103,4 +103,20 @@ def main() raises:
     if not approx_eq(s2.a + s2.b, Float32(1.0)):
         raise Error("ssprk3_test FAILED: stage 2 a+b != 1")
 
+    # --- SSP-coefficient invariant: c_k == b_k for stages where
+    # b_k > 0.  This is the specific property that makes Gottlieb-Shu
+    # SSPRK3 the OPTIMAL third-order SSP scheme (CFL-equivalent to
+    # forward Euler).  Stage 0 has b=0 so the relation is vacuous
+    # there (the dt*L(q) term is the only contribution).
+    if s1.b > Float32(0.0) and not approx_eq(s1.c, s1.b):
+        raise Error(
+            "ssprk3_test FAILED: stage 1 c != b (broke SSPRK3 SSP-"
+            "coefficient property): c=" + String(s1.c) + " b=" + String(s1.b)
+        )
+    if s2.b > Float32(0.0) and not approx_eq(s2.c, s2.b):
+        raise Error(
+            "ssprk3_test FAILED: stage 2 c != b (broke SSPRK3 SSP-"
+            "coefficient property): c=" + String(s2.c) + " b=" + String(s2.b)
+        )
+
     print("=== ssprk3_test PASSED ===")
