@@ -123,6 +123,50 @@ def main() raises:
             + String(p3_r0.neighbour_plus_z)
         )
 
+    # ---------- (3b) nprocs=4, 4x4x4 mesh ----------
+    # Three (px,py,pz) options tie at surface=20: (1,2,2), (2,1,2),
+    # (2,2,1).  Loop visits px=1 first and only updates `best_cost` on
+    # strict less-than, so the cost-minimiser settles at (1,2,2).
+    # Rank 0 at (0,0,0), rank 1 at (0,0,1), rank 2 at (0,1,0), rank 3
+    # at (0,1,1).
+    var p4_r0 = build_partition(rank=0, nprocs=4, nx=4, ny=4, nz=4)
+    if p4_r0.px != 1 or p4_r0.py != 2 or p4_r0.pz != 2:
+        raise Error(
+            "partition_test FAILED: nprocs=4 4x4x4 expected (1,2,2), got ("
+            + String(p4_r0.px) + "," + String(p4_r0.py) + ","
+            + String(p4_r0.pz) + ")"
+        )
+    if p4_r0.nx != 4 or p4_r0.ny != 2 or p4_r0.nz != 2:
+        raise Error(
+            "partition_test FAILED: nprocs=4 r0 owned counts != (4,2,2)"
+        )
+    # Owned union over all 4 ranks covers the global grid exactly once.
+    var total4: Int = 0
+    for r in range(4):
+        var pp = build_partition(rank=r, nprocs=4, nx=4, ny=4, nz=4)
+        total4 += pp.num_owned_cubes()
+    if total4 != 64:
+        raise Error(
+            "partition_test FAILED: nprocs=4 union != 64, got " + String(total4)
+        )
+    # Rank 0 (rx=0, ry=0, rz=0) periodic neighbours.  px=1 -> x is
+    # self-loop (rx=0 always), so x neighbours are rank 0.  py=2,
+    # pz=2 -> y and z wrap to the other rank in their plane.
+    if p4_r0.neighbour_minus_x != 0 or p4_r0.neighbour_plus_x != 0:
+        raise Error("partition_test FAILED: nprocs=4 r0 x-neighbour != self")
+    if p4_r0.neighbour_minus_y != 2 or p4_r0.neighbour_plus_y != 2:
+        raise Error(
+            "partition_test FAILED: nprocs=4 r0 y-neighbour expected 2, got "
+            + String(p4_r0.neighbour_minus_y) + "/"
+            + String(p4_r0.neighbour_plus_y)
+        )
+    if p4_r0.neighbour_minus_z != 1 or p4_r0.neighbour_plus_z != 1:
+        raise Error(
+            "partition_test FAILED: nprocs=4 r0 z-neighbour expected 1, got "
+            + String(p4_r0.neighbour_minus_z) + "/"
+            + String(p4_r0.neighbour_plus_z)
+        )
+
     # ---------- (4) error path: indivisible factorisation ----------
     var raised: Bool = False
     try:
