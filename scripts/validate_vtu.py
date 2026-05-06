@@ -218,6 +218,57 @@ def validate_one(path: Path) -> list[str]:
                 if cell_edge_failed:
                     break
 
+        # Face-interior nodes (only at P >= 3).  After 4 corners +
+        # 6*(P-1) edge interiors, each of 4 faces contributes
+        # (P-1)(P-2)/2 interior nodes.  We only check that each face
+        # interior lies *in the plane* of one of the 4 face triangles
+        # (and not on an edge), without committing to a specific
+        # face-ordering convention -- VTK's exact face index
+        # convention varies across docs, but every spec agrees the
+        # interiors must sit on the face planes.  This is the
+        # direction-agnostic, writer-bug-catching check.
+        if p_eff is not None and p_eff >= 3:
+            n_face_interior_per_face = (p_eff - 1) * (p_eff - 2) // 2
+            n_face_interior_total = 4 * n_face_interior_per_face
+            face_base = 4 + 6 * (p_eff - 1)
+            # 4 face triangles -- normals + a base point + edge vecs
+            # for the in-triangle check.
+            face_corner_idx = [
+                (0, 1, 2),
+                (0, 1, 3),
+                (1, 2, 3),
+                (2, 0, 3),
+            ]
+            face_planes = []
+            for a, b, c in face_corner_idx:
+                base_pt = corners[a]
+                ab = corners[b] - base_pt
+                ac = corners[c] - base_pt
+                normal = np.cross(ab, ac)
+                nlen = float(np.linalg.norm(normal))
+                if nlen > 0.0:
+                    face_planes.append((base_pt, normal / nlen))
+                else:
+                    face_planes.append((base_pt, normal))
+            cell_face_failed = False
+            for fk in range(n_face_interior_total):
+                interior = m.points[row[face_base + fk]]
+                # Distance to each face plane; must be near-zero for one.
+                min_d = float("inf")
+                for base_pt, n_unit in face_planes:
+                    d = abs(float(np.dot(n_unit, interior - base_pt)))
+                    if d < min_d:
+                        min_d = d
+                if min_d > 1e-5:
+                    failures.append(
+                        f"{path}: cell {ci} face-interior node {fk} "
+                        f"is off all 4 face planes (min |d| = {min_d:.2e})"
+                    )
+                    cell_face_failed = True
+                    break
+            if cell_face_failed:
+                break
+
     return failures
 
 
