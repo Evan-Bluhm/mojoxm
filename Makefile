@@ -201,7 +201,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help format format-check install-hooks profile-summary profile-summary-test pre-push test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help format format-check install-hooks profile-summary profile-summary-test pre-push test test-bc test-vtu-meshio test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -394,6 +394,19 @@ test-vtu-2d-multi: vtu_2d_multi_test
 	./vtu_2d_multi_test
 test-vtu-3d-multi: vtu_3d_multi_test
 	./vtu_3d_multi_test
+
+# meshio-roundtrip sanity check on the P=2..5 VTU fixtures produced
+# by vtu_3d_multi_test (which writes to /tmp/vtu_3d_multi_test_pN.vtu
+# at each P).  Catches regressions where the binary VTU format breaks
+# meshio's parser -- the in-Mojo XML-string check in vtu_3d_multi_test
+# would not see this.  Depends on test-vtu-3d-multi to produce the
+# fixtures first.
+test-vtu-meshio: test-vtu-3d-multi
+	@scripts/validate_vtu.py \
+		/tmp/vtu_3d_multi_test_p2.vtu \
+		/tmp/vtu_3d_multi_test_p3.vtu \
+		/tmp/vtu_3d_multi_test_p4.vtu \
+		/tmp/vtu_3d_multi_test_p5.vtu
 test-memory-report: memory_report_test
 	./memory_report_test
 test-ssprk3: ssprk3_test
