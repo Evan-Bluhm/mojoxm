@@ -117,7 +117,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_euler_vortex_2d bench_euler_vortex_2d_p3 \
                 bench_mhd_alfven_2d bench_mhd_alfven_glm_2d \
                 bench_mhd_inflow_2d bench_mhd_inflow_2d_glm \
-                bench_mhd_wall_2d bench_mhd_wall_2d_glm \
+                bench_mhd_wall_2d bench_mhd_wall_2d_glm bench_mhd_wall_3d \
                 bench_mhd_alfven_glm_2d_p3 \
                 bench_mhd_alfven_glm_2d_p4 \
                 bench_mhd_alfven_glm_2d_p5 \
@@ -203,8 +203,8 @@ help:
 	@echo '  make bench-p5            run 12 P=5 P-parity gates at NP=21/56 (~80s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
-	@echo '  make bench-bcs           run 25 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
-	@echo '  make bench-all           build + run every analytic-solution gate (109 benches)'
+	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
+	@echo '  make bench-all           build + run every analytic-solution gate (110 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -255,12 +255,12 @@ help:
 	@echo '                           e_2N) >= P-dependent floor.  Advection 2D + 3D P=2-5 (8) +'
 	@echo '                           Euler 3D P=2/3 (2).  Catches scheme-order regressions an'
 	@echo '                           absolute-L2 sentinel would miss (~50s).'
-	@echo '  make bench-bcs           25 boundary-condition + source-term gates exercising every'
+	@echo '  make bench-bcs           26 boundary-condition + source-term gates exercising every'
 	@echo '                           BC dispatch arm (interior / wall / outflow / inflow) across'
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
 	@echo '                           the source-term hook in rk_stage_kernel (~95s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (109 benches, ~10 min)'
+	@echo '  make bench-all           build + run every gate (110 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -493,6 +493,8 @@ bench-mhd-wall-2d-glm: bench_mhd_wall_2d_glm
 	./bench_mhd_wall_2d_glm
 bench-mhd-wall-2d: bench_mhd_wall_2d
 	./bench_mhd_wall_2d
+bench-mhd-wall-3d: bench_mhd_wall_3d
+	./bench_mhd_wall_3d
 bench-mhd-alfven-glm-2d-p3: bench_mhd_alfven_glm_2d_p3
 	./bench_mhd_alfven_glm_2d_p3
 bench-mhd-alfven-glm-2d-p4: bench_mhd_alfven_glm_2d_p4
@@ -723,11 +725,11 @@ bench-bcs: \
 		bench-euler-hydrostatic-3d bench-euler-hydrostatic-3d-p3 \
 		bench-shallow-water-inflow-2d bench-shallow-water-inflow-2d-rusanov bench-shallow-water-inflow-3d \
 		bench-mhd-inflow-2d bench-mhd-inflow-2d-glm bench-mhd-inflow-3d \
-		bench-mhd-wall-2d bench-mhd-wall-2d-glm \
+		bench-mhd-wall-2d bench-mhd-wall-2d-glm bench-mhd-wall-3d \
 		bench-maxwell-outflow-2d bench-maxwell-inflow-2d \
 		bench-maxwell-outflow-3d bench-maxwell-inflow-3d \
 		bench-two-fluid-outflow-3d bench-two-fluid-walls-3d
-	@echo '=== bench-bcs: 25 BC + source-term gates PASSED ==='
+	@echo '=== bench-bcs: 26 BC + source-term gates PASSED ==='
 
 
 # Convergence-rate sweep -- 10 gates that explicitly assert
