@@ -48,6 +48,7 @@ from src.solver import Solver
 from src.two_fluid import FiveMomentTwoFluid
 from src.nvtx import NvtxContext
 from src.frame_writer import FrameWriter
+from src.vtu import dump_vtu_3d_frame_multi
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
 from src.diagnostics import DiagnosticsWriter, NamedComponent
 
@@ -244,6 +245,62 @@ def main() raises:
     )
 
     writer.finalize("output/solution.pvd", nvtx)
+
+    # Final-state multi-field snapshot for richer ParaView inspection.
+    # Two-Fluid is NC=17; emits four physically meaningful scalars:
+    # n_e (electron number density rho_e/m_e), n_i (ion number density
+    # rho_i/m_i), Ex (the dominant Langmuir-oscillation E-field
+    # component), and charge_density (Q_E*n_e + Q_I*n_i, which oscillates
+    # 90 degrees out of phase with Ex per the cold-plasma dispersion
+    # relation).  Gated on np=1.
+    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
+    if nprocs == 1:
+        nvtx.push_range("snapshot_t_final")
+        var n_owned_dof = solver.num_owned_elements * N_P
+        var snap_rho_e = List[Float32]()
+        var snap_rho_i = List[Float32]()
+        var snap_ex    = List[Float32]()
+        for _ in range(n_owned_dof):
+            snap_rho_e.append(Float32(0.0))
+            snap_rho_i.append(Float32(0.0))
+            snap_ex.append(Float32(0.0))
+        solver.download_owned_component(0,  snap_rho_e, nvtx)  # electron rho
+        solver.download_owned_component(5,  snap_rho_i, nvtx)  # ion rho
+        solver.download_owned_component(10, snap_ex,    nvtx)  # Ex
+        var f_n_e   = List[Float64]()
+        var f_n_i   = List[Float64]()
+        var f_ex    = List[Float64]()
+        var f_chg   = List[Float64]()
+        for k in range(n_owned_dof):
+            var n_e = snap_rho_e[k] / M_E
+            var n_i = snap_rho_i[k] / M_I
+            f_n_e.append(Float64(n_e))
+            f_n_i.append(Float64(n_i))
+            f_ex.append(Float64(snap_ex[k]))
+            f_chg.append(Float64(Q_E * n_e + Q_I * n_i))
+        var fields = List[List[Float64]]()
+        fields.append(f_n_e^)
+        fields.append(f_n_i^)
+        fields.append(f_ex^)
+        fields.append(f_chg^)
+        var names = List[String]()
+        names.append(String("n_e"))
+        names.append(String("n_i"))
+        names.append(String("Ex"))
+        names.append(String("charge_density"))
+        dump_vtu_3d_frame_multi(
+            num_elements=solver.num_owned_elements,
+            nodes_per_elem=N_P,
+            elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                solver.mesh.owned_node_xyz_f32_ptr
+            ),
+            field_names=names,
+            field_data=fields,
+            path=String("output/snapshot_t_final.vtu"),
+        )
+        nvtx.pop_range()
+        if rank == 0:
+            print("  wrote output/snapshot_t_final.vtu (n_e + n_i + Ex + charge, t=", T_FINAL, ")")
 
     # At np=1 sample a few diagnostics: the spatial mean of Ex and of
     # rho_e * u_e (electron x-momentum) should both be traces of the
