@@ -197,7 +197,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -213,6 +213,7 @@ help:
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
 	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
 	@echo '  make bench-mhd           run 33 MHD-focused gates (Alfven + GLM rates + Brio-Wu + BCs, ~110s)'
+	@echo '  make bench-euler         run 33 Euler-focused gates (vortex + smooth + Sod + hydrostatic + BCs, ~110s)'
 	@echo '  make bench-all           build + run every analytic-solution gate (121 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -832,6 +833,34 @@ bench-mhd: \
 		bench-mhd-inflow-2d bench-mhd-inflow-2d-glm bench-mhd-inflow-3d \
 		bench-mhd-wall-2d bench-mhd-wall-2d-glm bench-mhd-wall-3d
 	@echo '=== bench-mhd: 33 MHD-focused gates PASSED ==='
+
+
+# Euler-focused regression suite -- 33 gates covering every Euler
+# bench in the suite: smooth (vortex, smooth_wave, hydrostatic, full
+# P-parity), shocks (Sod 2D + 3D, sod_limited 2D, full P-parity for
+# limited path), BCs (channel-steady, inflow), and the flux-coverage
+# 3D gate.  Run when iterating on Euler internals: physics module,
+# HLLC / HLLEC Riemann solvers, the BJ limiter on Euler, gravity
+# source.  Run-time ~110s w/ cached binaries.
+bench-euler: \
+		bench-euler-vortex-2d bench-euler-vortex-2d-p3 \
+		bench-euler-vortex-3d bench-euler-vortex-3d-p3 \
+		bench-euler-smooth-wave-2d bench-euler-smooth-wave-2d-p3 \
+		bench-euler-smooth-wave-2d-p4 bench-euler-smooth-wave-2d-p5 \
+		bench-euler-smooth-wave-3d bench-euler-smooth-wave-3d-p3 \
+		bench-euler-smooth-wave-3d-p4 bench-euler-smooth-wave-3d-p5 \
+		bench-euler-sod-2d bench-euler-sod-3d \
+		bench-euler-sod-3d-p3 bench-euler-sod-3d-p4 bench-euler-sod-3d-p5 \
+		bench-euler-sod-limited-2d bench-euler-sod-limited-2d-p3 \
+		bench-euler-sod-limited-2d-p4 bench-euler-sod-limited-2d-p5 \
+		bench-euler-hydrostatic-2d bench-euler-hydrostatic-2d-p3 \
+		bench-euler-hydrostatic-2d-p4 bench-euler-hydrostatic-2d-p5 \
+		bench-euler-hydrostatic-3d bench-euler-hydrostatic-3d-p3 \
+		bench-euler-hydrostatic-3d-p4 bench-euler-hydrostatic-3d-p5 \
+		bench-euler-channel-steady-2d \
+		bench-euler-inflow-2d bench-euler-inflow-3d \
+		bench-euler-flux-coverage-3d
+	@echo '=== bench-euler: 33 Euler-focused gates PASSED ==='
 
 
 # P=5 P-parity sweep -- 19 gates at the largest comptime config
