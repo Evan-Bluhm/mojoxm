@@ -31,14 +31,18 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL
 from src.ssprk3 import ssprk3_stage_plans
-from src.memory_report import ThroughputReport
+from src.memory_report import MemoryReport, ThroughputReport
 from src.vtu_2d import (
-    dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
+    dump_vtu_2d_frame_multi,
+    dump_pvd_collection,
+    vtu_frame_name,
 )
 
 
@@ -49,7 +53,7 @@ comptime LX = 1.0
 comptime LY = 1.0
 comptime C_LIGHT: Float32 = 1.0
 comptime CFL = 0.2
-comptime T_FINAL: Float64 = 1.41421356237   # one period = sqrt(2) / c
+comptime T_FINAL: Float64 = 1.41421356237  # one period = sqrt(2) / c
 comptime NUM_FRAMES = 20
 
 
@@ -65,8 +69,15 @@ def main() raises:
         print("maxwell_cavity_2d_gpu: runs at np=1 only")
         return
 
-    print("maxwell_cavity_2d_gpu (GPU 2D Maxwell PEC cavity, P=", P,
-          ",", NX, "x", NY, ")")
+    print(
+        "maxwell_cavity_2d_gpu (GPU 2D Maxwell PEC cavity, P=",
+        P,
+        ",",
+        NX,
+        "x",
+        NY,
+        ")",
+    )
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -79,10 +90,16 @@ def main() raises:
     var host_re = ReferenceElement2D[P]()
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
-    print("  elements:", gpu_mesh.num_elements,
-          " faces:", gpu_mesh.num_faces,
-          "  nodes/elem:", NP_p,
-          "  total DOF:", gpu_mesh.num_elements * NP_p * NC)
+    print(
+        "  elements:",
+        gpu_mesh.num_elements,
+        " faces:",
+        gpu_mesh.num_faces,
+        "  nodes/elem:",
+        NP_p,
+        "  total DOF:",
+        gpu_mesh.num_elements * NP_p * NC,
+    )
 
     # IC: Ez = sin(pi x) sin(pi y), all other components 0.
     var k = pi
@@ -94,19 +111,35 @@ def main() raises:
             var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var y = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
             var Ez = sin(k * x) * sin(k * y)
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # Ex
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # Ey
-            host_q.append(Float32(Ez));   host_ic.append(Float32(Ez))    # Ez
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # Bx
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # By
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # Bz
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Ex
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Ey
+            host_q.append(Float32(Ez))
+            host_ic.append(Float32(Ez))  # Ez
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Bx
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # By
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Bz
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar_count = gpu_mesh.num_faces * NFP_e * NC
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](d_fstar_count)
+
+    # WARPXM-style device-memory accounting (Maxwell: linear vacuum
+    # flux, no BJ limiter; 2D np=1 only).
+    MemoryReport(
+        rk_stage_bytes=3 * n_q * 4,
+        dg_operators_bytes=gpu_re.device_bytes(),
+        limiter_bytes=0,
+        mesh_connectivity_bytes=(gpu_mesh.device_bytes() + d_fstar_count * 4),
+        halo_device_bytes=0,
+        halo_pinned_bytes=0,
+    ).print()
 
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
@@ -122,8 +155,14 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = Float32(T_FINAL / Float64(total_steps))
-    print("  dt=", dt, "  steps/frame=", steps_per_frame,
-          "  total steps=", total_steps)
+    print(
+        "  dt=",
+        dt,
+        "  steps/frame=",
+        steps_per_frame,
+        "  total steps=",
+        total_steps,
+    )
 
     var Ez_field = List[Float64]()
     var Emag = List[Float64]()
@@ -136,7 +175,7 @@ def main() raises:
     var times = List[Float64]()
 
     var field_names = List[String]()
-    field_names.append(String("Ez"))   # signed -- shows TM(1,1) phase
+    field_names.append(String("Ez"))  # signed -- shows TM(1,1) phase
     field_names.append(String("|E|"))
     field_names.append(String("|B|"))
 
@@ -163,7 +202,9 @@ def main() raises:
     fields.append(Bmag.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
     dump_vtu_2d_frame_multi[P](
-        mesh_coords, field_names, fields,
+        mesh_coords,
+        field_names,
+        fields,
         String("output/") + f0_name,
     )
     paths.append(f0_name)
@@ -172,20 +213,29 @@ def main() raises:
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
             for stage in stage_plans:
                 maxwell_rk_stage_2d[P](
-                    ctx, gpu_mesh,
+                    ctx,
+                    gpu_mesh,
                     gpu_re.d_Lift_ref.unsafe_ptr(),
                     gpu_re.d_D_ref.unsafe_ptr(),
-                    stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                    stage.q_in,
+                    stage.q_a,
+                    stage.q_b,
+                    stage.q_out,
                     d_fstar.unsafe_ptr(),
                     C_LIGHT,
-                    stage.a, stage.b, stage.c, dt,
+                    stage.a,
+                    stage.b,
+                    stage.c,
+                    dt,
                 )
         ctx.synchronize()
         var c_end = perf_counter_ns()
@@ -201,7 +251,9 @@ def main() raises:
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
         dump_vtu_2d_frame_multi[P](
-            mesh_coords, field_names, fi_fields,
+            mesh_coords,
+            field_names,
+            fi_fields,
             String("output/") + fname,
         )
         paths.append(fname)
@@ -229,14 +281,18 @@ def main() raises:
         sum_ic += ic * ic
     var l2 = sqrt(sum_sq / Float64(n_q))
     var l2_ic = sqrt(sum_ic / Float64(n_q))
-    print("  L2 err =", l2, "  rel err =", l2 / l2_ic,
-          "  (IC L2 =", l2_ic, ")")
+    print("  L2 err =", l2, "  rel err =", l2 / l2_ic, "  (IC L2 =", l2_ic, ")")
 
     # PVD collection -- `scripts/animate_2d.py` walks this directly.
     dump_pvd_collection(
-        String("output/solution_maxwell_cav2d_gpu.pvd"), paths, times,
+        String("output/solution_maxwell_cav2d_gpu.pvd"),
+        paths,
+        times,
     )
-    print("  wrote output/solution_maxwell_cav2d_gpu.pvd +",
-          NUM_FRAMES + 1, "VTU frames")
+    print(
+        "  wrote output/solution_maxwell_cav2d_gpu.pvd +",
+        NUM_FRAMES + 1,
+        "VTU frames",
+    )
 
     mpi.finalize()

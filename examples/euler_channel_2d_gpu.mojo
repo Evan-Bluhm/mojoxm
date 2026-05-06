@@ -21,16 +21,23 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_2d
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import (
-    BoundaryConditions2D, BC_WALL, BC_OUTFLOW, BC_INFLOW,
+    BoundaryConditions2D,
+    BC_WALL,
+    BC_OUTFLOW,
+    BC_INFLOW,
 )
 from src.ssprk3 import ssprk3_stage_plans
-from src.memory_report import ThroughputReport
+from src.memory_report import MemoryReport, ThroughputReport
 from src.vtu_2d import (
-    dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
+    dump_vtu_2d_frame_multi,
+    dump_pvd_collection,
+    vtu_frame_name,
 )
 
 
@@ -39,13 +46,13 @@ comptime NX = 64
 comptime NY = 16
 comptime LX = 1.0
 comptime LY = 0.25
-comptime GAMMA     = 1.4
-comptime RHO_0     = 1.0
-comptime P_0       = 1.0
-comptime MACH      = 2.0
-comptime T_FINAL   = 0.2
+comptime GAMMA = 1.4
+comptime RHO_0 = 1.0
+comptime P_0 = 1.0
+comptime MACH = 2.0
+comptime T_FINAL = 0.2
 comptime NUM_FRAMES = 20
-comptime CFL       = 0.15
+comptime CFL = 0.15
 
 
 comptime FRAME_PREFIX = "frame_channel_gpu_"
@@ -60,8 +67,7 @@ def main() raises:
         print("euler_channel_2d_gpu: runs at np=1 only")
         return
 
-    print("euler_channel_2d_gpu (Mach", MACH, ", P=", P, ",",
-          NX, "x", NY, ")")
+    print("euler_channel_2d_gpu (Mach", MACH, ", P=", P, ",", NX, "x", NY, ")")
     print("  BCs: -x INFLOW, +x OUTFLOW, y WALL")
 
     comptime NP_p = num_tri_nodes_2d(P)
@@ -76,16 +82,24 @@ def main() raises:
     print("  c_inf =", c_inf, " u_inf =", u_inf, " E_inf =", E_inf)
 
     var bcs = BoundaryConditions2D(
-        BC_INFLOW, BC_OUTFLOW, BC_WALL, BC_WALL,
+        BC_INFLOW,
+        BC_OUTFLOW,
+        BC_WALL,
+        BC_WALL,
     )
     var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var host_re = ReferenceElement2D[P]()
     var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
-    print("  elements:", gpu_mesh.num_elements,
-          " faces:", gpu_mesh.num_faces,
-          "  total DOF:", gpu_mesh.num_elements * NP_p * NC)
+    print(
+        "  elements:",
+        gpu_mesh.num_elements,
+        " faces:",
+        gpu_mesh.num_faces,
+        "  total DOF:",
+        gpu_mesh.num_elements * NP_p * NC,
+    )
 
     # IC = inflow state everywhere (analytically steady).
     var n_q = gpu_mesh.num_elements * NP_p * NC
@@ -96,12 +110,22 @@ def main() raises:
         host_q.append(Float32(0.0))
         host_q.append(Float32(E_inf))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar_count = gpu_mesh.num_faces * NFP_e * NC
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](d_fstar_count)
+
+    # WARPXM-style device-memory accounting (Euler channel: smooth flow,
+    # no BJ limiter; 2D np=1 only).
+    MemoryReport(
+        rk_stage_bytes=3 * n_q * 4,
+        dg_operators_bytes=gpu_re.device_bytes(),
+        limiter_bytes=0,
+        mesh_connectivity_bytes=(gpu_mesh.device_bytes() + d_fstar_count * 4),
+        halo_device_bytes=0,
+        halo_pinned_bytes=0,
+    ).print()
 
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
@@ -116,17 +140,23 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = Float32(T_FINAL / Float64(total_steps))
-    print("  dt=", dt, "  steps/frame=", steps_per_frame,
-          "  total steps=", total_steps)
+    print(
+        "  dt=",
+        dt,
+        "  steps/frame=",
+        steps_per_frame,
+        "  total steps=",
+        total_steps,
+    )
 
     var gamma = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
-    var min_p   = Float32(1.0e-6)
+    var min_p = Float32(1.0e-6)
     # Kernel-level inflow state (matches the CPU driver's Euler2D ctor).
-    var inflow_rho  = Float32(RHO_0)
+    var inflow_rho = Float32(RHO_0)
     var inflow_rhou = Float32(rhou_inf)
     var inflow_rhov = Float32(0.0)
-    var inflow_E    = Float32(E_inf)
+    var inflow_E = Float32(E_inf)
 
     var density = List[Float64]()
     var pressure = List[Float64]()
@@ -148,9 +178,9 @@ def main() raises:
         var n_nodes = gpu_mesh.num_elements * NP_p
         for i in range(n_nodes):
             var rho = Float64(src[i * NC + 0])
-            var mx  = Float64(src[i * NC + 1])
-            var my  = Float64(src[i * NC + 2])
-            var E   = Float64(src[i * NC + 3])
+            var mx = Float64(src[i * NC + 1])
+            var my = Float64(src[i * NC + 2])
+            var E = Float64(src[i * NC + 3])
             var rho_safe = rho if rho > 1.0e-12 else 1.0e-12
             var u = mx / rho_safe
             var v = my / rho_safe
@@ -167,7 +197,9 @@ def main() raises:
     fields.append(vmag.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
     dump_vtu_2d_frame_multi[P](
-        mesh_coords, field_names, fields,
+        mesh_coords,
+        field_names,
+        fields,
         String("output/") + f0_name,
     )
     paths.append(f0_name)
@@ -177,22 +209,35 @@ def main() raises:
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
             for stage in stage_plans:
                 euler_rk_stage_2d[P](
-                    ctx, gpu_mesh,
+                    ctx,
+                    gpu_mesh,
                     gpu_re.d_Lift_ref.unsafe_ptr(),
                     gpu_re.d_D_ref.unsafe_ptr(),
-                    stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                    stage.q_in,
+                    stage.q_a,
+                    stage.q_b,
+                    stage.q_out,
                     d_fstar.unsafe_ptr(),
-                    gamma, min_rho, min_p,
-                    stage.a, stage.b, stage.c, dt,
-                    inflow_rho=inflow_rho, inflow_rhou=inflow_rhou,
-                    inflow_rhov=inflow_rhov, inflow_E=inflow_E,
+                    gamma,
+                    min_rho,
+                    min_p,
+                    stage.a,
+                    stage.b,
+                    stage.c,
+                    dt,
+                    inflow_rho=inflow_rho,
+                    inflow_rhou=inflow_rhou,
+                    inflow_rhov=inflow_rhov,
+                    inflow_E=inflow_E,
                 )
         ctx.synchronize()
         var c_end = perf_counter_ns()
@@ -213,13 +258,23 @@ def main() raises:
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
         dump_vtu_2d_frame_multi[P](
-            mesh_coords, field_names, fi_fields,
+            mesh_coords,
+            field_names,
+            fi_fields,
             String("output/") + fname,
         )
         paths.append(fname)
         times.append(t)
-        print("    frame", fi, "/", NUM_FRAMES, " t=", t,
-              "  rho max |drift|:", rho_max_drift)
+        print(
+            "    frame",
+            fi,
+            "/",
+            NUM_FRAMES,
+            " t=",
+            t,
+            "  rho max |drift|:",
+            rho_max_drift,
+        )
     var run_end = perf_counter_ns()
 
     var total_sec = Float64(run_end - run_start) * 1.0e-9
@@ -231,13 +286,21 @@ def main() raises:
         dof_count=gpu_mesh.num_elements * NP_p * NC,
         state_bytes_per_step=8 * n_q * 4,
     ).print()
-    print("  rho max |drift| vs IC:", rho_max_drift,
-          " (expected ~ 0 for exact steady solution)")
+    print(
+        "  rho max |drift| vs IC:",
+        rho_max_drift,
+        " (expected ~ 0 for exact steady solution)",
+    )
 
     dump_pvd_collection(
-        String("output/solution_channel_gpu.pvd"), paths, times,
+        String("output/solution_channel_gpu.pvd"),
+        paths,
+        times,
     )
-    print("  wrote output/solution_channel_gpu.pvd +",
-          NUM_FRAMES + 1, "VTU frames")
+    print(
+        "  wrote output/solution_channel_gpu.pvd +",
+        NUM_FRAMES + 1,
+        "VTU frames",
+    )
 
     mpi.finalize()

@@ -21,13 +21,15 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_advection import advection_rk_stage_2d
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_OUTFLOW
 from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
 from src.ssprk3 import ssprk3_stage_plans
-from src.memory_report import ThroughputReport
+from src.memory_report import MemoryReport, ThroughputReport
 
 
 comptime P = 2
@@ -65,16 +67,25 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions2D(
-        BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
     )
     var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var host_re = ReferenceElement2D[P]()
     var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
-    print("  elements:", gpu_mesh.num_elements,
-          " faces:", gpu_mesh.num_faces,
-          "  (", gpu_mesh.num_faces - 3 * NX * NY, "boundary faces)")
+    print(
+        "  elements:",
+        gpu_mesh.num_elements,
+        " faces:",
+        gpu_mesh.num_faces,
+        "  (",
+        gpu_mesh.num_faces - 3 * NX * NY,
+        "boundary faces)",
+    )
 
     var n_q = gpu_mesh.num_elements * NP_p
     var host_q = List[Float32]()
@@ -90,12 +101,22 @@ def main() raises:
             host_q.append(v)
             mass_ic += Float64(v)
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e
-    )
+    var d_fstar_count = gpu_mesh.num_faces * NFP_e
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](d_fstar_count)
+
+    # WARPXM-style device-memory accounting (advection NC=1, no limiter,
+    # 2D np=1 only).
+    MemoryReport(
+        rk_stage_bytes=3 * n_q * 4,
+        dg_operators_bytes=gpu_re.device_bytes(),
+        limiter_bytes=0,
+        mesh_connectivity_bytes=(gpu_mesh.device_bytes() + d_fstar_count * 4),
+        halo_device_bytes=0,
+        halo_pinned_bytes=0,
+    ).print()
 
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
@@ -110,8 +131,14 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float32(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = T_FINAL / Float32(total_steps)
-    print("  dt=", dt, "  steps/frame=", steps_per_frame,
-          "  total steps=", total_steps)
+    print(
+        "  dt=",
+        dt,
+        "  steps/frame=",
+        steps_per_frame,
+        "  total steps=",
+        total_steps,
+    )
 
     var q_scalar = List[Float64]()
     for _ in range(n_q):
@@ -123,8 +150,10 @@ def main() raises:
         q_scalar[k] = Float64(host_q[k])
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
     dump_vtu_2d_frame[P](
-        mesh_coords, q_scalar,
-        String("output/") + f0_name, String("q"),
+        mesh_coords,
+        q_scalar,
+        String("output/") + f0_name,
+        String("q"),
     )
     paths.append(f0_name)
     times.append(0.0)
@@ -133,20 +162,30 @@ def main() raises:
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
             for stage in stage_plans:
                 advection_rk_stage_2d[P](
-                    ctx, gpu_mesh,
+                    ctx,
+                    gpu_mesh,
                     gpu_re.d_Lift_ref.unsafe_ptr(),
                     gpu_re.d_D_ref.unsafe_ptr(),
-                    stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                    stage.q_in,
+                    stage.q_a,
+                    stage.q_b,
+                    stage.q_out,
                     d_fstar.unsafe_ptr(),
-                    VX, VY,
-                    stage.a, stage.b, stage.c, dt,
+                    VX,
+                    VY,
+                    stage.a,
+                    stage.b,
+                    stage.c,
+                    dt,
                 )
         ctx.synchronize()
         var c_end = perf_counter_ns()
@@ -161,14 +200,23 @@ def main() raises:
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
         dump_vtu_2d_frame[P](
-            mesh_coords, q_scalar,
-            String("output/") + fname, String("q"),
+            mesh_coords,
+            q_scalar,
+            String("output/") + fname,
+            String("q"),
         )
         paths.append(fname)
         times.append(t)
         if fi % 4 == 0 or fi == NUM_FRAMES:
-            print("    t=", t, " mass =", mass_now,
-                  " (frac of IC =", mass_now / mass_ic, ")")
+            print(
+                "    t=",
+                t,
+                " mass =",
+                mass_now,
+                " (frac of IC =",
+                mass_now / mass_ic,
+                ")",
+            )
     var run_end = perf_counter_ns()
 
     var total_sec = Float64(run_end - run_start) * 1.0e-9
@@ -177,14 +225,17 @@ def main() raises:
     ThroughputReport(
         num_steps=total_steps,
         wall_seconds=compute_sec,
-        dof_count=n_q,                    # NC=1 for advection
+        dof_count=n_q,  # NC=1 for advection
         state_bytes_per_step=8 * n_q * 4,
     ).print()
 
     dump_pvd_collection(
-        String("output/solution_advout_gpu.pvd"), paths, times,
+        String("output/solution_advout_gpu.pvd"),
+        paths,
+        times,
     )
-    print("  wrote output/solution_advout_gpu.pvd +",
-          NUM_FRAMES + 1, "VTU frames")
+    print(
+        "  wrote output/solution_advout_gpu.pvd +", NUM_FRAMES + 1, "VTU frames"
+    )
 
     mpi.finalize()

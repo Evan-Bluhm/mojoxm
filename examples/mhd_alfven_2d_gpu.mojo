@@ -30,13 +30,17 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd import mhd_rk_stage_2d
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.ssprk3 import ssprk3_stage_plans
-from src.memory_report import ThroughputReport
+from src.memory_report import MemoryReport, ThroughputReport
 from src.vtu_2d import (
-    dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
+    dump_vtu_2d_frame_multi,
+    dump_pvd_collection,
+    vtu_frame_name,
 )
 
 
@@ -44,18 +48,18 @@ comptime P = 2
 comptime NX = 64
 comptime NY = 4
 comptime LX = 1.0
-comptime LY = Float64(4.0 / 64.0)   # dx = dy so triangles are isotropic
+comptime LY = Float64(4.0 / 64.0)  # dx = dy so triangles are isotropic
 
-comptime GAMMA     = 5.0 / 3.0
-comptime RHO0      = 1.0
-comptime B0        = 1.0
-comptime P0        = 0.1
+comptime GAMMA = 5.0 / 3.0
+comptime RHO0 = 1.0
+comptime B0 = 1.0
+comptime P0 = 0.1
 comptime AMPLITUDE = 0.1
 
 # c_A = B0 / sqrt(rho0) = 1 here; wave period = LX / c_A = LX.
-comptime T_FINAL   = 1.0
+comptime T_FINAL = 1.0
 comptime NUM_FRAMES = 20
-comptime CFL       = 0.15
+comptime CFL = 0.15
 
 
 comptime FRAME_PREFIX = "frame_mhd_alfven_2d_gpu_"
@@ -82,10 +86,16 @@ def main() raises:
     var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY)
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
-    print("  elements:", gpu_mesh.num_elements,
-          " faces:", gpu_mesh.num_faces,
-          "  nodes/elem:", NP_p,
-          "  total DOF:", gpu_mesh.num_elements * NP_p * NC)
+    print(
+        "  elements:",
+        gpu_mesh.num_elements,
+        " faces:",
+        gpu_mesh.num_faces,
+        "  nodes/elem:",
+        NP_p,
+        "  total DOF:",
+        gpu_mesh.num_elements * NP_p * NC,
+    )
 
     # IC: rho0, (mx, my) = (0, rho0 A sin(k x)),
     #     (Bx, By) = (B0, -A sin(k x)), E from gas + mag pressure.
@@ -98,14 +108,14 @@ def main() raises:
             var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var sv = sin(k_wave * x)
             var rho = RHO0
-            var uy  = AMPLITUDE * sv
-            var By  = -AMPLITUDE * sv
-            var Bx  = B0
-            var mx  = 0.0
-            var my  = rho * uy
-            var ke  = 0.5 * rho * (uy * uy)
-            var mp  = 0.5 * (Bx * Bx + By * By)
-            var E   = P0 / (GAMMA - 1.0) + ke + mp
+            var uy = AMPLITUDE * sv
+            var By = -AMPLITUDE * sv
+            var Bx = B0
+            var mx = 0.0
+            var my = rho * uy
+            var ke = 0.5 * rho * (uy * uy)
+            var mp = 0.5 * (Bx * Bx + By * By)
+            var E = P0 / (GAMMA - 1.0) + ke + mp
             host_q.append(Float32(rho))
             host_q.append(Float32(mx))
             host_q.append(Float32(my))
@@ -119,12 +129,22 @@ def main() raises:
             host_ic.append(Float32(By))
             host_ic.append(Float32(E))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar_count = gpu_mesh.num_faces * NFP_e * NC
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](d_fstar_count)
+
+    # WARPXM-style device-memory accounting (plain MHD: no BJ limiter,
+    # 2D np=1 only).
+    MemoryReport(
+        rk_stage_bytes=3 * n_q * 4,
+        dg_operators_bytes=gpu_re.device_bytes(),
+        limiter_bytes=0,
+        mesh_connectivity_bytes=(gpu_mesh.device_bytes() + d_fstar_count * 4),
+        halo_device_bytes=0,
+        halo_pinned_bytes=0,
+    ).print()
 
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
@@ -144,12 +164,20 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = Float32(T_FINAL / Float64(total_steps))
-    print("  cf=", cf, "  dt=", dt, "  steps/frame=", steps_per_frame,
-          "  total steps=", total_steps)
+    print(
+        "  cf=",
+        cf,
+        "  dt=",
+        dt,
+        "  steps/frame=",
+        steps_per_frame,
+        "  total steps=",
+        total_steps,
+    )
 
     var gamma_f = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
-    var min_p   = Float32(1.0e-6)
+    var min_p = Float32(1.0e-6)
 
     var density = List[Float64]()
     var vmag = List[Float64]()
@@ -167,7 +195,7 @@ def main() raises:
     field_names.append(String("rho"))
     field_names.append(String("|v|"))
     field_names.append(String("|B|"))
-    field_names.append(String("By"))   # signed component, useful for wave phase
+    field_names.append(String("By"))  # signed component, useful for wave phase
 
     # 2D plain MHD (NC=6) state layout: rho, mom_x, mom_y, Bx, By, E
     @parameter
@@ -175,10 +203,10 @@ def main() raises:
         var n_nodes = gpu_mesh.num_elements * NP_p
         for i in range(n_nodes):
             var rho = Float64(src[i * NC + 0])
-            var mx  = Float64(src[i * NC + 1])
-            var my  = Float64(src[i * NC + 2])
-            var Bx  = Float64(src[i * NC + 3])
-            var By  = Float64(src[i * NC + 4])
+            var mx = Float64(src[i * NC + 1])
+            var my = Float64(src[i * NC + 2])
+            var Bx = Float64(src[i * NC + 3])
+            var By = Float64(src[i * NC + 4])
             var rho_safe = rho if rho > 1.0e-12 else 1.0e-12
             var u = mx / rho_safe
             var v = my / rho_safe
@@ -196,7 +224,9 @@ def main() raises:
     fields.append(By_scalar.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
     dump_vtu_2d_frame_multi[P](
-        mesh_coords, field_names, fields,
+        mesh_coords,
+        field_names,
+        fields,
         String("output/") + f0_name,
     )
     paths.append(f0_name)
@@ -205,20 +235,31 @@ def main() raises:
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
             for stage in stage_plans:
                 mhd_rk_stage_2d[P](
-                    ctx, gpu_mesh,
+                    ctx,
+                    gpu_mesh,
                     gpu_re.d_Lift_ref.unsafe_ptr(),
                     gpu_re.d_D_ref.unsafe_ptr(),
-                    stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                    stage.q_in,
+                    stage.q_a,
+                    stage.q_b,
+                    stage.q_out,
                     d_fstar.unsafe_ptr(),
-                    gamma_f, min_rho, min_p,
-                    stage.a, stage.b, stage.c, dt,
+                    gamma_f,
+                    min_rho,
+                    min_p,
+                    stage.a,
+                    stage.b,
+                    stage.c,
+                    dt,
                 )
         ctx.synchronize()
         var c_end = perf_counter_ns()
@@ -235,7 +276,9 @@ def main() raises:
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
         dump_vtu_2d_frame_multi[P](
-            mesh_coords, field_names, fi_fields,
+            mesh_coords,
+            field_names,
+            fi_fields,
             String("output/") + fname,
         )
         paths.append(fname)
@@ -263,13 +306,17 @@ def main() raises:
         sum_ic += ic * ic
     var l2 = sqrt(sum_sq / Float64(n_q))
     var l2_ic = sqrt(sum_ic / Float64(n_q))
-    print("  L2 err =", l2, "  rel err =", l2 / l2_ic,
-          "  (IC L2 =", l2_ic, ")")
+    print("  L2 err =", l2, "  rel err =", l2 / l2_ic, "  (IC L2 =", l2_ic, ")")
 
     dump_pvd_collection(
-        String("output/solution_mhd_alfven_2d_gpu.pvd"), paths, times,
+        String("output/solution_mhd_alfven_2d_gpu.pvd"),
+        paths,
+        times,
     )
-    print("  wrote output/solution_mhd_alfven_2d_gpu.pvd +",
-          NUM_FRAMES + 1, "VTU frames")
+    print(
+        "  wrote output/solution_mhd_alfven_2d_gpu.pvd +",
+        NUM_FRAMES + 1,
+        "VTU frames",
+    )
 
     mpi.finalize()
