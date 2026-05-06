@@ -140,6 +140,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_shallow_water_wave_2d_p5 \
                 bench_shallow_water_wave_2d_rusanov \
                 bench_shallow_water_inflow_2d \
+                bench_shallow_water_inflow_2d_rusanov \
                 bench_shallow_water_dam_break_2d \
                 bench_maxwell_cavity_2d bench_maxwell_plane_wave_2d \
                 bench_maxwell_te_plane_wave_2d \
@@ -524,6 +525,8 @@ bench-shallow-water-wave-2d-rusanov: bench_shallow_water_wave_2d_rusanov
 	./bench_shallow_water_wave_2d_rusanov
 bench-shallow-water-inflow-2d: bench_shallow_water_inflow_2d
 	./bench_shallow_water_inflow_2d
+bench-shallow-water-inflow-2d-rusanov: bench_shallow_water_inflow_2d_rusanov
+	./bench_shallow_water_inflow_2d_rusanov
 bench-shallow-water-dam-break-2d: bench_shallow_water_dam_break_2d
 	./bench_shallow_water_dam_break_2d
 bench-maxwell-cavity-2d: bench_maxwell_cavity_2d
@@ -692,7 +695,7 @@ bench-bcs: \
 		bench-euler-channel-steady-2d bench-euler-inflow-2d bench-euler-inflow-3d \
 		bench-euler-hydrostatic-2d bench-euler-hydrostatic-2d-p3 \
 		bench-euler-hydrostatic-3d bench-euler-hydrostatic-3d-p3 \
-		bench-shallow-water-inflow-2d bench-shallow-water-inflow-3d \
+		bench-shallow-water-inflow-2d bench-shallow-water-inflow-2d-rusanov bench-shallow-water-inflow-3d \
 		bench-maxwell-outflow-2d bench-maxwell-inflow-2d \
 		bench-maxwell-outflow-3d bench-maxwell-inflow-3d \
 		bench-two-fluid-outflow-3d bench-two-fluid-walls-3d
