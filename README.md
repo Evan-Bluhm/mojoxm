@@ -174,7 +174,7 @@ Nine reference drivers under `examples/`:
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  116 analytic-solution gates tying schemes to closed-form reference
+  117 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
@@ -185,7 +185,7 @@ Nine reference drivers under `examples/`:
   largest comptime configuration the suite gates end-to-end.  When
   iterating, pick the slice that matches what's changing:
   `make bench-quick` (13 representative gates, ~65s),
-  `make bench-p5` (17 P=5 high-order gates, ~90s),
+  `make bench-p5` (19 P=5 high-order gates, ~95s),
   `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~70s),
   `make bench-rates` (10 explicit convergence-rate gates, ~50s),
   `make bench-bcs` (26 BC + source-term gates, ~95s).  Or
@@ -389,7 +389,7 @@ Nine reference drivers under `examples/`:
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 116 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 117 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused

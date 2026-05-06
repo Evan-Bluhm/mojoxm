@@ -122,7 +122,8 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_alfven_glm_2d_p4 \
                 bench_mhd_alfven_glm_2d_p5 \
                 bench_mhd_glm_psi_transport_2d_p3 \
-                bench_mhd_glm_psi_transport_2d bench_mhd_glm_psi_damp_2d \
+                bench_mhd_glm_psi_transport_2d \
+                bench_mhd_glm_psi_transport_2d_p5 bench_mhd_glm_psi_damp_2d \
                 bench_mhd_glm_psi_damp_2d_p3 bench_mhd_glm_psi_damp_2d_p5 \
                 bench_euler_sod_2d \
                 bench_euler_sod_limited_2d bench_euler_sod_limited_2d_p3 \
@@ -203,11 +204,11 @@ help:
 	@echo '  make test-quick          smoke 8 representative tests (~30s w/ cached binaries)'
 	@echo '  make bench-quick         smoke 13 representative benches (~65s)'
 	@echo '  make smoke               test-quick + bench-quick combined (~90s; one-command sanity check)'
-	@echo '  make bench-p5            run 17 P=5 P-parity gates at NP=21/56 (~90s)'
+	@echo '  make bench-p5            run 19 P=5 P-parity gates at NP=21/56 (~95s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
 	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
-	@echo '  make bench-all           build + run every analytic-solution gate (116 benches)'
+	@echo '  make bench-all           build + run every analytic-solution gate (117 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -253,7 +254,7 @@ help:
 	@echo ''
 	@echo 'Bench targets (analytic-solution gates):'
 	@echo '  make bench-quick         smoke-test one bench per physics per dim + limiter (13 gates, ~65s)'
-	@echo '  make bench-p5            P=5 P-parity sweep -- 17 gates at NP=21 (2D) / NP=56 (3D)'
+	@echo '  make bench-p5            P=5 P-parity sweep -- 19 gates at NP=21 (2D) / NP=56 (3D)'
 	@echo '                           across all 5 smooth physics + limited shocked Sod + Euler'
 	@echo '                           hydrostatic + 3D Two-Fluid (NC=17) + GLM exp-decay rate gates'
 	@echo '                           (~90s); the largest comptime configs the suite covers, where'
@@ -271,7 +272,7 @@ help:
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
 	@echo '                           the source-term hook in rk_stage_kernel (~95s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (116 benches, ~10 min)'
+	@echo '  make bench-all           build + run every gate (117 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -516,6 +517,8 @@ bench-mhd-glm-psi-transport-2d: bench_mhd_glm_psi_transport_2d
 	./bench_mhd_glm_psi_transport_2d
 bench-mhd-glm-psi-transport-2d-p3: bench_mhd_glm_psi_transport_2d_p3
 	./bench_mhd_glm_psi_transport_2d_p3
+bench-mhd-glm-psi-transport-2d-p5: bench_mhd_glm_psi_transport_2d_p5
+	./bench_mhd_glm_psi_transport_2d_p5
 bench-mhd-glm-psi-damp-2d: bench_mhd_glm_psi_damp_2d
 	./bench_mhd_glm_psi_damp_2d
 bench-mhd-glm-psi-damp-2d-p3: bench_mhd_glm_psi_damp_2d_p3
@@ -791,14 +794,15 @@ bench-shocks: \
 	@echo '=== bench-shocks: 13 shocked-flow gates PASSED ==='
 
 
-# P=5 P-parity sweep -- 17 gates at the largest comptime config
+# P=5 P-parity sweep -- 19 gates at the largest comptime config
 # the suite covers (2D NP=21 + 3D NP=56 across all 5 smooth physics
 # + 2D and 3D limited shocked Sod + 2D and 3D Euler hydrostatic
 # (gravity source) + 3D Two-Fluid (NC=17, the largest NC in the
 # suite) + 2D and 3D GLM psi exp-decay (operator-split + source-term
-# rate gates)).  High-P regressions tend to surface here first since
-# these stress the comptime template + shared-memory rk_stage_kernel
-# + the BJ limiter pipeline hardest.  Run-time ~90s wall.
+# rate gates) + 2D and 3D GLM psi transport (psi advection at c_h)).
+# High-P regressions tend to surface here first since these stress
+# the comptime template + shared-memory rk_stage_kernel + the BJ
+# limiter pipeline hardest.  Run-time ~95s wall.
 bench-p5: \
 		bench-advection-translation-2d-p5 \
 		bench-advection-3d-p5 \
@@ -814,10 +818,12 @@ bench-p5: \
 		bench-shallow-water-wave-3d-p5 \
 		bench-mhd-glm-psi-damp-2d-p5 \
 		bench-mhd-glm-psi-damp-3d-p5 \
+		bench-mhd-glm-psi-transport-2d-p5 \
+		bench-mhd-glm-psi-transport-3d-p5 \
 		bench-mhd-alfven-glm-2d-p5 \
 		bench-mhd-alfven-3d-p5 \
 		bench-two-fluid-walls-3d-p5
-	@echo '=== bench-p5: 17 P=5 P-parity gates PASSED ==='
+	@echo '=== bench-p5: 19 P=5 P-parity gates PASSED ==='
 
 
 # Aggregate target -- runs every analytic benchmark.  Grouped by
