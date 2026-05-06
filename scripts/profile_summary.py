@@ -109,6 +109,27 @@ def parse_file(path: Path) -> list[KernelRow]:
     return rows
 
 
+def bench_physics(bench: str) -> str:
+    """Map a bench name to its physics module (one of: advection / euler /
+    mhd / shallow_water / maxwell / two_fluid).  Used by --by-physics
+    aggregation."""
+    # mhd_glm_psi_* + mhd_brio_wu_* + mhd_alfven_glm_* all roll up to "mhd".
+    # shallow_water comes before "water" so we just check the prefix.
+    if bench.startswith("bench_advection_"):
+        return "advection"
+    if bench.startswith("bench_euler_"):
+        return "euler"
+    if bench.startswith("bench_mhd_"):
+        return "mhd"
+    if bench.startswith("bench_shallow_water_"):
+        return "shallow_water"
+    if bench.startswith("bench_maxwell_"):
+        return "maxwell"
+    if bench.startswith("bench_two_fluid_"):
+        return "two_fluid"
+    return "other"
+
+
 def kernel_kind(name: str) -> str:
     # The mangler appends a content hash; strip it for a readable label.
     base = re.sub(r"_[0-9a-f]{16}$", "", name)
@@ -278,6 +299,15 @@ def main() -> int:
             "timing anomaly."
         ),
     )
+    ap.add_argument(
+        "--by-physics",
+        action="store_true",
+        help=(
+            "Aggregate dominant-kernel time by physics module (advection / "
+            "euler / mhd / shallow_water / maxwell / two_fluid).  Useful "
+            "for sizing where the suite-wide compute budget actually sits."
+        ),
+    )
     args = ap.parse_args()
 
     if not PROFILE_DIR.is_dir():
@@ -318,6 +348,57 @@ def main() -> int:
     label += f", sorted by {sort_desc}:"
 
     show = dom if args.all else dom[: args.top]
+    if args.by_physics:
+        # Group by physics module; sum total_ms and instance count.
+        # Sort groups descending by total_ms.  Always operates on the
+        # full dom set (not the --top slice), since aggregating just
+        # the top-N benches isn't a meaningful suite roll-up.
+        by_phys: dict[str, list[KernelRow]] = {}
+        for r in dom:
+            by_phys.setdefault(bench_physics(r.bench), []).append(r)
+        groups = [
+            (
+                phys,
+                len(rows),
+                sum(r.instances for r in rows),
+                sum(r.total_ms for r in rows),
+            )
+            for phys, rows in by_phys.items()
+        ]
+        groups.sort(key=lambda g: -g[3])
+        suite_total_ms = sum(g[3] for g in groups)
+        if args.csv:
+            print("physics,benches,instances,total_ms,share_pct")
+            for phys, n_benches, n_inst, t_ms in groups:
+                share = 100.0 * t_ms / suite_total_ms if suite_total_ms > 0 else 0.0
+                print(f"{phys},{n_benches},{n_inst},{t_ms:.3f},{share:.2f}")
+            return 0
+        # Different label semantics in --by-physics: --top is irrelevant
+        # since we're aggregating, and the rows are sorted by group total
+        # not the per-bench --sort key.
+        phys_label = f"all {len(dom)} benches grouped by physics module"
+        if args.kernel:
+            phys_label += f" (kernel ~ '{args.kernel}')"
+        if args.filter:
+            phys_label += f" (bench ~ '{args.filter}')"
+        phys_label += ", sorted by group total ms:"
+        print(phys_label)
+        print(
+            f"  {'physics':<14} {'benches':>8} {'launches':>10} "
+            f"{'total ms':>11} {'share':>7}"
+        )
+        print(f"  {'-' * 14} {'-' * 8} {'-' * 10} {'-' * 11} {'-' * 7}")
+        for phys, n_benches, n_inst, t_ms in groups:
+            share = 100.0 * t_ms / suite_total_ms if suite_total_ms > 0 else 0.0
+            print(
+                f"  {phys:<14} {n_benches:>8d} {n_inst:>10d} "
+                f"{t_ms:>11.1f} {share:>6.1f}%"
+            )
+        print(
+            f"  -> {len(dom)} benches across {len(groups)} physics modules, "
+            f"{suite_total_ms / 1000:.2f} s total"
+        )
+        return 0
     if args.csv:
         # Stable column order; downstream tooling can pivot/aggregate.
         print("bench,kernel,avg_us,instances,total_ms,cv_pct")
