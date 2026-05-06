@@ -39,6 +39,7 @@ from src.nvtx import NvtxContext
 from src.frame_writer import FrameWriter
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
 from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.vtu import dump_vtu_3d_frame_multi
 
 
 comptime NX = 16
@@ -190,6 +191,70 @@ def main() raises:
     )
 
     writer.finalize("output/solution.pvd", nvtx)
+
+    # Final-state multi-field snapshot for richer ParaView inspection
+    # (the per-frame async pipeline above writes one Ex field per
+    # frame for performance).  Emits Ex + |E| + |B| at t=T_FINAL to
+    # output/snapshot_t_final.vtu -- Ex shows the dominant cavity
+    # standing-wave pattern, |E| and |B| show the energy localisation.
+    # Gated on np=1 since each rank would dump only its owned slab.
+    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
+    if nprocs == 1:
+        nvtx.push_range("snapshot_t_final")
+        var n_owned_dof = solver.num_owned_elements * N_P
+        var snap_ex = List[Float32]()
+        var snap_ey = List[Float32]()
+        var snap_ez = List[Float32]()
+        var snap_bx = List[Float32]()
+        var snap_by = List[Float32]()
+        var snap_bz = List[Float32]()
+        for _ in range(n_owned_dof):
+            snap_ex.append(Float32(0.0))
+            snap_ey.append(Float32(0.0))
+            snap_ez.append(Float32(0.0))
+            snap_bx.append(Float32(0.0))
+            snap_by.append(Float32(0.0))
+            snap_bz.append(Float32(0.0))
+        solver.download_owned_component(0, snap_ex, nvtx)
+        solver.download_owned_component(1, snap_ey, nvtx)
+        solver.download_owned_component(2, snap_ez, nvtx)
+        solver.download_owned_component(3, snap_bx, nvtx)
+        solver.download_owned_component(4, snap_by, nvtx)
+        solver.download_owned_component(5, snap_bz, nvtx)
+        var f_ex   = List[Float64]()
+        var f_emag = List[Float64]()
+        var f_bmag = List[Float64]()
+        for k in range(n_owned_dof):
+            var ex = snap_ex[k]
+            var ey = snap_ey[k]
+            var ez = snap_ez[k]
+            var bx = snap_bx[k]
+            var by = snap_by[k]
+            var bz = snap_bz[k]
+            f_ex.append(Float64(ex))
+            f_emag.append(Float64(sqrt(ex*ex + ey*ey + ez*ez)))
+            f_bmag.append(Float64(sqrt(bx*bx + by*by + bz*bz)))
+        var fields = List[List[Float64]]()
+        fields.append(f_ex^)
+        fields.append(f_emag^)
+        fields.append(f_bmag^)
+        var names = List[String]()
+        names.append(String("Ex"))
+        names.append(String("|E|"))
+        names.append(String("|B|"))
+        dump_vtu_3d_frame_multi(
+            num_elements=solver.num_owned_elements,
+            nodes_per_elem=N_P,
+            elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                solver.mesh.owned_node_xyz_f32_ptr
+            ),
+            field_names=names,
+            field_data=fields,
+            path=String("output/snapshot_t_final.vtu"),
+        )
+        nvtx.pop_range()
+        if rank == 0:
+            print("  wrote output/snapshot_t_final.vtu (Ex + |E| + |B|, t=", T_FINAL, ")")
 
     # Round-trip L2 + energy diagnostics are rank-local sums; at np>1
     # they'd need an allreduce to be meaningful, so gate on np=1.
