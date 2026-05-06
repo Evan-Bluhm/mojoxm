@@ -22,6 +22,9 @@ Usage
     scripts/profile_summary.py --kernel rk_stage  # only rk_stage_kernel rows
                                             # (3D benches only; 2D benches
                                             # use per-physics kernels)
+    scripts/profile_summary.py --sort total # sort by total kernel ms
+                                            # (where the profile-bench-all
+                                            # budget actually sits)
 
 Doesn't depend on Mojo / pixi -- pure stdlib Python so it runs
 anywhere the .kern.txt files do.
@@ -218,6 +221,16 @@ def main() -> int:
             "the 3D Solver's main kernel."
         ),
     )
+    ap.add_argument(
+        "--sort",
+        default="avg",
+        choices=["avg", "total", "inst"],
+        help=(
+            "Sort key (default: avg us/launch).  'total' = total kernel ms "
+            "across all instances (where the profile-bench-all budget sits); "
+            "'inst' = number of kernel launches (a proxy for step count)."
+        ),
+    )
     args = ap.parse_args()
 
     if not PROFILE_DIR.is_dir():
@@ -238,7 +251,13 @@ def main() -> int:
         return 1
 
     dom = dominant_per_bench(rows)
-    dom.sort(key=lambda r: -r.avg_ns)
+    sort_label_map = {
+        "avg": ("avg us/launch", lambda r: -r.avg_ns),
+        "total": ("total kernel ms", lambda r: -r.total_ns),
+        "inst": ("instance count", lambda r: -r.instances),
+    }
+    sort_desc, sort_key = sort_label_map[args.sort]
+    dom.sort(key=sort_key)
 
     label = (
         f"all {len(dom)} benches"
@@ -249,7 +268,7 @@ def main() -> int:
         label += f" (kernel ~ '{args.kernel}')"
     if args.filter:
         label += f" (bench ~ '{args.filter}')"
-    label += ", sorted by avg us/launch:"
+    label += f", sorted by {sort_desc}:"
 
     show = dom if args.all else dom[: args.top]
     total_ms_all = sum(r.total_ms for r in dom)
