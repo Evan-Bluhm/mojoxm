@@ -1040,13 +1040,15 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
   3D kernel uses).
 - **3D async-writev `FrameWriter` is single-field.** The async
   scatter-gather pipeline (`VtuWriter` + `AsyncWriter`) writes a
-  single rho field per frame for performance.  A synchronous
-  multi-field helper `dump_vtu_3d_frame_multi` lives alongside
-  `write_pvd` in `src/vtu.mojo` and accepts N named scalar fields
-  (mirrors `dump_vtu_2d_frame_multi`); 3D drivers that want
-  multi-field output can opt into it at the cost of one
-  synchronous write per frame.  Folding multi-field into the async
-  pipeline would be the natural next step.
+  single rho field per frame for performance.  Synchronous
+  multi-field output is available via `FrameWriter.write_frame_multi`
+  (in addition to the underlying `dump_vtu_3d_frame_multi` helper
+  in `src/vtu.mojo`); both accept N named scalar fields and the
+  `FrameWriter` method correctly handles per-rank output dirs at
+  np>1.  3D drivers that want multi-field output can opt into the
+  sync path at the cost of one synchronous write per frame; folding
+  multi-field into the async pipeline would be the natural next
+  step.
 
 ## References
 
