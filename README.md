@@ -392,6 +392,11 @@ Nine reference drivers under `examples/`:
   `nsys profile --stats=true` and saves a per-kernel time summary
   to `benchmarks/profile_reports/<name>.kern.txt` for diff-ability
   across runs.  Baseline reports live in git for every benchmark.
+  `make profile-summary` (or `scripts/profile_summary.py`) reads the
+  cached reports and ranks every bench by dominant-kernel avg
+  us/launch -- a quick visual scan of where the per-step cost sits
+  across the suite (heaviest = best per-step ROI for kernel-level
+  optimisation).
 
 - **2D kernel fusion (phase 2):** Each 2D physics path now
   runs its flux pipeline in **2 kernel launches per SSPRK3 stage**
