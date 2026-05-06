@@ -214,4 +214,93 @@ def main() raises:
             "(no integer factorisation); did not raise"
         )
 
+    # ---------- (5) torus topology invariant -----------------------
+    # On periodic boundaries, the neighbour graph forms a 3D torus.
+    # For every rank r and every direction d in {x, y, z}:
+    #   the (-d) neighbour's (+d) neighbour is r itself, and
+    #   the (+d) neighbour's (-d) neighbour is r itself.
+    # Catches a regression in the wrap-around index math (e.g. dropping
+    # the modulo on rx-1 when rx=0).  Sweep nprocs in {1, 2, 4, 8} on
+    # a 4x4x4 mesh -- already-validated partitioning above; this just
+    # checks the topology closure.
+    for nprocs in [1, 2, 4, 8]:
+        for r in range(nprocs):
+            var p = build_partition(rank=r, nprocs=nprocs, nx=4, ny=4, nz=4)
+            var nmx = p.neighbour_minus_x
+            var npx = p.neighbour_plus_x
+            var nmy = p.neighbour_minus_y
+            var npy = p.neighbour_plus_y
+            var nmz = p.neighbour_minus_z
+            var npz = p.neighbour_plus_z
+            # Walk -d then +d.
+            var p_mx = build_partition(
+                rank=Int(nmx), nprocs=nprocs, nx=4, ny=4, nz=4
+            )
+            if Int(p_mx.neighbour_plus_x) != r:
+                raise Error(
+                    "partition_test FAILED: nprocs="
+                    + String(nprocs)
+                    + " r="
+                    + String(r)
+                    + " (-x then +x) != self ("
+                    + String(p_mx.neighbour_plus_x)
+                    + ")"
+                )
+            var p_px = build_partition(
+                rank=Int(npx), nprocs=nprocs, nx=4, ny=4, nz=4
+            )
+            if Int(p_px.neighbour_minus_x) != r:
+                raise Error(
+                    "partition_test FAILED: nprocs="
+                    + String(nprocs)
+                    + " r="
+                    + String(r)
+                    + " (+x then -x) != self"
+                )
+            var p_my = build_partition(
+                rank=Int(nmy), nprocs=nprocs, nx=4, ny=4, nz=4
+            )
+            if Int(p_my.neighbour_plus_y) != r:
+                raise Error(
+                    "partition_test FAILED: nprocs="
+                    + String(nprocs)
+                    + " r="
+                    + String(r)
+                    + " (-y then +y) != self"
+                )
+            var p_py = build_partition(
+                rank=Int(npy), nprocs=nprocs, nx=4, ny=4, nz=4
+            )
+            if Int(p_py.neighbour_minus_y) != r:
+                raise Error(
+                    "partition_test FAILED: nprocs="
+                    + String(nprocs)
+                    + " r="
+                    + String(r)
+                    + " (+y then -y) != self"
+                )
+            var p_mz = build_partition(
+                rank=Int(nmz), nprocs=nprocs, nx=4, ny=4, nz=4
+            )
+            if Int(p_mz.neighbour_plus_z) != r:
+                raise Error(
+                    "partition_test FAILED: nprocs="
+                    + String(nprocs)
+                    + " r="
+                    + String(r)
+                    + " (-z then +z) != self"
+                )
+            var p_pz = build_partition(
+                rank=Int(npz), nprocs=nprocs, nx=4, ny=4, nz=4
+            )
+            if Int(p_pz.neighbour_minus_z) != r:
+                raise Error(
+                    "partition_test FAILED: nprocs="
+                    + String(nprocs)
+                    + " r="
+                    + String(r)
+                    + " (+z then -z) != self"
+                )
+    print("  torus topology OK (nprocs=1/2/4/8, all 6 directions)")
+
     print("=== partition_test PASSED ===")
