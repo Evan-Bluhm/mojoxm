@@ -1251,6 +1251,52 @@ profile-bench-mhd-brio-wu-3d: bench_mhd_brio_wu_3d
 	@bin=bench_mhd_brio_wu_3d; $(PROFILE_BIN)
 profile-bench-mhd-brio-wu-3d-p3: bench_mhd_brio_wu_3d_p3
 	@bin=bench_mhd_brio_wu_3d_p3; $(PROFILE_BIN)
+profile-bench-euler-hydrostatic-2d-p4: bench_euler_hydrostatic_2d_p4
+	@bin=bench_euler_hydrostatic_2d_p4; $(PROFILE_BIN)
+profile-bench-euler-hydrostatic-2d-p5: bench_euler_hydrostatic_2d_p5
+	@bin=bench_euler_hydrostatic_2d_p5; $(PROFILE_BIN)
+profile-bench-euler-hydrostatic-3d-p4: bench_euler_hydrostatic_3d_p4
+	@bin=bench_euler_hydrostatic_3d_p4; $(PROFILE_BIN)
+profile-bench-euler-hydrostatic-3d-p5: bench_euler_hydrostatic_3d_p5
+	@bin=bench_euler_hydrostatic_3d_p5; $(PROFILE_BIN)
+profile-bench-euler-inflow-2d: bench_euler_inflow_2d
+	@bin=bench_euler_inflow_2d; $(PROFILE_BIN)
+profile-bench-mhd-glm-psi-damp-2d-p4: bench_mhd_glm_psi_damp_2d_p4
+	@bin=bench_mhd_glm_psi_damp_2d_p4; $(PROFILE_BIN)
+profile-bench-mhd-glm-psi-damp-2d-p5: bench_mhd_glm_psi_damp_2d_p5
+	@bin=bench_mhd_glm_psi_damp_2d_p5; $(PROFILE_BIN)
+profile-bench-mhd-glm-psi-damp-3d-p4: bench_mhd_glm_psi_damp_3d_p4
+	@bin=bench_mhd_glm_psi_damp_3d_p4; $(PROFILE_BIN)
+profile-bench-mhd-glm-psi-damp-3d-p5: bench_mhd_glm_psi_damp_3d_p5
+	@bin=bench_mhd_glm_psi_damp_3d_p5; $(PROFILE_BIN)
+profile-bench-mhd-glm-psi-transport-2d-p4: bench_mhd_glm_psi_transport_2d_p4
+	@bin=bench_mhd_glm_psi_transport_2d_p4; $(PROFILE_BIN)
+profile-bench-mhd-glm-psi-transport-2d-p5: bench_mhd_glm_psi_transport_2d_p5
+	@bin=bench_mhd_glm_psi_transport_2d_p5; $(PROFILE_BIN)
+profile-bench-mhd-glm-psi-transport-3d-p4: bench_mhd_glm_psi_transport_3d_p4
+	@bin=bench_mhd_glm_psi_transport_3d_p4; $(PROFILE_BIN)
+profile-bench-mhd-glm-psi-transport-3d-p5: bench_mhd_glm_psi_transport_3d_p5
+	@bin=bench_mhd_glm_psi_transport_3d_p5; $(PROFILE_BIN)
+profile-bench-mhd-inflow-2d: bench_mhd_inflow_2d
+	@bin=bench_mhd_inflow_2d; $(PROFILE_BIN)
+profile-bench-mhd-inflow-2d-glm: bench_mhd_inflow_2d_glm
+	@bin=bench_mhd_inflow_2d_glm; $(PROFILE_BIN)
+profile-bench-mhd-inflow-3d: bench_mhd_inflow_3d
+	@bin=bench_mhd_inflow_3d; $(PROFILE_BIN)
+profile-bench-mhd-wall-2d: bench_mhd_wall_2d
+	@bin=bench_mhd_wall_2d; $(PROFILE_BIN)
+profile-bench-mhd-wall-2d-glm: bench_mhd_wall_2d_glm
+	@bin=bench_mhd_wall_2d_glm; $(PROFILE_BIN)
+profile-bench-mhd-wall-3d: bench_mhd_wall_3d
+	@bin=bench_mhd_wall_3d; $(PROFILE_BIN)
+profile-bench-shallow-water-inflow-2d-rusanov: bench_shallow_water_inflow_2d_rusanov
+	@bin=bench_shallow_water_inflow_2d_rusanov; $(PROFILE_BIN)
+profile-bench-two-fluid-walls-3d-p3: bench_two_fluid_walls_3d_p3
+	@bin=bench_two_fluid_walls_3d_p3; $(PROFILE_BIN)
+profile-bench-two-fluid-walls-3d-p4: bench_two_fluid_walls_3d_p4
+	@bin=bench_two_fluid_walls_3d_p4; $(PROFILE_BIN)
+profile-bench-two-fluid-walls-3d-p5: bench_two_fluid_walls_3d_p5
+	@bin=bench_two_fluid_walls_3d_p5; $(PROFILE_BIN)
 
 # Aggregate profile target -- captures kernel summaries for every
 # bench under nsys.  Same per-physics grouping as `bench-all`.
@@ -1309,7 +1355,20 @@ profile-bench-all: \
 		profile-bench-maxwell-uniform-m-3d profile-bench-maxwell-uniform-m-3d-p3 \
 		profile-bench-maxwell-outflow-3d profile-bench-maxwell-inflow-3d \
 		profile-bench-two-fluid-langmuir-3d profile-bench-two-fluid-outflow-3d \
-		profile-bench-two-fluid-walls-3d
+		profile-bench-two-fluid-walls-3d profile-bench-two-fluid-walls-3d-p3 \
+		profile-bench-two-fluid-walls-3d-p4 profile-bench-two-fluid-walls-3d-p5 \
+		profile-bench-euler-hydrostatic-2d-p4 profile-bench-euler-hydrostatic-2d-p5 \
+		profile-bench-euler-hydrostatic-3d-p4 profile-bench-euler-hydrostatic-3d-p5 \
+		profile-bench-euler-inflow-2d \
+		profile-bench-shallow-water-inflow-2d-rusanov \
+		profile-bench-mhd-glm-psi-damp-2d-p4 profile-bench-mhd-glm-psi-damp-2d-p5 \
+		profile-bench-mhd-glm-psi-damp-3d-p4 profile-bench-mhd-glm-psi-damp-3d-p5 \
+		profile-bench-mhd-glm-psi-transport-2d-p4 profile-bench-mhd-glm-psi-transport-2d-p5 \
+		profile-bench-mhd-glm-psi-transport-3d-p4 profile-bench-mhd-glm-psi-transport-3d-p5 \
+		profile-bench-mhd-inflow-2d profile-bench-mhd-inflow-2d-glm \
+		profile-bench-mhd-inflow-3d \
+		profile-bench-mhd-wall-2d profile-bench-mhd-wall-2d-glm \
+		profile-bench-mhd-wall-3d
 	@echo '=== All profile reports written to benchmarks/profile_reports/ ==='
 
 test-klone:
