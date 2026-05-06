@@ -154,6 +154,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_advection_3d_p5 \
                 bench_advection_outflow_3d bench_advection_inflow_3d \
                 bench_mhd_alfven_3d bench_mhd_alfven_3d_p3 \
+                bench_mhd_inflow_3d \
                 bench_mhd_alfven_3d_p4 bench_mhd_alfven_3d_p5 \
                 bench_mhd_glm_psi_damp_3d bench_mhd_glm_psi_damp_3d_p3 \
                 bench_mhd_glm_psi_transport_3d \
@@ -567,6 +568,8 @@ bench-advection-inflow-3d: bench_advection_inflow_3d
 	./bench_advection_inflow_3d
 bench-mhd-alfven-3d: bench_mhd_alfven_3d
 	./bench_mhd_alfven_3d
+bench-mhd-inflow-3d: bench_mhd_inflow_3d
+	./bench_mhd_inflow_3d
 bench-mhd-alfven-3d-p3: bench_mhd_alfven_3d_p3
 	./bench_mhd_alfven_3d_p3
 bench-mhd-alfven-3d-p4: bench_mhd_alfven_3d_p4
@@ -696,6 +699,7 @@ bench-bcs: \
 		bench-euler-hydrostatic-2d bench-euler-hydrostatic-2d-p3 \
 		bench-euler-hydrostatic-3d bench-euler-hydrostatic-3d-p3 \
 		bench-shallow-water-inflow-2d bench-shallow-water-inflow-2d-rusanov bench-shallow-water-inflow-3d \
+		bench-mhd-inflow-3d \
 		bench-maxwell-outflow-2d bench-maxwell-inflow-2d \
 		bench-maxwell-outflow-3d bench-maxwell-inflow-3d \
 		bench-two-fluid-outflow-3d bench-two-fluid-walls-3d
