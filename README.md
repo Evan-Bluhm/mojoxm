@@ -1034,7 +1034,8 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
 - **2D MHD shocked-Riemann problems are unsupported.** The
   `mhd_glm_*` kernels in `src/local_mesh_2d_gpu_mhd_glm.mojo` add
   GLM as an opt-in NC=7 path (gated by alfven-via-GLM at P=2/3/4/5,
-  psi-transport at P=2/3, and psi-damp at P=2/3).  Shocked 2D MHD
+  psi-transport at P=2/3/4/5, and psi-damp at P=2/3/4/5 in both 2D
+  and 3D).  Shocked 2D MHD
   (Brio-Wu, OT vortex, ...) is not gated.  A 2D Brio-Wu retry
   2026-05-05 with the current BJ-limited GLM stack confirmed that
   HLLD is genuinely needed: the run no longer NaNs immediately
