@@ -46,6 +46,19 @@ Nine reference drivers under `examples/`:
 - `two_fluid_langmuir` — electron plasma oscillation at the plasma
   frequency, analytic two-fluid period match.
 
+## Contents
+
+- [Capabilities at a glance](#capabilities-at-a-glance)
+- [Numerical scheme](#numerical-scheme)
+- [System architecture](#system-architecture)
+- [Diagnostics & visualization](#diagnostics--visualization)
+- [Performance](#performance)
+- [Build & run](#build--run)
+- [Profiling](#profiling)
+- [Design decisions worth knowing](#design-decisions-worth-knowing)
+- [Limitations](#limitations)
+- [References](#references)
+
 ## Capabilities at a glance
 
 - **Boundary conditions**: periodic, slip wall (`BC_WALL`), transmissive
