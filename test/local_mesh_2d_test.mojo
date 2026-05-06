@@ -161,4 +161,5 @@ def main() raises:
     check_topology[2](5, 3, 2.0, 1.0)  # non-square cells
     check_topology[3](4, 4, 1.0, 1.0)
     check_topology[4](3, 3, 1.0, 1.0)
+    check_topology[5](3, 3, 1.0, 1.0)  # NP_p=21, NFP_e=6 -- largest config
     print("=== local_mesh_2d_test PASSED ===")

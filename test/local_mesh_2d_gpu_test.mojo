@@ -2,7 +2,7 @@
 # local_mesh_2d_gpu_test -- 2D mesh + advection GPU foundation test
 # ======================================================================
 #
-# Verifies that the 2D GPU foundation works end-to-end at P=1/2/3:
+# Verifies that the 2D GPU foundation works end-to-end at P=1..5:
 #   (a) LocalMesh2DGpu upload is lossless for Int32 tables and within
 #       Float32 round-trip precision for geometry tables.
 #   (b) cell_mean_kernel_2d (mass-matrix-weighted nodal quadrature)
@@ -475,5 +475,7 @@ def main() raises:
     check[1]()
     check[2]()
     check[3]()
+    check[4]()
+    check[5]()
     print("=== local_mesh_2d_gpu_test PASSED ===")
     mpi.finalize()
