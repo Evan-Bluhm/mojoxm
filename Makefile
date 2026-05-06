@@ -202,8 +202,8 @@ help:
 	@echo '  make bench-p5            run 12 P=5 P-parity gates at NP=21/56 (~80s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
-	@echo '  make bench-bcs           run 18 BC + source-term gates -- inflow / outflow / wall / gravity (~80s cached)'
-	@echo '  make bench-all           build + run every analytic-solution gate (98 benches)'
+	@echo '  make bench-bcs           run 24 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
+	@echo '  make bench-all           build + run every analytic-solution gate (108 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -254,12 +254,12 @@ help:
 	@echo '                           e_2N) >= P-dependent floor.  Advection 2D + 3D P=2-5 (8) +'
 	@echo '                           Euler 3D P=2/3 (2).  Catches scheme-order regressions an'
 	@echo '                           absolute-L2 sentinel would miss (~50s).'
-	@echo '  make bench-bcs           18 boundary-condition + source-term gates exercising every'
+	@echo '  make bench-bcs           24 boundary-condition + source-term gates exercising every'
 	@echo '                           BC dispatch arm (interior / wall / outflow / inflow) across'
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
-	@echo '                           the source-term hook in rk_stage_kernel (~80s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (98 benches, ~10 min)'
+	@echo '                           the source-term hook in rk_stage_kernel (~95s w/ cached binaries).'
+	@echo '  make bench-all           build + run every gate (108 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -712,7 +712,7 @@ bench-bcs: \
 		bench-maxwell-outflow-2d bench-maxwell-inflow-2d \
 		bench-maxwell-outflow-3d bench-maxwell-inflow-3d \
 		bench-two-fluid-outflow-3d bench-two-fluid-walls-3d
-	@echo '=== bench-bcs: 18 BC + source-term gates PASSED ==='
+	@echo '=== bench-bcs: 24 BC + source-term gates PASSED ==='
 
 
 # Convergence-rate sweep -- 10 gates that explicitly assert
