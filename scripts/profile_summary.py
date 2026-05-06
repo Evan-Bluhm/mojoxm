@@ -231,6 +231,13 @@ def main() -> int:
             "'inst' = number of kernel launches (a proxy for step count)."
         ),
     )
+    ap.add_argument(
+        "--csv",
+        action="store_true",
+        help=(
+            "Emit machine-readable CSV instead of the human-readable table."
+        ),
+    )
     args = ap.parse_args()
 
     if not PROFILE_DIR.is_dir():
@@ -271,6 +278,15 @@ def main() -> int:
     label += f", sorted by {sort_desc}:"
 
     show = dom if args.all else dom[: args.top]
+    if args.csv:
+        # Stable column order; downstream tooling can pivot/aggregate.
+        print("bench,kernel,avg_us,instances,total_ms")
+        for r in show:
+            print(
+                f"{r.bench},{kernel_kind(r.name)},{r.avg_us:.3f},"
+                f"{r.instances},{r.total_ms:.3f}"
+            )
+        return 0
     total_ms_all = sum(r.total_ms for r in dom)
     print_table(show, label, total_ms_all_benches=total_ms_all)
     return 0
