@@ -130,6 +130,22 @@ def main() raises:
         raise Error("memory_report_test: per_step_seconds non-positive")
     if tput.state_bandwidth_bytes_per_second() <= 0.0:
         raise Error("memory_report_test: state_bandwidth non-positive")
+    # Internal consistency: dof_per_second == dof_count / per_step_seconds.
+    # Catches a regression where one of the two methods forgets to scale
+    # by num_steps (e.g. dof_per_second using wall_seconds in place of
+    # per_step_seconds, or vice versa).
+    var derived_rate = Float64(tput.dof_count) / tput.per_step_seconds()
+    var rate_err = derived_rate - tput.dof_per_second()
+    if rate_err < 0.0:
+        rate_err = -rate_err
+    var rate_rel = rate_err / tput.dof_per_second()
+    if rate_rel > 1.0e-9:
+        raise Error(
+            "memory_report_test: throughput consistency violated -- "
+            "dof_per_second=" + String(tput.dof_per_second())
+            + " vs dof_count/per_step_seconds=" + String(derived_rate)
+            + " (rel err " + String(rate_rel) + ")"
+        )
     # Upper-bound sanity: physically plausible range.  This catches the
     # async-enqueue-only timing bug that originally produced ~9 TB/s
     # numbers (which is impossible on any real GPU).  Modern HBM peaks
