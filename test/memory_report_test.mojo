@@ -21,7 +21,6 @@
 # ======================================================================
 
 from src import mpi
-from std.math import ceildiv
 from std.sys import has_accelerator
 from std.gpu.host import DeviceContext
 

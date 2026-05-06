@@ -30,7 +30,7 @@ from std.math import ceildiv, sqrt, isnan, isinf
 
 from src import mpi
 from src.partition import build_partition
-from src.reference import ReferenceElement, to_float32, num_tet_nodes, N_P
+from src.reference import ReferenceElement, to_float32, num_tet_nodes
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
