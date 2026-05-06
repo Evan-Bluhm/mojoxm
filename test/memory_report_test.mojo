@@ -52,7 +52,9 @@ def main() raises:
     var mesh = Mesh[P](
         ctx=ctx,
         part=build_partition(rank=rank, nprocs=size, nx=4, ny=4, nz=4),
-        Lx=1.0, Ly=1.0, Lz=1.0,
+        Lx=1.0,
+        Ly=1.0,
+        Lz=1.0,
         bcs=BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
@@ -62,11 +64,18 @@ def main() raises:
         d_perm=mesh.d_perm.unsafe_ptr(),
     )
     var physics = Advection(
-        vx=Float32(1.0), vy=Float32(0.0), vz=Float32(0.0),
+        vx=Float32(1.0),
+        vy=Float32(0.0),
+        vz=Float32(0.0),
     )
     var solver = Solver[Advection, P](
-        ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^,
-        D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^,
+        ctx=ctx^,
+        mesh=mesh^,
+        halo=halo^,
+        physics=physics^,
+        D_ref=D_ref^,
+        Lift_ref=Lift_ref^,
+        node_weights=node_weights^,
     )
 
     var rep = solver.memory_report()
@@ -104,7 +113,8 @@ def main() raises:
             "memory_report_test: total_device_bytes ("
             + String(rep.total_device_bytes())
             + ") != per-category sum ("
-            + String(sum_check) + ")"
+            + String(sum_check)
+            + ")"
         )
 
     print()
@@ -117,12 +127,16 @@ def main() raises:
         raise Error(
             "memory_report_test: dof_count "
             + String(solver.dof_count())
-            + " != expected " + String(expected_dof)
+            + " != expected "
+            + String(expected_dof)
         )
 
     var dt = Float32(1.0e-3)
     var tput = solver.bench_step_loop(
-        dt, nvtx, warmup_steps=2, measure_steps=10,
+        dt,
+        nvtx,
+        warmup_steps=2,
+        measure_steps=10,
     )
     if tput.dof_per_second() <= 0.0:
         raise Error("memory_report_test: dof_per_second non-positive")
@@ -142,9 +156,13 @@ def main() raises:
     if rate_rel > 1.0e-9:
         raise Error(
             "memory_report_test: throughput consistency violated -- "
-            "dof_per_second=" + String(tput.dof_per_second())
-            + " vs dof_count/per_step_seconds=" + String(derived_rate)
-            + " (rel err " + String(rate_rel) + ")"
+            "dof_per_second="
+            + String(tput.dof_per_second())
+            + " vs dof_count/per_step_seconds="
+            + String(derived_rate)
+            + " (rel err "
+            + String(rate_rel)
+            + ")"
         )
     # Upper-bound sanity: physically plausible range.  This catches the
     # async-enqueue-only timing bug that originally produced ~9 TB/s
@@ -165,7 +183,8 @@ def main() raises:
         raise Error(
             "memory_report_test: state_bytes_per_step "
             + String(solver.state_bytes_per_step())
-            + " != expected " + String(expected_state_bytes)
+            + " != expected "
+            + String(expected_state_bytes)
         )
 
     print()

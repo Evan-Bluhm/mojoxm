@@ -27,7 +27,7 @@ comptime NX = 32
 comptime NY = 32
 comptime NZ = 32
 comptime LX = 1.0
-comptime NC = 1   # scalar field for this test
+comptime NC = 1  # scalar field for this test
 
 comptime IC_BLOCK = 256
 
@@ -35,7 +35,9 @@ comptime IC_BLOCK = 256
 def init_q_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int, total_dof: Int, rank_f: Float32,
+    num_owned: Int,
+    total_dof: Int,
+    rank_f: Float32,
 ):
     var tid = Int(global_idx.x)
     if tid >= total_dof:
@@ -47,7 +49,8 @@ def init_q_kernel(
 def fill_owned_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int, rank_f: Float32,
+    num_owned: Int,
+    rank_f: Float32,
 ):
     var idx = Int(global_idx.x)
     if idx >= num_owned * 10:
@@ -66,11 +69,18 @@ def main() raises:
 
     var ctx = DeviceContext()
     var patch = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LX, LX,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LX,
+        LX,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, patch.part, NC, patch.d_perm.unsafe_ptr(),
+        ctx,
+        patch.part,
+        NC,
+        patch.d_perm.unsafe_ptr(),
     )
 
     # Allocate scalar q on the local mesh (NC=1).
@@ -79,7 +89,9 @@ def main() raises:
     ctx.enqueue_function[init_q_kernel, init_q_kernel](
         d_q.unsafe_ptr(),
         patch.d_owned_elem_ids.unsafe_ptr(),
-        patch.num_owned_elements, total_dof, Float32(rank),
+        patch.num_owned_elements,
+        total_dof,
+        Float32(rank),
         grid_dim=ceildiv(total_dof, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
@@ -87,7 +99,8 @@ def main() raises:
     ctx.enqueue_function[fill_owned_kernel, fill_owned_kernel](
         d_q.unsafe_ptr(),
         patch.d_owned_elem_ids.unsafe_ptr(),
-        patch.num_owned_elements, Float32(rank),
+        patch.num_owned_elements,
+        Float32(rank),
         grid_dim=ceildiv(patch.num_owned_elements * 10, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
@@ -120,14 +133,20 @@ def main() raises:
         return (cube_cell * 6 + tet) * 10 + nn
 
     var neighbours = [
-        patch.part.neighbour_minus_x, patch.part.neighbour_plus_x,
-        patch.part.neighbour_minus_y, patch.part.neighbour_plus_y,
-        patch.part.neighbour_minus_z, patch.part.neighbour_plus_z,
+        patch.part.neighbour_minus_x,
+        patch.part.neighbour_plus_x,
+        patch.part.neighbour_minus_y,
+        patch.part.neighbour_plus_y,
+        patch.part.neighbour_minus_z,
+        patch.part.neighbour_plus_z,
     ]
     var names = [
-        String("-x"), String("+x"),
-        String("-y"), String("+y"),
-        String("-z"), String("+z"),
+        String("-x"),
+        String("+x"),
+        String("-y"),
+        String("+y"),
+        String("-z"),
+        String("+z"),
     ]
 
     # Ghost-ring first-cube local cell index per direction.
@@ -138,12 +157,12 @@ def main() raises:
     # -z: (1, 1, 0)
     # +z: (1, 1, nz+1)
     var cells = [
-        0       + loc_nx * (1       + loc_ny * 1),
-        (nx+1)  + loc_nx * (1       + loc_ny * 1),
-        1       + loc_nx * (0       + loc_ny * 1),
-        1       + loc_nx * ((ny+1)  + loc_ny * 1),
-        1       + loc_nx * (1       + loc_ny * 0),
-        1       + loc_nx * (1       + loc_ny * (nz+1)),
+        0 + loc_nx * (1 + loc_ny * 1),
+        (nx + 1) + loc_nx * (1 + loc_ny * 1),
+        1 + loc_nx * (0 + loc_ny * 1),
+        1 + loc_nx * ((ny + 1) + loc_ny * 1),
+        1 + loc_nx * (1 + loc_ny * 0),
+        1 + loc_nx * (1 + loc_ny * (nz + 1)),
     ]
 
     # Check every ghost DOF: extract the encoded (sender_rank) via
@@ -161,12 +180,21 @@ def main() raises:
                 if not ok:
                     any_fail = True
                 print(
-                    "[rank", rank, "]", names[d],
-                    " ghost_dof0=", got,
-                    " -> sender_rank=", encoded_rank,
-                    " (expected ", expected_rank, ")",
-                    " offset=", encoded_offset,
-                    " ok=", ok,
+                    "[rank",
+                    rank,
+                    "]",
+                    names[d],
+                    " ghost_dof0=",
+                    got,
+                    " -> sender_rank=",
+                    encoded_rank,
+                    " (expected ",
+                    expected_rank,
+                    ")",
+                    " offset=",
+                    encoded_offset,
+                    " ok=",
+                    ok,
                 )
             if not any_fail:
                 print("[rank", rank, "] all 6 directions OK")

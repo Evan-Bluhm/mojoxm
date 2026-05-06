@@ -50,10 +50,10 @@ comptime NY = 32
 comptime NZ = 2
 comptime LX = 1.0
 comptime LY = 1.0
-comptime LZ = Float64(2.0 / 32.0)   # dz matches dx = dy
+comptime LZ = Float64(2.0 / 32.0)  # dz matches dx = dy
 
 comptime GAMMA: Float32 = 1.4
-comptime MIN_DENSITY:  Float32 = 1.0e-6
+comptime MIN_DENSITY: Float32 = 1.0e-6
 comptime MIN_PRESSURE: Float32 = 1.0e-6
 
 # Gravity: -y direction, unit magnitude.  Scale height H = p0 / (rho0 * g)
@@ -68,7 +68,7 @@ comptime SCALE_H: Float32 = 1.0
 comptime BUBBLE_X0: Float32 = 0.5
 comptime BUBBLE_Y0: Float32 = 0.2
 comptime BUBBLE_RADIUS: Float32 = 0.1
-comptime BUBBLE_RHO_FACTOR: Float32 = 0.8   # 20% density deficit at core
+comptime BUBBLE_RHO_FACTOR: Float32 = 0.8  # 20% density deficit at core
 
 comptime T_FINAL: Float32 = 2.5
 comptime NUM_FRAMES = 25
@@ -80,12 +80,15 @@ comptime IC_BLOCK = 256
 def bubble_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
     gamma: Float32,
     H: Float32,
-    x0: Float32, y0: Float32, z_mid: Float32,
-    radius: Float32, rho_factor: Float32,
+    x0: Float32,
+    y0: Float32,
+    z_mid: Float32,
+    radius: Float32,
+    rho_factor: Float32,
 ):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
@@ -100,7 +103,7 @@ def bubble_ic_kernel(
 
     # Hydrostatic background.
     var rho_bg = exp(-py / H)
-    var p_bg   = exp(-py / H)
+    var p_bg = exp(-py / H)
 
     # Smooth Gaussian bubble mask in (x, y) with a mild z-dependence.
     var dx = px - x0
@@ -110,9 +113,11 @@ def bubble_ic_kernel(
     var bubble_mask = exp(-r2 / (radius * radius))
 
     # Keep pressure = hydrostatic; deplete density inside the bubble.
-    var rho = rho_bg * (Float32(1.0) - (Float32(1.0) - rho_factor) * bubble_mask)
-    var p   = p_bg
-    var E   = p / (gamma - Float32(1.0))   # velocities are zero
+    var rho = rho_bg * (
+        Float32(1.0) - (Float32(1.0) - rho_factor) * bubble_mask
+    )
+    var p = p_bg
+    var E = p / (gamma - Float32(1.0))  # velocities are zero
     var base = (e * N_P + nn) * 5
     q[base + 0] = rho
     q[base + 1] = Float32(0.0)
@@ -139,10 +144,20 @@ def main() raises:
     if rank == 0:
         print(
             "euler_rising_bubble: GPU DG Euler + gravity,",
-            size, "rank(s)",
+            size,
+            "rank(s)",
         )
-        print("  global mesh: ", NX, "x", NY, "x", NZ,
-              " cells -> ", NX * NY * NZ * 6, "tets")
+        print(
+            "  global mesh: ",
+            NX,
+            "x",
+            NY,
+            "x",
+            NZ,
+            " cells -> ",
+            NX * NY * NZ * 6,
+            "tets",
+        )
 
     var nvtx = NvtxContext()
 
@@ -152,27 +167,50 @@ def main() raises:
 
     # All walls.
     var bcs = BoundaryConditions(
-        BC_WALL, BC_WALL,   # -x, +x
-        BC_WALL, BC_WALL,   # -y, +y
-        BC_WALL, BC_WALL,   # -z, +z
+        BC_WALL,
+        BC_WALL,  # -x, +x
+        BC_WALL,
+        BC_WALL,  # -y, +y
+        BC_WALL,
+        BC_WALL,  # -z, +z
     )
 
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
 
     var halo = HaloExchange(
-        ctx, mesh.part, Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        Euler.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
 
     var physics = Euler(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True,
-        GX, GY, GZ,
+        GAMMA,
+        MIN_DENSITY,
+        MIN_PRESSURE,
+        FLUX_HLLEC,
+        True,
+        GX,
+        GY,
+        GZ,
     )
 
     var solver = Solver[Euler](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[bubble_ic_kernel, bubble_ic_kernel](
@@ -180,12 +218,14 @@ def main() raises:
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
-        GAMMA, SCALE_H,
-        BUBBLE_X0, BUBBLE_Y0, Float32(LZ) * Float32(0.5),
-        BUBBLE_RADIUS, BUBBLE_RHO_FACTOR,
-        grid_dim=ceildiv(
-            solver.num_owned_elements * N_P, IC_BLOCK
-        ),
+        GAMMA,
+        SCALE_H,
+        BUBBLE_X0,
+        BUBBLE_Y0,
+        Float32(LZ) * Float32(0.5),
+        BUBBLE_RADIUS,
+        BUBBLE_RHO_FACTOR,
+        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
     solver.ctx.synchronize()
@@ -196,8 +236,13 @@ def main() raises:
     # diagnostic prints are suppressed outside np=1.
     if size == 1:
         var y_bubble_ic = _bubble_centroid_y(solver, nvtx)
-        print("  bubble centroid y at t=0 :", y_bubble_ic,
-              " (expected ~", BUBBLE_Y0, ")")
+        print(
+            "  bubble centroid y at t=0 :",
+            y_bubble_ic,
+            " (expected ~",
+            BUBBLE_Y0,
+            ")",
+        )
 
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
     if rank == 0:
@@ -213,15 +258,20 @@ def main() raises:
     # carry no net momentum or energy transport, gravity source shifts
     # y-momentum and energy as expected).
     var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass",         0))
-    diag_linear.append(NamedComponent("momentum_x",   1))
-    diag_linear.append(NamedComponent("momentum_y",   2))
-    diag_linear.append(NamedComponent("momentum_z",   3))
+    diag_linear.append(NamedComponent("mass", 0))
+    diag_linear.append(NamedComponent("momentum_x", 1))
+    diag_linear.append(NamedComponent("momentum_y", 2))
+    diag_linear.append(NamedComponent("momentum_z", 3))
     diag_linear.append(NamedComponent("total_energy", 4))
     var diag = DiagnosticsWriter[Euler](
-        solver, "output/diagnostics.csv",
-        diag_linear, List[NamedComponent](), List[NamedComponent](),
-        LX, LY, LZ,
+        solver,
+        "output/diagnostics.csv",
+        diag_linear,
+        List[NamedComponent](),
+        List[NamedComponent](),
+        LX,
+        LY,
+        LZ,
     )
 
     var dt = choose_dt()
@@ -229,7 +279,13 @@ def main() raises:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
     var result = run_ssprk3_loop_with_diagnostics[Euler](
-        solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx,
+        solver,
+        writer,
+        diag,
+        dt,
+        T_FINAL,
+        NUM_FRAMES,
+        nvtx,
     )
 
     writer.finalize("output/solution.pvd", nvtx)
@@ -250,24 +306,24 @@ def main() raises:
             snap_rhov.append(Float32(0.0))
             snap_rhow.append(Float32(0.0))
             snap_E.append(Float32(0.0))
-        solver.download_owned_component(0, snap_rho,  nvtx)
+        solver.download_owned_component(0, snap_rho, nvtx)
         solver.download_owned_component(1, snap_rhou, nvtx)
         solver.download_owned_component(2, snap_rhov, nvtx)
         solver.download_owned_component(3, snap_rhow, nvtx)
-        solver.download_owned_component(4, snap_E,    nvtx)
-        var f_rho  = List[Float64]()
-        var f_p    = List[Float64]()
+        solver.download_owned_component(4, snap_E, nvtx)
+        var f_rho = List[Float64]()
+        var f_p = List[Float64]()
         var f_vmag = List[Float64]()
         for k in range(n_owned_dof):
             var rho = snap_rho[k]
             var u = snap_rhou[k] / rho
             var v = snap_rhov[k] / rho
             var w = snap_rhow[k] / rho
-            var ke = Float32(0.5) * rho * (u*u + v*v + w*w)
+            var ke = Float32(0.5) * rho * (u * u + v * v + w * w)
             var p = (GAMMA - Float32(1.0)) * (snap_E[k] - ke)
             f_rho.append(Float64(rho))
             f_p.append(Float64(p))
-            f_vmag.append(Float64(sqrt(u*u + v*v + w*w)))
+            f_vmag.append(Float64(sqrt(u * u + v * v + w * w)))
         var fields = List[List[Float64]]()
         fields.append(f_rho^)
         fields.append(f_p^)
@@ -277,18 +333,30 @@ def main() raises:
         names.append(String("p"))
         names.append(String("|v|"))
         write_snapshot_3d_multi(
-            solver=solver, field_names=names, field_data=fields,
-            path=String("output/snapshot_t_final.vtu"), nvtx=nvtx,
+            solver=solver,
+            field_names=names,
+            field_data=fields,
+            path=String("output/snapshot_t_final.vtu"),
+            nvtx=nvtx,
         )
         if rank == 0:
-            print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
+            print(
+                "  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=",
+                T_FINAL,
+                ")",
+            )
 
     if size == 1:
         var y_bubble_final = _bubble_centroid_y(solver, nvtx)
         print("  bubble centroid y at t=", T_FINAL, ":", y_bubble_final)
     if rank == 0:
-        print("  total steps:", result.total_steps,
-              " wall time:", result.wall_sec, "s")
+        print(
+            "  total steps:",
+            result.total_steps,
+            " wall time:",
+            result.wall_sec,
+            "s",
+        )
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
     var tput = solver.bench_step_loop(dt, nvtx)
@@ -307,8 +375,10 @@ def main() raises:
 # source is doing something" check for this driver.
 # ----------------------------------------------------------------------
 
+
 def _bubble_centroid_y(
-    mut solver: Solver[Euler], mut nvtx: NvtxContext,
+    mut solver: Solver[Euler],
+    mut nvtx: NvtxContext,
 ) raises -> Float32:
     var num_owned = solver.num_owned_elements
     var h_q = List[Float32]()
@@ -318,7 +388,7 @@ def _bubble_centroid_y(
     var xyz_ptr = solver.mesh.owned_node_xyz_f32_ptr
 
     var weighted_y = Float32(0.0)
-    var total_w    = Float32(0.0)
+    var total_w = Float32(0.0)
     for i in range(num_owned):
         for nn in range(N_P):
             var py = xyz_ptr[(i * N_P + nn) * 3 + 1]
@@ -329,7 +399,7 @@ def _bubble_centroid_y(
             # is interior oscillation, not the bubble itself.
             if deficit > Float32(1.0e-3):
                 weighted_y += py * deficit
-                total_w    += deficit
+                total_w += deficit
     if total_w <= Float32(0.0):
         return Float32(-1.0)
     return weighted_y / total_w

@@ -32,7 +32,8 @@ comptime EPS: Float32 = Float32(1.0e-7)
 
 def approx_eq(a: Float32, b: Float32) -> Bool:
     var d = a - b
-    if d < Float32(0.0): d = -d
+    if d < Float32(0.0):
+        d = -d
     return d <= EPS
 
 
@@ -42,7 +43,7 @@ def main() raises:
     # Three distinguishable fake pointers.  The helper never
     # dereferences these -- it just routes them between the
     # stage-plan struct fields.
-    var p_q  = UnsafePointer[Float32, MutAnyOrigin](unsafe_from_address=0x1000)
+    var p_q = UnsafePointer[Float32, MutAnyOrigin](unsafe_from_address=0x1000)
     var p_q1 = UnsafePointer[Float32, MutAnyOrigin](unsafe_from_address=0x2000)
     var p_q2 = UnsafePointer[Float32, MutAnyOrigin](unsafe_from_address=0x3000)
 
@@ -51,46 +52,63 @@ def main() raises:
     # --- (1) length ---
     if len(plans) != 3:
         raise Error(
-            "ssprk3_test FAILED: expected 3 stages, got "
-            + String(len(plans))
+            "ssprk3_test FAILED: expected 3 stages, got " + String(len(plans))
         )
 
     # --- (2) buffer routing per stage ---
     var s0 = plans[0].copy()
-    if s0.q_in  != p_q  or s0.q_a != p_q or s0.q_b != p_q or s0.q_out != p_q1:
+    if s0.q_in != p_q or s0.q_a != p_q or s0.q_b != p_q or s0.q_out != p_q1:
         raise Error("ssprk3_test FAILED: stage 0 routing wrong")
 
     var s1 = plans[1].copy()
-    if s1.q_in  != p_q1 or s1.q_a != p_q or s1.q_b != p_q1 or s1.q_out != p_q2:
+    if s1.q_in != p_q1 or s1.q_a != p_q or s1.q_b != p_q1 or s1.q_out != p_q2:
         raise Error("ssprk3_test FAILED: stage 1 routing wrong")
 
     var s2 = plans[2].copy()
-    if s2.q_in  != p_q2 or s2.q_a != p_q or s2.q_b != p_q2 or s2.q_out != p_q:
+    if s2.q_in != p_q2 or s2.q_a != p_q or s2.q_b != p_q2 or s2.q_out != p_q:
         raise Error("ssprk3_test FAILED: stage 2 routing wrong")
 
     # --- (3) coefficients per stage ---
-    if not (approx_eq(s0.a, Float32(1.0))
-            and approx_eq(s0.b, Float32(0.0))
-            and approx_eq(s0.c, Float32(1.0))):
+    if not (
+        approx_eq(s0.a, Float32(1.0))
+        and approx_eq(s0.b, Float32(0.0))
+        and approx_eq(s0.c, Float32(1.0))
+    ):
         raise Error(
-            "ssprk3_test FAILED: stage 0 coefficients wrong: "
-            "a=" + String(s0.a) + " b=" + String(s0.b) + " c=" + String(s0.c)
+            "ssprk3_test FAILED: stage 0 coefficients wrong: a="
+            + String(s0.a)
+            + " b="
+            + String(s0.b)
+            + " c="
+            + String(s0.c)
         )
-    if not (approx_eq(s1.a, Float32(0.75))
-            and approx_eq(s1.b, Float32(0.25))
-            and approx_eq(s1.c, Float32(0.25))):
+    if not (
+        approx_eq(s1.a, Float32(0.75))
+        and approx_eq(s1.b, Float32(0.25))
+        and approx_eq(s1.c, Float32(0.25))
+    ):
         raise Error(
-            "ssprk3_test FAILED: stage 1 coefficients wrong: "
-            "a=" + String(s1.a) + " b=" + String(s1.b) + " c=" + String(s1.c)
+            "ssprk3_test FAILED: stage 1 coefficients wrong: a="
+            + String(s1.a)
+            + " b="
+            + String(s1.b)
+            + " c="
+            + String(s1.c)
         )
     var third = Float32(1.0 / 3.0)
     var two_thirds = Float32(2.0 / 3.0)
-    if not (approx_eq(s2.a, third)
-            and approx_eq(s2.b, two_thirds)
-            and approx_eq(s2.c, two_thirds)):
+    if not (
+        approx_eq(s2.a, third)
+        and approx_eq(s2.b, two_thirds)
+        and approx_eq(s2.c, two_thirds)
+    ):
         raise Error(
-            "ssprk3_test FAILED: stage 2 coefficients wrong: "
-            "a=" + String(s2.a) + " b=" + String(s2.b) + " c=" + String(s2.c)
+            "ssprk3_test FAILED: stage 2 coefficients wrong: a="
+            + String(s2.a)
+            + " b="
+            + String(s2.b)
+            + " c="
+            + String(s2.c)
         )
 
     # --- Conservation invariant: a + b == 1 in each stage.  This is
@@ -111,12 +129,18 @@ def main() raises:
     if s1.b > Float32(0.0) and not approx_eq(s1.c, s1.b):
         raise Error(
             "ssprk3_test FAILED: stage 1 c != b (broke SSPRK3 SSP-"
-            "coefficient property): c=" + String(s1.c) + " b=" + String(s1.b)
+            "coefficient property): c="
+            + String(s1.c)
+            + " b="
+            + String(s1.b)
         )
     if s2.b > Float32(0.0) and not approx_eq(s2.c, s2.b):
         raise Error(
             "ssprk3_test FAILED: stage 2 c != b (broke SSPRK3 SSP-"
-            "coefficient property): c=" + String(s2.c) + " b=" + String(s2.b)
+            "coefficient property): c="
+            + String(s2.c)
+            + " b="
+            + String(s2.b)
         )
 
     print("=== ssprk3_test PASSED ===")

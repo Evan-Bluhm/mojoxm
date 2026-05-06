@@ -42,8 +42,10 @@ from std.math import sqrt
 # Floored primitive helpers (density and thermal pressure)
 # ----------------------------------------------------------------------
 
+
 def mhd_rho_floored(
-    q: UnsafePointer[Float32, MutAnyOrigin], rho_min: Float32,
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    rho_min: Float32,
 ) -> Float32:
     var r = q[0]
     return r if r > rho_min else rho_min
@@ -51,14 +53,20 @@ def mhd_rho_floored(
 
 def mhd_gas_pressure(
     q: UnsafePointer[Float32, MutAnyOrigin],
-    gamma: Float32, rho_min: Float32, press_min: Float32,
+    gamma: Float32,
+    rho_min: Float32,
+    press_min: Float32,
 ) -> Float32:
     var rho = mhd_rho_floored(q, rho_min)
-    var mx = q[1]; var my = q[2]; var mz = q[3]
+    var mx = q[1]
+    var my = q[2]
+    var mz = q[3]
     var ke = Float32(0.5) * (mx * mx + my * my + mz * mz) / rho
-    var bx = q[5]; var by = q[6]; var bz = q[7]
+    var bx = q[5]
+    var by = q[6]
+    var bz = q[7]
     var me = Float32(0.5) * (bx * bx + by * by + bz * bz)
-    var p  = (gamma - Float32(1.0)) * (q[4] - ke - me)
+    var p = (gamma - Float32(1.0)) * (q[4] - ke - me)
     return p if p > press_min else press_min
 
 
@@ -70,12 +78,18 @@ def mhd_gas_pressure(
 #                 0.5 sqrt((c_s^2 + c_a^2)^2 - 4 c_s^2 c_an^2)
 def mhd_fast_speed(
     q: UnsafePointer[Float32, MutAnyOrigin],
-    nx: Float32, ny: Float32, nz: Float32,
-    gamma: Float32, rho_min: Float32, press_min: Float32,
+    nx: Float32,
+    ny: Float32,
+    nz: Float32,
+    gamma: Float32,
+    rho_min: Float32,
+    press_min: Float32,
 ) -> Float32:
     var rho = mhd_rho_floored(q, rho_min)
-    var p   = mhd_gas_pressure(q, gamma, rho_min, press_min)
-    var bx = q[5]; var by = q[6]; var bz = q[7]
+    var p = mhd_gas_pressure(q, gamma, rho_min, press_min)
+    var bx = q[5]
+    var by = q[6]
+    var bz = q[7]
     var bn = bx * nx + by * ny + bz * nz
     var cs2 = gamma * p / rho
     var ca2 = (bx * bx + by * by + bz * bz) / rho
@@ -91,15 +105,24 @@ def mhd_fast_speed(
 # solver's flux[d*9 + c] layout).  p_tot = p_gas + |B|^2/2.
 # ----------------------------------------------------------------------
 def mhd_flux_dir(
-    gamma: Float32, rho_min: Float32, press_min: Float32, c_h: Float32,
+    gamma: Float32,
+    rho_min: Float32,
+    press_min: Float32,
+    c_h: Float32,
     q: UnsafePointer[Float32, MutAnyOrigin],
     flux: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var rho = mhd_rho_floored(q, rho_min)
-    var mx = q[1]; var my = q[2]; var mz = q[3]
-    var u = mx / rho; var v = my / rho; var w = mz / rho
+    var mx = q[1]
+    var my = q[2]
+    var mz = q[3]
+    var u = mx / rho
+    var v = my / rho
+    var w = mz / rho
     var E = q[4]
-    var bx = q[5]; var by = q[6]; var bz = q[7]
+    var bx = q[5]
+    var by = q[6]
+    var bz = q[7]
     var psi = q[8]
     var p_gas = mhd_gas_pressure(q, gamma, rho_min, press_min)
     var pB = Float32(0.5) * (bx * bx + by * by + bz * bz)
@@ -150,16 +173,27 @@ def mhd_flux_dir(
 # Normal-direction flux F . n for use inside the Rusanov sum (avoids
 # allocating a full 3x9 flux tensor at the face).
 def mhd_normal_flux(
-    gamma: Float32, rho_min: Float32, press_min: Float32, c_h: Float32,
+    gamma: Float32,
+    rho_min: Float32,
+    press_min: Float32,
+    c_h: Float32,
     q: UnsafePointer[Float32, MutAnyOrigin],
-    nx: Float32, ny: Float32, nz: Float32,
+    nx: Float32,
+    ny: Float32,
+    nz: Float32,
     F_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var rho = mhd_rho_floored(q, rho_min)
-    var mx = q[1]; var my = q[2]; var mz = q[3]
-    var u = mx / rho; var v = my / rho; var w = mz / rho
+    var mx = q[1]
+    var my = q[2]
+    var mz = q[3]
+    var u = mx / rho
+    var v = my / rho
+    var w = mz / rho
     var E = q[4]
-    var bx = q[5]; var by = q[6]; var bz = q[7]
+    var bx = q[5]
+    var by = q[6]
+    var bz = q[7]
     var psi = q[8]
     var p_gas = mhd_gas_pressure(q, gamma, rho_min, press_min)
     var pB = Float32(0.5) * (bx * bx + by * by + bz * bz)
@@ -184,31 +218,32 @@ def mhd_normal_flux(
 # Ideal MHD struct
 # ======================================================================
 
-struct IdealMHD(Physics, ImplicitlyCopyable):
+
+struct IdealMHD(ImplicitlyCopyable, Physics):
     comptime NUM_COMPONENTS = 9
 
-    var gamma:        Float32
-    var min_density:  Float32
+    var gamma: Float32
+    var min_density: Float32
     var min_pressure: Float32
     # GLM divergence-cleaning parameters.  c_h is the hyperbolic
     # transport speed for div(B) errors (usually set to a conservative
     # upper bound on the mesh-wide fast magnetosonic speed); alpha_d is
     # the Dedner damping rate on psi.  Setting both to zero disables
     # GLM entirely and turns this into "plain" (uncleaned) ideal MHD.
-    var c_h:     Float32
+    var c_h: Float32
     var alpha_d: Float32
 
     # BC_INFLOW ghost state (rho, rho u, rho v, rho w, E, Bx, By, Bz,
     # psi).  Defaults zero; existing drivers unaffected.
-    var inflow_rho:  Float32
+    var inflow_rho: Float32
     var inflow_rhou: Float32
     var inflow_rhov: Float32
     var inflow_rhow: Float32
-    var inflow_E:    Float32
-    var inflow_Bx:   Float32
-    var inflow_By:   Float32
-    var inflow_Bz:   Float32
-    var inflow_psi:  Float32
+    var inflow_E: Float32
+    var inflow_Bx: Float32
+    var inflow_By: Float32
+    var inflow_Bz: Float32
+    var inflow_psi: Float32
 
     def __init__(
         out self,
@@ -217,15 +252,15 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
         min_pressure: Float32,
         c_h: Float32,
         alpha_d: Float32,
-        inflow_rho: Float32  = Float32(0.0),
+        inflow_rho: Float32 = Float32(0.0),
         inflow_rhou: Float32 = Float32(0.0),
         inflow_rhov: Float32 = Float32(0.0),
         inflow_rhow: Float32 = Float32(0.0),
-        inflow_E: Float32    = Float32(0.0),
-        inflow_Bx: Float32   = Float32(0.0),
-        inflow_By: Float32   = Float32(0.0),
-        inflow_Bz: Float32   = Float32(0.0),
-        inflow_psi: Float32  = Float32(0.0),
+        inflow_E: Float32 = Float32(0.0),
+        inflow_Bx: Float32 = Float32(0.0),
+        inflow_By: Float32 = Float32(0.0),
+        inflow_Bz: Float32 = Float32(0.0),
+        inflow_psi: Float32 = Float32(0.0),
     ):
         self.gamma = gamma
         self.min_density = min_density
@@ -245,9 +280,9 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[origin: MutOrigin](
-        self, target: UnsafePointer[NoneType, origin]
-    ):
+    def _to_device_type[
+        origin: MutOrigin
+    ](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -256,21 +291,29 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
 
     def internal_flux(
         self,
-        q:    UnsafePointer[Float32, MutAnyOrigin],
+        q: UnsafePointer[Float32, MutAnyOrigin],
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         mhd_flux_dir(
-            self.gamma, self.min_density, self.min_pressure, self.c_h,
-            q, flux,
+            self.gamma,
+            self.min_density,
+            self.min_pressure,
+            self.c_h,
+            q,
+            flux,
         )
         # Loose CFL-upper-bound: |u| + sqrt(c_s^2 + c_a^2).  Per-face
         # Rusanov dissipation uses a tighter anisotropic c_f.
         var rho = mhd_rho_floored(q, self.min_density)
-        var u = q[1] / rho; var v = q[2] / rho; var w = q[3] / rho
+        var u = q[1] / rho
+        var v = q[2] / rho
+        var w = q[3] / rho
         var p = mhd_gas_pressure(
             q, self.gamma, self.min_density, self.min_pressure
         )
-        var bx = q[5]; var by = q[6]; var bz = q[7]
+        var bx = q[5]
+        var by = q[6]
+        var bz = q[7]
         var cs2 = self.gamma * p / rho
         var ca2 = (bx * bx + by * by + bz * bz) / rho
         var cf = sqrt(cs2 + ca2)
@@ -281,7 +324,9 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
         self,
         q_l: UnsafePointer[Float32, MutAnyOrigin],
         q_r: UnsafePointer[Float32, MutAnyOrigin],
-        nx: Float32, ny: Float32, nz: Float32,
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         var Fl = InlineArray[Float32, 9](fill=0.0)
@@ -289,21 +334,45 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
         var Fl_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](Fl.unsafe_ptr())
         var Fr_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](Fr.unsafe_ptr())
         mhd_normal_flux(
-            self.gamma, self.min_density, self.min_pressure, self.c_h,
-            q_l, nx, ny, nz, Fl_p,
+            self.gamma,
+            self.min_density,
+            self.min_pressure,
+            self.c_h,
+            q_l,
+            nx,
+            ny,
+            nz,
+            Fl_p,
         )
         mhd_normal_flux(
-            self.gamma, self.min_density, self.min_pressure, self.c_h,
-            q_r, nx, ny, nz, Fr_p,
+            self.gamma,
+            self.min_density,
+            self.min_pressure,
+            self.c_h,
+            q_r,
+            nx,
+            ny,
+            nz,
+            Fr_p,
         )
         # Rusanov alpha = max(|u_n| + c_f, c_h).
         var cf_l = mhd_fast_speed(
-            q_l, nx, ny, nz,
-            self.gamma, self.min_density, self.min_pressure,
+            q_l,
+            nx,
+            ny,
+            nz,
+            self.gamma,
+            self.min_density,
+            self.min_pressure,
         )
         var cf_r = mhd_fast_speed(
-            q_r, nx, ny, nz,
-            self.gamma, self.min_density, self.min_pressure,
+            q_r,
+            nx,
+            ny,
+            nz,
+            self.gamma,
+            self.min_density,
+            self.min_pressure,
         )
         var rhol = mhd_rho_floored(q_l, self.min_density)
         var rhor = mhd_rho_floored(q_r, self.min_density)
@@ -327,7 +396,9 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
         self,
         q_int: UnsafePointer[Float32, MutAnyOrigin],
         bc_type: Int32,
-        nx: Float32, ny: Float32, nz: Float32,
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         var q_ghost = InlineArray[Float32, 9](fill=0.0)
@@ -374,7 +445,9 @@ struct IdealMHD(Physics, ImplicitlyCopyable):
     def source_term(
         self,
         q: UnsafePointer[Float32, MutAnyOrigin],
-        x: Float32, y: Float32, z: Float32,
+        x: Float32,
+        y: Float32,
+        z: Float32,
         source_out: UnsafePointer[Float32, MutAnyOrigin],
     ):
         for c in range(8):

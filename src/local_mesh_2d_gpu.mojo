@@ -87,6 +87,7 @@ def _upload_i32(
 # GPU mesh wrapper
 # ----------------------------------------------------------------------
 
+
 struct LocalMesh2DGpu[P: Int = 2](Movable):
     comptime NP = num_tri_nodes_2d(Self.P)
     comptime NFP_edge = num_edge_nodes(Self.P)
@@ -94,17 +95,17 @@ struct LocalMesh2DGpu[P: Int = 2](Movable):
     var num_elements: Int
     var num_faces: Int
 
-    var d_elem_node_xyz:    DeviceBuffer[mesh_f]
-    var d_elem_invJ:        DeviceBuffer[mesh_f]
-    var d_elem_inv_2A:      DeviceBuffer[mesh_f]
-    var d_elem_faces:       DeviceBuffer[mesh_i]
-    var d_elem_face_side:   DeviceBuffer[mesh_i]
+    var d_elem_node_xyz: DeviceBuffer[mesh_f]
+    var d_elem_invJ: DeviceBuffer[mesh_f]
+    var d_elem_inv_2A: DeviceBuffer[mesh_f]
+    var d_elem_faces: DeviceBuffer[mesh_i]
+    var d_elem_face_side: DeviceBuffer[mesh_i]
     var d_elem_canon_to_ref: DeviceBuffer[mesh_i]
-    var d_face_elem:        DeviceBuffer[mesh_i]
-    var d_face_elem_node:   DeviceBuffer[mesh_i]
-    var d_face_normal:      DeviceBuffer[mesh_f]
-    var d_face_length:      DeviceBuffer[mesh_f]
-    var d_face_bc_type:     DeviceBuffer[mesh_i]
+    var d_face_elem: DeviceBuffer[mesh_i]
+    var d_face_elem_node: DeviceBuffer[mesh_i]
+    var d_face_normal: DeviceBuffer[mesh_f]
+    var d_face_length: DeviceBuffer[mesh_f]
+    var d_face_bc_type: DeviceBuffer[mesh_i]
 
     def __init__(
         out self,
@@ -112,19 +113,19 @@ struct LocalMesh2DGpu[P: Int = 2](Movable):
         host: LocalMesh2D[Self.P],
     ) raises:
         self.num_elements = host.num_elements
-        self.num_faces    = host.num_faces
+        self.num_faces = host.num_faces
 
-        self.d_elem_node_xyz    = _upload_f64_as_f32(ctx, host.elem_node_xyz)
-        self.d_elem_invJ        = _upload_f64_as_f32(ctx, host.elem_invJ)
-        self.d_elem_inv_2A      = _upload_f64_as_f32(ctx, host.elem_inv_2A)
-        self.d_elem_faces       = _upload_i32(ctx, host.elem_faces)
-        self.d_elem_face_side   = _upload_i32(ctx, host.elem_face_side)
+        self.d_elem_node_xyz = _upload_f64_as_f32(ctx, host.elem_node_xyz)
+        self.d_elem_invJ = _upload_f64_as_f32(ctx, host.elem_invJ)
+        self.d_elem_inv_2A = _upload_f64_as_f32(ctx, host.elem_inv_2A)
+        self.d_elem_faces = _upload_i32(ctx, host.elem_faces)
+        self.d_elem_face_side = _upload_i32(ctx, host.elem_face_side)
         self.d_elem_canon_to_ref = _upload_i32(ctx, host.elem_canon_to_ref)
-        self.d_face_elem        = _upload_i32(ctx, host.face_elem)
-        self.d_face_elem_node   = _upload_i32(ctx, host.face_elem_node)
-        self.d_face_normal      = _upload_f64_as_f32(ctx, host.face_normal)
-        self.d_face_length      = _upload_f64_as_f32(ctx, host.face_length)
-        self.d_face_bc_type     = _upload_i32(ctx, host.face_bc_type)
+        self.d_face_elem = _upload_i32(ctx, host.face_elem)
+        self.d_face_elem_node = _upload_i32(ctx, host.face_elem_node)
+        self.d_face_normal = _upload_f64_as_f32(ctx, host.face_normal)
+        self.d_face_length = _upload_f64_as_f32(ctx, host.face_length)
+        self.d_face_bc_type = _upload_i32(ctx, host.face_bc_type)
         ctx.synchronize()
 
     def device_bytes(self) -> Int:
@@ -143,23 +144,23 @@ struct LocalMesh2DGpu[P: Int = 2](Movable):
             d_face_length      [num_faces]               Float32
             d_face_bc_type     [num_faces]               Int32
         Used by `MemoryReport` 2D-side construction in drivers."""
-        comptime SZ = 4   # Float32 == Int32 == 4 bytes
+        comptime SZ = 4  # Float32 == Int32 == 4 bytes
         var ne = self.num_elements
         var nf = self.num_faces
         comptime NP = Self.NP
         comptime NFP = Self.NFP_edge
         return SZ * (
-            ne * NP * 2     # elem_node_xyz
-            + ne * 4         # elem_invJ
-            + ne             # elem_inv_2A
-            + ne * 3         # elem_faces
-            + ne * 3         # elem_face_side
-            + ne * 3 * NFP   # elem_canon_to_ref
-            + nf * 2         # face_elem
-            + nf * 2 * NFP   # face_elem_node
-            + nf * 2         # face_normal
-            + nf             # face_length
-            + nf             # face_bc_type
+            ne * NP * 2  # elem_node_xyz
+            + ne * 4  # elem_invJ
+            + ne  # elem_inv_2A
+            + ne * 3  # elem_faces
+            + ne * 3  # elem_face_side
+            + ne * 3 * NFP  # elem_canon_to_ref
+            + nf * 2  # face_elem
+            + nf * 2 * NFP  # face_elem_node
+            + nf * 2  # face_normal
+            + nf  # face_length
+            + nf  # face_bc_type
         )
 
 
@@ -183,11 +184,14 @@ struct LocalMesh2DGpu[P: Int = 2](Movable):
 # `bench_euler_sod_limited_2d`).
 # ----------------------------------------------------------------------
 
-def cell_mean_kernel_2d[NP: Int, NC: Int](
-    q:            UnsafePointer[Float32, MutAnyOrigin],
+
+def cell_mean_kernel_2d[
+    NP: Int, NC: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
     node_weights: UnsafePointer[Float32, MutAnyOrigin],
     num_elements: Int,
-    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
 ):
     # One thread per (element, component) pair (NC-fold parallelism
     # vs the original 1-thread-per-element design).  Adjacent threads
@@ -207,18 +211,21 @@ def cell_mean_kernel_2d[NP: Int, NC: Int](
     cell_mean[elem * NC + c] = s
 
 
-def launch_cell_mean_2d[NP: Int, NC: Int](
+def launch_cell_mean_2d[
+    NP: Int, NC: Int
+](
     mut ctx: DeviceContext,
-    q:            UnsafePointer[Float32, MutAnyOrigin],
+    q: UnsafePointer[Float32, MutAnyOrigin],
     node_weights: UnsafePointer[Float32, MutAnyOrigin],
     num_elements: Int,
-    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     comptime _kernel = cell_mean_kernel_2d[NP, NC]
     ctx.enqueue_function[_kernel, _kernel](
-        q, node_weights, num_elements, cell_mean,
+        q,
+        node_weights,
+        num_elements,
+        cell_mean,
         grid_dim=ceildiv(num_elements * NC, 256),
         block_dim=256,
     )
-
-

@@ -23,7 +23,8 @@
 
 from src.reference import (
     ReferenceElement,
-    num_tet_nodes, num_tri_nodes,
+    num_tet_nodes,
+    num_tri_nodes,
 )
 from std.math import sqrt
 
@@ -56,13 +57,16 @@ def _test_sizes(P: Int) raises:
     var expected_nfp = (P + 1) * (P + 2) // 2
     if np != expected_np:
         raise Error(
-            "P=" + String(P) + ": num_tet_nodes mismatch ("
-            + String(np) + " vs " + String(expected_np) + ")"
+            "P="
+            + String(P)
+            + ": num_tet_nodes mismatch ("
+            + String(np)
+            + " vs "
+            + String(expected_np)
+            + ")"
         )
     if nfp != expected_nfp:
-        raise Error(
-            "P=" + String(P) + ": num_tri_nodes mismatch"
-        )
+        raise Error("P=" + String(P) + ": num_tri_nodes mismatch")
     print("  P=", P, " sizes OK (N_P=", np, ", N_FP=", nfp, ")")
 
 
@@ -107,14 +111,21 @@ def _test_node_positions(re: ReferenceElement, P: Int) raises:
             if d2 < min_d2:
                 min_d2 = d2
     var min_d = sqrt(min_d2)
-    var expected_d = 0.5 / Float64(P)       # half a grid spacing lower bound
+    var expected_d = 0.5 / Float64(P)  # half a grid spacing lower bound
     if min_d < expected_d * 0.99:
         raise Error(
-            "min node distance " + String(min_d)
-            + " < expected " + String(expected_d)
+            "min node distance "
+            + String(min_d)
+            + " < expected "
+            + String(expected_d)
         )
-    print("  node positions OK (", n_nodes, " nodes, min sep=",
-          Float32(min_d), ")")
+    print(
+        "  node positions OK (",
+        n_nodes,
+        " nodes, min sep=",
+        Float32(min_d),
+        ")",
+    )
 
 
 def _test_face_to_elem_coverage(re: ReferenceElement) raises:
@@ -127,8 +138,13 @@ def _test_face_to_elem_coverage(re: ReferenceElement) raises:
             var e = Int(re.face_to_elem[f * n_fp + l])
             if e < 0 or e >= n_nodes:
                 raise Error(
-                    "face_to_elem[" + String(f) + "," + String(l)
-                    + "] = " + String(e) + " is out of range"
+                    "face_to_elem["
+                    + String(f)
+                    + ","
+                    + String(l)
+                    + "] = "
+                    + String(e)
+                    + " is out of range"
                 )
     print("  face_to_elem coverage OK")
 

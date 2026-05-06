@@ -23,7 +23,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd import mhd_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL, BC_INTERIOR
@@ -35,12 +37,12 @@ comptime NY = 4
 comptime LX = 1.0
 comptime LY = Float64(NY) / Float64(NX) * LX
 
-comptime GAMMA:    Float32 = Float32(5.0 / 3.0)
-comptime RHO0:     Float32 = 1.0
-comptime B0:       Float32 = 1.0    # B_x; tangential to +/-y walls
-comptime P0:       Float32 = 0.5
-comptime MIN_RHO:  Float32 = 1.0e-6
-comptime MIN_P:    Float32 = 1.0e-6
+comptime GAMMA: Float32 = Float32(5.0 / 3.0)
+comptime RHO0: Float32 = 1.0
+comptime B0: Float32 = 1.0  # B_x; tangential to +/-y walls
+comptime P0: Float32 = 0.5
+comptime MIN_RHO: Float32 = 1.0e-6
+comptime MIN_P: Float32 = 1.0e-6
 comptime CFL: Float64 = 0.15
 comptime T_FINAL: Float64 = 1.0
 
@@ -57,9 +59,19 @@ def main() raises:
         return
 
     print("bench_mhd_wall_2d (BC_WALL preservation, plain MHD NC=6)")
-    print("  P=", P, "  mesh=", NX, "x", NY,
-          "   B0=", B0, "   T=", T_FINAL,
-          "  (u=0; B tangent to +/-y walls; periodic in x)")
+    print(
+        "  P=",
+        P,
+        "  mesh=",
+        NX,
+        "x",
+        NY,
+        "   B0=",
+        B0,
+        "   T=",
+        T_FINAL,
+        "  (u=0; B tangent to +/-y walls; periodic in x)",
+    )
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -67,8 +79,10 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions2D(
-        BC_INTERIOR, BC_INTERIOR,    # -x, +x periodic
-        BC_WALL, BC_WALL,            # -y, +y reflecting
+        BC_INTERIOR,
+        BC_INTERIOR,  # -x, +x periodic
+        BC_WALL,
+        BC_WALL,  # -y, +y reflecting
     )
     var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var host_re = ReferenceElement2D[P]()
@@ -81,13 +95,13 @@ def main() raises:
     var host_q = List[Float32]()
     for _ in range(gpu_mesh.num_elements * NP_p):
         host_q.append(RHO0)
-        host_q.append(Float32(0.0))   # rhou
-        host_q.append(Float32(0.0))   # rhov
-        host_q.append(B0)             # Bx
-        host_q.append(Float32(0.0))   # By
-        host_q.append(E0)             # E
+        host_q.append(Float32(0.0))  # rhou
+        host_q.append(Float32(0.0))  # rhov
+        host_q.append(B0)  # Bx
+        host_q.append(Float32(0.0))  # By
+        host_q.append(E0)  # E
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -127,7 +141,10 @@ def main() raises:
                 gamma=GAMMA,
                 min_density=MIN_RHO,
                 min_pressure=MIN_P,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -143,17 +160,20 @@ def main() raises:
                 raise Error("bench_mhd_wall_2d: non-finite output")
             var qref = host_q[i * NC + c]
             var d = Float64(qv) - Float64(qref)
-            if d < 0.0: d = -d
+            if d < 0.0:
+                d = -d
             var rel = d / ref_scale
-            if rel > max_drift: max_drift = rel
+            if rel > max_drift:
+                max_drift = rel
 
-    print("  max relative drift   =", max_drift,
-          "  (threshold", REL_TOL, ")")
+    print("  max relative drift   =", max_drift, "  (threshold", REL_TOL, ")")
 
     if max_drift > REL_TOL:
         raise Error(
             "bench_mhd_wall_2d FAILED: max relative drift "
-            + String(max_drift) + " > " + String(REL_TOL)
+            + String(max_drift)
+            + " > "
+            + String(REL_TOL)
         )
 
     print("=== bench_mhd_wall_2d PASSED ===")

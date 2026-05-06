@@ -48,8 +48,10 @@ from std.math import sqrt
 # first of that species' 5 components).
 # ----------------------------------------------------------------------
 
+
 def _species_rho_floored(
-    q: UnsafePointer[Float32, MutAnyOrigin], rho_min: Float32,
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    rho_min: Float32,
 ) -> Float32:
     var r = q[0]
     return r if r > rho_min else rho_min
@@ -57,10 +59,14 @@ def _species_rho_floored(
 
 def _species_pressure(
     q: UnsafePointer[Float32, MutAnyOrigin],
-    gamma: Float32, rho_min: Float32, press_min: Float32,
+    gamma: Float32,
+    rho_min: Float32,
+    press_min: Float32,
 ) -> Float32:
     var rho = _species_rho_floored(q, rho_min)
-    var mx = q[1]; var my = q[2]; var mz = q[3]
+    var mx = q[1]
+    var my = q[2]
+    var mz = q[3]
     var ke = Float32(0.5) * (mx * mx + my * my + mz * mz) / rho
     var p = (gamma - Float32(1.0)) * (q[4] - ke)
     return p if p > press_min else press_min
@@ -68,7 +74,9 @@ def _species_pressure(
 
 def _species_sound(
     q: UnsafePointer[Float32, MutAnyOrigin],
-    gamma: Float32, rho_min: Float32, press_min: Float32,
+    gamma: Float32,
+    rho_min: Float32,
+    press_min: Float32,
 ) -> Float32:
     var rho = _species_rho_floored(q, rho_min)
     var p = _species_pressure(q, gamma, rho_min, press_min)
@@ -79,13 +87,19 @@ def _species_sound(
 # flux_out[0..4].  Stride handled by the caller.
 def _species_flux_dir(
     q: UnsafePointer[Float32, MutAnyOrigin],
-    gamma: Float32, rho_min: Float32, press_min: Float32,
+    gamma: Float32,
+    rho_min: Float32,
+    press_min: Float32,
     d: Int,
     flux_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var rho = _species_rho_floored(q, rho_min)
-    var mx = q[1]; var my = q[2]; var mz = q[3]
-    var u = mx / rho; var v = my / rho; var w = mz / rho
+    var mx = q[1]
+    var my = q[2]
+    var mz = q[3]
+    var u = mx / rho
+    var v = my / rho
+    var w = mz / rho
     var E = q[4]
     var p = _species_pressure(q, gamma, rho_min, press_min)
     if d == 0:
@@ -112,13 +126,21 @@ def _species_flux_dir(
 # _species_flux_dir(d) * n_d but hand-rolled to avoid an extra loop.
 def _species_normal_flux(
     q: UnsafePointer[Float32, MutAnyOrigin],
-    gamma: Float32, rho_min: Float32, press_min: Float32,
-    nx: Float32, ny: Float32, nz: Float32,
+    gamma: Float32,
+    rho_min: Float32,
+    press_min: Float32,
+    nx: Float32,
+    ny: Float32,
+    nz: Float32,
     flux_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var rho = _species_rho_floored(q, rho_min)
-    var mx = q[1]; var my = q[2]; var mz = q[3]
-    var u = mx / rho; var v = my / rho; var w = mz / rho
+    var mx = q[1]
+    var my = q[2]
+    var mz = q[3]
+    var u = mx / rho
+    var v = my / rho
+    var w = mz / rho
     var E = q[4]
     var p = _species_pressure(q, gamma, rho_min, press_min)
     var un = u * nx + v * ny + w * nz
@@ -133,7 +155,8 @@ def _species_normal_flux(
 # FiveMomentTwoFluid struct
 # ======================================================================
 
-struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
+
+struct FiveMomentTwoFluid(ImplicitlyCopyable, Physics):
     comptime NUM_COMPONENTS = 17
 
     # Per-species adiabatic index.  For most plasma problems both are 5/3.
@@ -160,30 +183,30 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
     var alpha_d: Float32
 
     # Floor values for each species' density and pressure.
-    var min_density:  Float32
+    var min_density: Float32
     var min_pressure: Float32
 
     # BC_INFLOW ghost state: one conservative value per component
     # (electrons 0..4, ions 5..9, EM 10..15, GLM psi 16).  Defaults
     # zero so existing drivers keep working with just the physics
     # constants.
-    var inflow_rho_e:  Float32
-    var inflow_mxe:    Float32
-    var inflow_mye:    Float32
-    var inflow_mze:    Float32
-    var inflow_E_e:    Float32
-    var inflow_rho_i:  Float32
-    var inflow_mxi:    Float32
-    var inflow_myi:    Float32
-    var inflow_mzi:    Float32
-    var inflow_E_i:    Float32
-    var inflow_Ex:     Float32
-    var inflow_Ey:     Float32
-    var inflow_Ez:     Float32
-    var inflow_Bx:     Float32
-    var inflow_By:     Float32
-    var inflow_Bz:     Float32
-    var inflow_psi:    Float32
+    var inflow_rho_e: Float32
+    var inflow_mxe: Float32
+    var inflow_mye: Float32
+    var inflow_mze: Float32
+    var inflow_E_e: Float32
+    var inflow_rho_i: Float32
+    var inflow_mxi: Float32
+    var inflow_myi: Float32
+    var inflow_mzi: Float32
+    var inflow_E_i: Float32
+    var inflow_Ex: Float32
+    var inflow_Ey: Float32
+    var inflow_Ez: Float32
+    var inflow_Bx: Float32
+    var inflow_By: Float32
+    var inflow_Bz: Float32
+    var inflow_psi: Float32
 
     def __init__(
         out self,
@@ -199,23 +222,23 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
         alpha_d: Float32,
         min_density: Float32,
         min_pressure: Float32,
-        inflow_rho_e: Float32  = Float32(0.0),
-        inflow_mxe: Float32    = Float32(0.0),
-        inflow_mye: Float32    = Float32(0.0),
-        inflow_mze: Float32    = Float32(0.0),
-        inflow_E_e: Float32    = Float32(0.0),
-        inflow_rho_i: Float32  = Float32(0.0),
-        inflow_mxi: Float32    = Float32(0.0),
-        inflow_myi: Float32    = Float32(0.0),
-        inflow_mzi: Float32    = Float32(0.0),
-        inflow_E_i: Float32    = Float32(0.0),
-        inflow_Ex: Float32     = Float32(0.0),
-        inflow_Ey: Float32     = Float32(0.0),
-        inflow_Ez: Float32     = Float32(0.0),
-        inflow_Bx: Float32     = Float32(0.0),
-        inflow_By: Float32     = Float32(0.0),
-        inflow_Bz: Float32     = Float32(0.0),
-        inflow_psi: Float32    = Float32(0.0),
+        inflow_rho_e: Float32 = Float32(0.0),
+        inflow_mxe: Float32 = Float32(0.0),
+        inflow_mye: Float32 = Float32(0.0),
+        inflow_mze: Float32 = Float32(0.0),
+        inflow_E_e: Float32 = Float32(0.0),
+        inflow_rho_i: Float32 = Float32(0.0),
+        inflow_mxi: Float32 = Float32(0.0),
+        inflow_myi: Float32 = Float32(0.0),
+        inflow_mzi: Float32 = Float32(0.0),
+        inflow_E_i: Float32 = Float32(0.0),
+        inflow_Ex: Float32 = Float32(0.0),
+        inflow_Ey: Float32 = Float32(0.0),
+        inflow_Ez: Float32 = Float32(0.0),
+        inflow_Bx: Float32 = Float32(0.0),
+        inflow_By: Float32 = Float32(0.0),
+        inflow_Bz: Float32 = Float32(0.0),
+        inflow_psi: Float32 = Float32(0.0),
     ):
         self.gamma_e = gamma_e
         self.gamma_i = gamma_i
@@ -250,9 +273,9 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[origin: MutOrigin](
-        self, target: UnsafePointer[NoneType, origin]
-    ):
+    def _to_device_type[
+        origin: MutOrigin
+    ](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -264,13 +287,17 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
     # in the fluxes; coupling happens entirely in source_term.
     def internal_flux(
         self,
-        q:    UnsafePointer[Float32, MutAnyOrigin],
+        q: UnsafePointer[Float32, MutAnyOrigin],
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
-        var q_e_ptr = q + 0       # species e: q[0..4]
-        var q_i_ptr = q + 5       # species i: q[5..9]
-        var Ex = q[10]; var Ey = q[11]; var Ez = q[12]
-        var Bx = q[13]; var By = q[14]; var Bz = q[15]
+        var q_e_ptr = q + 0  # species e: q[0..4]
+        var q_i_ptr = q + 5  # species i: q[5..9]
+        var Ex = q[10]
+        var Ey = q[11]
+        var Ez = q[12]
+        var Bx = q[13]
+        var By = q[14]
+        var Bz = q[15]
         var psi = q[16]
         var c2 = self.c_light * self.c_light
         var ch2 = self.c_h * self.c_h
@@ -279,13 +306,21 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
         for d in range(3):
             # Species e: slots 0..4.
             _species_flux_dir(
-                q_e_ptr, self.gamma_e, self.min_density, self.min_pressure,
-                d, flux + d * NC + 0,
+                q_e_ptr,
+                self.gamma_e,
+                self.min_density,
+                self.min_pressure,
+                d,
+                flux + d * NC + 0,
             )
             # Species i: slots 5..9.
             _species_flux_dir(
-                q_i_ptr, self.gamma_i, self.min_density, self.min_pressure,
-                d, flux + d * NC + 5,
+                q_i_ptr,
+                self.gamma_i,
+                self.min_density,
+                self.min_pressure,
+                d,
+                flux + d * NC + 5,
             )
             # EM + GLM: slots 10..16.
             # F^x = (0, c^2 Bz, -c^2 By, psi, -Ez, Ey, c_h^2 Bx)
@@ -325,7 +360,8 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
             q_i_ptr, self.gamma_i, self.min_density, self.min_pressure
         )
         return max(
-            max(c_e, c_i), max(self.c_light, self.c_h),
+            max(c_e, c_i),
+            max(self.c_light, self.c_h),
         )
 
     # Rusanov (Lax-Friedrichs) numerical flux with alpha = worst-case
@@ -334,7 +370,9 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
         self,
         q_l: UnsafePointer[Float32, MutAnyOrigin],
         q_r: UnsafePointer[Float32, MutAnyOrigin],
-        nx: Float32, ny: Float32, nz: Float32,
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         var Fl = InlineArray[Float32, 17](fill=0.0)
@@ -344,21 +382,45 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
 
         # Species e.
         _species_normal_flux(
-            q_l + 0, self.gamma_e, self.min_density, self.min_pressure,
-            nx, ny, nz, Fl_p + 0,
+            q_l + 0,
+            self.gamma_e,
+            self.min_density,
+            self.min_pressure,
+            nx,
+            ny,
+            nz,
+            Fl_p + 0,
         )
         _species_normal_flux(
-            q_r + 0, self.gamma_e, self.min_density, self.min_pressure,
-            nx, ny, nz, Fr_p + 0,
+            q_r + 0,
+            self.gamma_e,
+            self.min_density,
+            self.min_pressure,
+            nx,
+            ny,
+            nz,
+            Fr_p + 0,
         )
         # Species i.
         _species_normal_flux(
-            q_l + 5, self.gamma_i, self.min_density, self.min_pressure,
-            nx, ny, nz, Fl_p + 5,
+            q_l + 5,
+            self.gamma_i,
+            self.min_density,
+            self.min_pressure,
+            nx,
+            ny,
+            nz,
+            Fl_p + 5,
         )
         _species_normal_flux(
-            q_r + 5, self.gamma_i, self.min_density, self.min_pressure,
-            nx, ny, nz, Fr_p + 5,
+            q_r + 5,
+            self.gamma_i,
+            self.min_density,
+            self.min_pressure,
+            nx,
+            ny,
+            nz,
+            Fr_p + 5,
         )
         # EM + GLM normal fluxes:
         #   F.n_E = c^2 (B x n)
@@ -369,8 +431,12 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
         for side in range(2):
             var q = q_l if side == 0 else q_r
             var F = Fl_p if side == 0 else Fr_p
-            var Ex = q[10]; var Ey = q[11]; var Ez = q[12]
-            var Bx = q[13]; var By = q[14]; var Bz = q[15]
+            var Ex = q[10]
+            var Ey = q[11]
+            var Ez = q[12]
+            var Bx = q[13]
+            var By = q[14]
+            var Bz = q[15]
             var psi = q[16]
             var bn = Bx * nx + By * ny + Bz * nz
             F[10] = c2 * (By * nz - Bz * ny)
@@ -409,7 +475,8 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
         var alpha_e = max(aun_el + ce_l, aun_er + ce_r)
         var alpha_i = max(aun_il + ci_l, aun_ir + ci_r)
         var alpha = max(
-            max(alpha_e, alpha_i), max(self.c_light, self.c_h),
+            max(alpha_e, alpha_i),
+            max(self.c_light, self.c_h),
         )
 
         var half = Float32(0.5)
@@ -421,7 +488,9 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
         self,
         q_int: UnsafePointer[Float32, MutAnyOrigin],
         bc_type: Int32,
-        nx: Float32, ny: Float32, nz: Float32,
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         # Ghost state: flip normal momentum on each fluid (slip wall) +
@@ -456,16 +525,16 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
             # side's information propagates into the domain via the
             # wave-speed dissipation, so upstream characteristics pull
             # from the inflow state and downstream-moving ones do not.
-            q_ghost[0]  = self.inflow_rho_e
-            q_ghost[1]  = self.inflow_mxe
-            q_ghost[2]  = self.inflow_mye
-            q_ghost[3]  = self.inflow_mze
-            q_ghost[4]  = self.inflow_E_e
-            q_ghost[5]  = self.inflow_rho_i
-            q_ghost[6]  = self.inflow_mxi
-            q_ghost[7]  = self.inflow_myi
-            q_ghost[8]  = self.inflow_mzi
-            q_ghost[9]  = self.inflow_E_i
+            q_ghost[0] = self.inflow_rho_e
+            q_ghost[1] = self.inflow_mxe
+            q_ghost[2] = self.inflow_mye
+            q_ghost[3] = self.inflow_mze
+            q_ghost[4] = self.inflow_E_e
+            q_ghost[5] = self.inflow_rho_i
+            q_ghost[6] = self.inflow_mxi
+            q_ghost[7] = self.inflow_myi
+            q_ghost[8] = self.inflow_mzi
+            q_ghost[9] = self.inflow_E_i
             q_ghost[10] = self.inflow_Ex
             q_ghost[11] = self.inflow_Ey
             q_ghost[12] = self.inflow_Ez
@@ -485,7 +554,9 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
     def source_term(
         self,
         q: UnsafePointer[Float32, MutAnyOrigin],
-        x: Float32, y: Float32, z: Float32,
+        x: Float32,
+        y: Float32,
+        z: Float32,
         source_out: UnsafePointer[Float32, MutAnyOrigin],
     ):
         # --- Electron fluid primitives ---
@@ -499,8 +570,12 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
         var vi = q[7] / rho_i
         var wi = q[8] / rho_i
         # --- EM field ---
-        var Ex = q[10]; var Ey = q[11]; var Ez = q[12]
-        var Bx = q[13]; var By = q[14]; var Bz = q[15]
+        var Ex = q[10]
+        var Ey = q[11]
+        var Ez = q[12]
+        var Bx = q[13]
+        var By = q[14]
+        var Bz = q[15]
         var psi = q[16]
 
         # qm_s = q_s / m_s; for an MHD-like normalisation with q_e = -1,
@@ -518,7 +593,7 @@ struct FiveMomentTwoFluid(Physics, ImplicitlyCopyable):
         var vxB_i_y = wi * Bx - ui * Bz
         var vxB_i_z = ui * By - vi * Bx
 
-        source_out[0] = Float32(0.0)    # no mass source
+        source_out[0] = Float32(0.0)  # no mass source
         source_out[1] = qme * rho_e * (Ex + vxB_e_x)
         source_out[2] = qme * rho_e * (Ey + vxB_e_y)
         source_out[3] = qme * rho_e * (Ez + vxB_e_z)

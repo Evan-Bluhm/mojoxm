@@ -21,7 +21,11 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd_glm import mhd_glm_rk_stage_2d
-from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
+from src.reference_2d import (
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
+)
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -54,23 +58,23 @@ def main() raises:
 
     var gamma = Float32(5.0 / 3.0)
     var min_rho = Float32(1.0e-8)
-    var min_p   = Float32(1.0e-8)
-    var c_h     = Float32(1.5)
+    var min_p = Float32(1.0e-8)
+    var c_h = Float32(1.5)
     var rho0 = Float32(1.0)
-    var u0   = Float32(0.2)
-    var v0   = Float32(0.1)
-    var Bx0  = Float32(0.3)
-    var By0  = Float32(0.15)
-    var p0   = Float32(0.5)
+    var u0 = Float32(0.2)
+    var v0 = Float32(0.1)
+    var Bx0 = Float32(0.3)
+    var By0 = Float32(0.15)
+    var p0 = Float32(0.5)
     var psi0 = Float32(0.05)
     var mx0 = rho0 * u0
     var my0 = rho0 * v0
-    var ke  = Float32(0.5) * rho0 * (u0 * u0 + v0 * v0)
-    var mp  = Float32(0.5) * (Bx0 * Bx0 + By0 * By0)
-    var E0  = p0 / (gamma - Float32(1.0)) + ke + mp
+    var ke = Float32(0.5) * rho0 * (u0 * u0 + v0 * v0)
+    var mp = Float32(0.5) * (Bx0 * Bx0 + By0 * By0)
+    var E0 = p0 / (gamma - Float32(1.0)) + ke + mp
 
     var n_q = gpu.num_elements * NP_p * NC
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -92,57 +96,89 @@ def main() raises:
 
     var dt = Float32(2.0e-4)
     mhd_glm_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p, c_h,
-        Float32(1.0), Float32(0.0), Float32(1.0), dt,
+        gamma,
+        min_rho,
+        min_p,
+        c_h,
+        Float32(1.0),
+        Float32(0.0),
+        Float32(1.0),
+        dt,
     )
     mhd_glm_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p, c_h,
-        Float32(0.75), Float32(0.25), Float32(0.25), dt,
+        gamma,
+        min_rho,
+        min_p,
+        c_h,
+        Float32(0.75),
+        Float32(0.25),
+        Float32(0.25),
+        dt,
     )
     mhd_glm_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p, c_h,
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt,
+        gamma,
+        min_rho,
+        min_p,
+        c_h,
+        Float32(1.0 / 3.0),
+        Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0),
+        dt,
     )
     ctx.enqueue_copy(hbuf, d_q)
     ctx.synchronize()
 
     var max_err: Float32 = 0.0
     var ic = List[Float32]()
-    ic.append(rho0); ic.append(mx0); ic.append(my0)
-    ic.append(Bx0);  ic.append(By0); ic.append(E0); ic.append(psi0)
+    ic.append(rho0)
+    ic.append(mx0)
+    ic.append(my0)
+    ic.append(Bx0)
+    ic.append(By0)
+    ic.append(E0)
+    ic.append(psi0)
     for k in range(gpu.num_elements * NP_p):
         var base = k * NC
         for c_idx in range(NC):
             var v = hptr[base + c_idx]
             if isnan(v) or isinf(v):
-                raise Error("GLM-MHD: non-finite at component "
-                            + String(c_idx))
+                raise Error("GLM-MHD: non-finite at component " + String(c_idx))
             var err = _abs32(v - ic[c_idx])
-            if err > max_err: max_err = err
+            if err > max_err:
+                max_err = err
     print("  GLM-MHD max |q - q_IC| =", max_err)
     if max_err > Float32(1.0e-4):
         raise Error(
             "GLM-MHD: constant state not preserved (max err "
-            + String(max_err) + ")"
+            + String(max_err)
+            + ")"
         )
 
     print("=== mhd_glm_2d_gpu_test PASSED ===")

@@ -41,11 +41,11 @@ comptime IC_BLOCK = 256
 comptime NUM_STEPS = 5
 
 comptime GAMMA: Float32 = 1.4
-comptime RHO0: Float32  = 1.5
-comptime U0: Float32    = 0.4
-comptime V0: Float32    = -0.2
-comptime W0: Float32    = 0.3
-comptime P0: Float32    = 0.7
+comptime RHO0: Float32 = 1.5
+comptime U0: Float32 = 0.4
+comptime V0: Float32 = -0.2
+comptime W0: Float32 = 0.3
+comptime P0: Float32 = 0.7
 comptime CONST_TOL: Float32 = Float32(1.0e-4)
 
 
@@ -89,18 +89,34 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh[P](
-        ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(0, 1, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Euler.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        Euler.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = Euler(
-        GAMMA, Float32(1.0e-6), Float32(1.0e-6), FLUX_HLLEC, False,
+        GAMMA,
+        Float32(1.0e-6),
+        Float32(1.0e-6),
+        FLUX_HLLEC,
+        False,
     )
     var solver = Solver[Euler, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     var num_owned = solver.num_owned_elements
@@ -142,18 +158,30 @@ def main() raises:
         for k in range(n_dof):
             var v = scratch[k]
             if isnan(v) or isinf(v):
-                raise Error("euler_3d_test: non-finite at component "
-                            + String(c))
+                raise Error(
+                    "euler_3d_test: non-finite at component " + String(c)
+                )
             var d = v - ic_vals[c]
             var ad = d if d >= Float32(0.0) else -d
-            if ad > max_err: max_err = ad
+            if ad > max_err:
+                max_err = ad
 
-    print("  max |q - IC| over", NUM_STEPS, "steps =", max_err,
-          "  (tol", CONST_TOL, ")")
+    print(
+        "  max |q - IC| over",
+        NUM_STEPS,
+        "steps =",
+        max_err,
+        "  (tol",
+        CONST_TOL,
+        ")",
+    )
     if max_err > CONST_TOL:
         raise Error(
             "euler_3d_test FAILED: constant state shifted by "
-            + String(max_err) + " over " + String(NUM_STEPS) + " steps"
+            + String(max_err)
+            + " over "
+            + String(NUM_STEPS)
+            + " steps"
         )
 
     print("=== euler_3d_test PASSED ===")

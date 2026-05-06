@@ -58,6 +58,7 @@ comptime dtype = DType.float32
 # block size per-NC at comptime from a small cascade.
 comptime EPB_DEFAULT = 16
 
+
 def elems_per_block_for(NC: Int, P: Int = 2) -> Int:
     # Keep the per-block shared slab below ~40 KB (leaves headroom for
     # register spills and locals).  Shared slab per element per block
@@ -69,10 +70,14 @@ def elems_per_block_for(NC: Int, P: Int = 2) -> Int:
     var bytes_per_elem = (NP * 3 + 4 * NFP) * NC * 4
     var budget = 40 * 1024
     var max_elems = budget // bytes_per_elem
-    if max_elems >= 16: return 16
-    if max_elems >= 8:  return 8
-    if max_elems >= 4:  return 4
-    if max_elems >= 2:  return 2
+    if max_elems >= 16:
+        return 16
+    if max_elems >= 8:
+        return 8
+    if max_elems >= 4:
+        return 4
+    if max_elems >= 2:
+        return 2
     return 1
 
 
@@ -88,21 +93,24 @@ def elems_per_block_for(NC: Int, P: Int = 2) -> Int:
 # max |wave speed| at the interface.
 # ----------------------------------------------------------------------
 
-trait Physics(Copyable, Movable, ImplicitlyDestructible, DevicePassable):
+
+trait Physics(Copyable, DevicePassable, ImplicitlyDestructible, Movable):
     comptime NUM_COMPONENTS: Int
 
     def internal_flux(
         self,
-        q:    UnsafePointer[Float32, MutAnyOrigin],
+        q: UnsafePointer[Float32, MutAnyOrigin],
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         ...
 
     def numerical_flux(
         self,
-        q_l:  UnsafePointer[Float32, MutAnyOrigin],
-        q_r:  UnsafePointer[Float32, MutAnyOrigin],
-        nx: Float32, ny: Float32, nz: Float32,
+        q_l: UnsafePointer[Float32, MutAnyOrigin],
+        q_r: UnsafePointer[Float32, MutAnyOrigin],
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         ...
@@ -119,7 +127,9 @@ trait Physics(Copyable, Movable, ImplicitlyDestructible, DevicePassable):
         self,
         q_int: UnsafePointer[Float32, MutAnyOrigin],
         bc_type: Int32,
-        nx: Float32, ny: Float32, nz: Float32,
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         ...
@@ -135,7 +145,9 @@ trait Physics(Copyable, Movable, ImplicitlyDestructible, DevicePassable):
     def source_term(
         self,
         q: UnsafePointer[Float32, MutAnyOrigin],
-        x: Float32, y: Float32, z: Float32,
+        x: Float32,
+        y: Float32,
+        z: Float32,
         source_out: UnsafePointer[Float32, MutAnyOrigin],
     ):
         ...
@@ -167,30 +179,37 @@ trait Physics(Copyable, Movable, ImplicitlyDestructible, DevicePassable):
 # preserved verbatim, just using the redirected element id `e`.
 # ----------------------------------------------------------------------
 
+
 def rk_stage_kernel[
-    NC: Int, EPB: Int, P: Int, PhysT: Physics,
+    NC: Int,
+    EPB: Int,
+    P: Int,
+    PhysT: Physics,
 ](
     physics: PhysT,
-    q_in:  UnsafePointer[Float32, MutAnyOrigin],
-    q_a:   UnsafePointer[Float32, MutAnyOrigin],
-    q_b:   UnsafePointer[Float32, MutAnyOrigin],
+    q_in: UnsafePointer[Float32, MutAnyOrigin],
+    q_a: UnsafePointer[Float32, MutAnyOrigin],
+    q_b: UnsafePointer[Float32, MutAnyOrigin],
     q_out: UnsafePointer[Float32, MutAnyOrigin],
-    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
-    elem_inv_6V:       UnsafePointer[Float32, MutAnyOrigin],
-    elem_node_xyz:     UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
-    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem:         UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node:    UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:       UnsafePointer[Float32, MutAnyOrigin],
-    face_area:         UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:      UnsafePointer[Int32,   MutAnyOrigin],
-    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
-    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ: UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_6V: UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    elem_face_side: UnsafePointer[Int32, MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_area: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    D_ref: UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
     elem_base: Int,
     num_elems: Int,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    a: Float32,
+    b: Float32,
+    cc: Float32,
+    dt: Float32,
 ):
     # Per-P sizes.  At P=2 these match the legacy module-level
     # N_P=10 / N_FP=6 exactly; for higher P they grow via the
@@ -283,17 +302,22 @@ def rk_stage_kernel[
                 if bc_type != Int32(0):
                     _ = physics.boundary_flux(
                         rebind[UnsafePointer[Float32, MutAnyOrigin]](q_l_ptr),
-                        bc_type, nx, ny, nz, fstar_p,
+                        bc_type,
+                        nx,
+                        ny,
+                        nz,
+                        fstar_p,
                     )
                 else:
                     _ = physics.numerical_flux(
                         rebind[UnsafePointer[Float32, MutAnyOrigin]](q_l_ptr),
                         rebind[UnsafePointer[Float32, MutAnyOrigin]](q_r_ptr),
-                        nx, ny, nz, fstar_p,
+                        nx,
+                        ny,
+                        nz,
+                        fstar_p,
                     )
-                var face_base = (
-                    (elem_in_block * NF + lf) * NFP + m_canon
-                ) * NC
+                var face_base = ((elem_in_block * NF + lf) * NFP + m_canon) * NC
                 for c in range(NC):
                     shared_face_flux[face_base + c] = fstar[c]
 
@@ -329,7 +353,10 @@ def rk_stage_kernel[
     )
     physics.source_term(
         rebind[UnsafePointer[Float32, MutAnyOrigin]](my_q_ptr),
-        my_x, my_y, my_z, source_p,
+        my_x,
+        my_y,
+        my_z,
+        source_p,
     )
 
     for c in range(NC):
@@ -354,22 +381,14 @@ def rk_stage_kernel[
             var fid = Int(elem_faces[e * NF + lf])
             var area = face_area[fid]
             for m_canon in range(NFP):
-                var r = Int(
-                    elem_canon_to_ref[(e * NF + lf) * NFP + m_canon]
-                )
+                var r = Int(elem_canon_to_ref[(e * NF + lf) * NFP + m_canon])
                 var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
-                var face_base = (
-                    (elem_in_block * NF + lf) * NFP + m_canon
-                ) * NC
-                face_c += sign * area * Lim * shared_face_flux[
-                    face_base + c
-                ]
+                var face_base = ((elem_in_block * NF + lf) * NFP + m_canon) * NC
+                face_c += sign * area * Lim * shared_face_flux[face_base + c]
 
         var rhs_val = vol_c - inv_6V * face_c + source[c]
         q_out[out_base + c] = (
-            a * q_a[out_base + c]
-            + b * q_b[out_base + c]
-            + cc * dt * rhs_val
+            a * q_a[out_base + c] + b * q_b[out_base + c] + cc * dt * rhs_val
         )
 
     # Post-stage limiter.  Runs once per (element, node) thread on
@@ -424,10 +443,13 @@ def rk_stage_kernel[
 # flow.
 # ----------------------------------------------------------------------
 
-def compute_cell_averages_kernel[NP: Int, NC: Int](
-    q:            UnsafePointer[Float32, MutAnyOrigin],
+
+def compute_cell_averages_kernel[
+    NP: Int, NC: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
     node_weights: UnsafePointer[Float32, MutAnyOrigin],
-    num_local:    Int,
+    num_local: Int,
     cell_avg_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     # One thread per (element, component) pair (NC-fold parallelism
@@ -453,15 +475,17 @@ def compute_cell_averages_kernel[NP: Int, NC: Int](
     cell_avg_out[elem * NC + c] = s
 
 
-def bj_limiter_compute_theta_kernel[NP: Int, NC: Int](
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32,   MutAnyOrigin],
-    num_owned:      Int,
-    cell_avg:       UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:     UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    venkat_eps:     Float32,
-    theta_out:      UnsafePointer[Float32, MutAnyOrigin],
+def bj_limiter_compute_theta_kernel[
+    NP: Int, NC: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
+    num_owned: Int,
+    cell_avg: UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    venkat_eps: Float32,
+    theta_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var idx = Int(global_idx.x)
     if idx >= num_owned:
@@ -514,10 +538,12 @@ def bj_limiter_compute_theta_kernel[NP: Int, NC: Int](
     var neg_D = InlineArray[Float32, NC](fill=Float32(0.0))
     for c in range(NC):
         var p = nbr_max[c] - own_avg[c]
-        if p < Float32(0.0): p = Float32(0.0)
+        if p < Float32(0.0):
+            p = Float32(0.0)
         pos_D[c] = p
         var n = own_avg[c] - nbr_min[c]
-        if n < Float32(0.0): n = Float32(0.0)
+        if n < Float32(0.0):
+            n = Float32(0.0)
         neg_D[c] = n
     var base_q = elem * NP * NC
     var theta: Float32 = 1.0
@@ -542,12 +568,14 @@ def bj_limiter_compute_theta_kernel[NP: Int, NC: Int](
     theta_out[idx] = theta
 
 
-def bj_limiter_apply_kernel[NP: Int, NC: Int](
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32,   MutAnyOrigin],
-    num_owned:      Int,
-    cell_avg:       UnsafePointer[Float32, MutAnyOrigin],
-    theta_in:       UnsafePointer[Float32, MutAnyOrigin],
+def bj_limiter_apply_kernel[
+    NP: Int, NC: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
+    num_owned: Int,
+    cell_avg: UnsafePointer[Float32, MutAnyOrigin],
+    theta_in: UnsafePointer[Float32, MutAnyOrigin],
 ):
     # One thread per (owned_idx, nn, c) -- coalesced apply pass.
     var tid = Int(global_idx.x)
@@ -574,6 +602,7 @@ def bj_limiter_apply_kernel[NP: Int, NC: Int](
 # Solver
 # ----------------------------------------------------------------------
 
+
 struct Solver[PhysT: Physics, P: Int = 2](Movable):
     comptime NC = Self.PhysT.NUM_COMPONENTS
     # Nodal-DOF count for the chosen spatial order.  At P=2 this is 10
@@ -595,15 +624,15 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
     # All DOF counts below are in element-nodes (not times NC).
     var total_local_dof: Int
     var total_owned_dof: Int
-    var total_q_len: Int      # total_local_dof * NC
+    var total_q_len: Int  # total_local_dof * NC
 
     # RK-stage buffers sized for the full local mesh (owned + ghost).
-    var d_q:  DeviceBuffer[dtype]
+    var d_q: DeviceBuffer[dtype]
     var d_q1: DeviceBuffer[dtype]
     var d_q2: DeviceBuffer[dtype]
 
     # Reference DG operators (uploaded once).
-    var d_D_ref:    DeviceBuffer[dtype]
+    var d_D_ref: DeviceBuffer[dtype]
     var d_Lift_ref: DeviceBuffer[dtype]
     # Nodal cell-mean weights (length NP, sum=1) for the BJ limiter.
     var d_node_weights: DeviceBuffer[dtype]
@@ -669,7 +698,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
             theta_size = 1
         self.d_bj_theta = self.ctx.enqueue_create_buffer[dtype](theta_size)
 
-        self.d_q  = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
+        self.d_q = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
         self.d_q1 = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
         self.d_q2 = self.ctx.enqueue_create_buffer[dtype](self.total_q_len)
         # Zero-initialise so ghost slots are sane until the first halo
@@ -685,10 +714,13 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
 
     # --- Download helpers --------------------------------------------
     def download_owned_component_with_ids(
-        mut self, c: Int,
+        mut self,
+        c: Int,
         mut scalar_host: List[Float32],
         mut global_elem_ids_host: List[Int32],
-        nx_global: Int, ny_global: Int, nz_global: Int,
+        nx_global: Int,
+        ny_global: Int,
+        nz_global: Int,
         mut nvtx: NvtxContext,
     ) raises:
         """Download component `c` for owned elements AND compute each
@@ -699,9 +731,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         `global_elem_ids_host`  length >= num_owned_elements
         """
         nvtx.push_range("download_owned_component_with_ids")
-        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](
-            self.total_q_len
-        )
+        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](self.total_q_len)
         var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](
             self.num_owned_elements
         )
@@ -712,13 +742,13 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         var h_invperm = self.ctx.enqueue_create_host_buffer[DType.int32](
             self.mesh.local.num_elements
         )
-        self.ctx.enqueue_copy(hbuf,  self.d_q)
+        self.ctx.enqueue_copy(hbuf, self.d_q)
         self.ctx.enqueue_copy(h_ids, self.mesh.d_owned_elem_ids)
         self.ctx.enqueue_copy(h_invperm, self.mesh.d_inv_perm)
         self.ctx.synchronize()
-        var q_p    = hbuf.unsafe_ptr()
-        var ids_p  = h_ids.unsafe_ptr()
-        var inv_p  = h_invperm.unsafe_ptr()
+        var q_p = hbuf.unsafe_ptr()
+        var ids_p = h_ids.unsafe_ptr()
+        var inv_p = h_invperm.unsafe_ptr()
         var stride = Self.NC
 
         # Local grid dimensions used to decode cube coords from element
@@ -733,8 +763,8 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         var cz0 = self.mesh.part.cz0
 
         for i in range(self.num_owned_elements):
-            var e_new = Int(ids_p[i])          # post-permutation id
-            var e_old = Int(inv_p[e_new])       # build-time id (decodable)
+            var e_new = Int(ids_p[i])  # post-permutation id
+            var e_old = Int(inv_p[e_new])  # build-time id (decodable)
             var cube = e_old // 6
             var tet = e_old - cube * 6
             var lcz = cube // (loc_nx * loc_ny)
@@ -755,7 +785,9 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         nvtx.pop_range()
 
     def download_owned_component(
-        mut self, c: Int, mut scalar_host: List[Float32],
+        mut self,
+        c: Int,
+        mut scalar_host: List[Float32],
         mut nvtx: NvtxContext,
     ) raises:
         """Download component `c` of q for *owned* elements only into
@@ -763,16 +795,14 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         nvtx.push_range("download_owned_component")
         # Full-buffer download, then host-side gather through
         # owned_elem_ids.  Ghost-slot values are simply skipped.
-        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](
-            self.total_q_len
-        )
+        var hbuf = self.ctx.enqueue_create_host_buffer[dtype](self.total_q_len)
         var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](
             self.num_owned_elements
         )
-        self.ctx.enqueue_copy(hbuf,  self.d_q)
+        self.ctx.enqueue_copy(hbuf, self.d_q)
         self.ctx.enqueue_copy(h_ids, self.mesh.d_owned_elem_ids)
         self.ctx.synchronize()
-        var q_p   = hbuf.unsafe_ptr()
+        var q_p = hbuf.unsafe_ptr()
         var ids_p = h_ids.unsafe_ptr()
         var stride = Self.NC
         for i in range(self.num_owned_elements):
@@ -905,10 +935,10 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         comptime NP = Self.NP
         comptime NFP = num_tri_nodes(Self.P)
         comptime NC = Self.NC
-        comptime NF = 4   # tet faces, P-independent
-        comptime ND = 3   # spatial dims
-        comptime SZ_F = 4 # Float32 byte size
-        comptime SZ_I = 4 # Int32 byte size
+        comptime NF = 4  # tet faces, P-independent
+        comptime ND = 3  # spatial dims
+        comptime SZ_F = 4  # Float32 byte size
+        comptime SZ_I = 4  # Int32 byte size
 
         var num_local = self.num_local_elements
         var num_owned = self.num_owned_elements
@@ -918,8 +948,8 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         var rk_stage_bytes = 3 * self.total_q_len * SZ_F
 
         # 2. Reference DG operators: D_ref, Lift_ref, node_weights.
-        var d_ref_bytes        = ND * NP * NP * SZ_F
-        var lift_ref_bytes     = NF * NP * NFP * SZ_F
+        var d_ref_bytes = ND * NP * NP * SZ_F
+        var lift_ref_bytes = NF * NP * NFP * SZ_F
         var node_weights_bytes = NP * SZ_F
         var dg_operators_bytes = (
             d_ref_bytes + lift_ref_bytes + node_weights_bytes
@@ -932,26 +962,35 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         # 4. Mesh connectivity -- LocalMesh d_* buffers + Mesh d_*
         # buffers.  Sizes mirror the allocation calls in
         # `LocalMesh.__init__` and `Mesh.__init__`.
-        var elem_node_xyz_bytes      = num_local * NP * 3 * SZ_F
-        var elem_invJ_bytes          = num_local * 9 * SZ_F
-        var elem_inv_6V_bytes        = num_local * SZ_F
-        var elem_faces_bytes         = num_local * NF * SZ_I
-        var elem_face_side_bytes     = num_local * NF * SZ_I
-        var elem_canon_to_ref_bytes  = num_local * NF * NFP * SZ_I
-        var face_elem_bytes          = num_faces * 2 * SZ_I
-        var face_elem_node_bytes     = num_faces * 2 * NFP * SZ_I
-        var face_normal_bytes        = num_faces * 3 * SZ_F
-        var face_area_bytes          = num_faces * SZ_F
-        var face_bc_type_bytes       = num_faces * SZ_I
-        var owned_elem_ids_bytes     = num_owned * SZ_I
-        var perm_bytes               = num_local * SZ_I
-        var inv_perm_bytes           = num_local * SZ_I
+        var elem_node_xyz_bytes = num_local * NP * 3 * SZ_F
+        var elem_invJ_bytes = num_local * 9 * SZ_F
+        var elem_inv_6V_bytes = num_local * SZ_F
+        var elem_faces_bytes = num_local * NF * SZ_I
+        var elem_face_side_bytes = num_local * NF * SZ_I
+        var elem_canon_to_ref_bytes = num_local * NF * NFP * SZ_I
+        var face_elem_bytes = num_faces * 2 * SZ_I
+        var face_elem_node_bytes = num_faces * 2 * NFP * SZ_I
+        var face_normal_bytes = num_faces * 3 * SZ_F
+        var face_area_bytes = num_faces * SZ_F
+        var face_bc_type_bytes = num_faces * SZ_I
+        var owned_elem_ids_bytes = num_owned * SZ_I
+        var perm_bytes = num_local * SZ_I
+        var inv_perm_bytes = num_local * SZ_I
         var mesh_connectivity_bytes = (
-            elem_node_xyz_bytes + elem_invJ_bytes + elem_inv_6V_bytes
-            + elem_faces_bytes + elem_face_side_bytes + elem_canon_to_ref_bytes
-            + face_elem_bytes + face_elem_node_bytes
-            + face_normal_bytes + face_area_bytes + face_bc_type_bytes
-            + owned_elem_ids_bytes + perm_bytes + inv_perm_bytes
+            elem_node_xyz_bytes
+            + elem_invJ_bytes
+            + elem_inv_6V_bytes
+            + elem_faces_bytes
+            + elem_face_side_bytes
+            + elem_canon_to_ref_bytes
+            + face_elem_bytes
+            + face_elem_node_bytes
+            + face_normal_bytes
+            + face_area_bytes
+            + face_bc_type_bytes
+            + owned_elem_ids_bytes
+            + perm_bytes
+            + inv_perm_bytes
         )
 
         # 5. Halo exchange (device side): pack/unpack indices +
@@ -962,7 +1001,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         var halo_device_bytes = 0
         for d in range(len(self.halo.ring_count)):
             var rc = self.halo.ring_count[d]
-            halo_device_bytes += 2 * (rc * SZ_I)            # pack + unpack
+            halo_device_bytes += 2 * (rc * SZ_I)  # pack + unpack
             halo_device_bytes += 2 * (rc * NP * NC * SZ_F)  # send + recv
 
         # 6. Halo exchange (pinned host side): only allocated when
@@ -1010,7 +1049,9 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         # Pass 2: BJ theta computation over owned elements (one
         # thread per owned element; same parallelism as the old
         # single-kernel limiter).
-        comptime _theta_kernel = bj_limiter_compute_theta_kernel[Self.NP, Self.NC]
+        comptime _theta_kernel = bj_limiter_compute_theta_kernel[
+            Self.NP, Self.NC
+        ]
         self.ctx.enqueue_function[_theta_kernel, _theta_kernel](
             q_ptr,
             self.mesh.d_owned_elem_ids.unsafe_ptr(),
@@ -1042,11 +1083,14 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         mut self,
         elem_base: Int,
         num_elems: Int,
-        q_in_ptr:  UnsafePointer[Float32, MutAnyOrigin],
-        q_a_ptr:   UnsafePointer[Float32, MutAnyOrigin],
-        q_b_ptr:   UnsafePointer[Float32, MutAnyOrigin],
+        q_in_ptr: UnsafePointer[Float32, MutAnyOrigin],
+        q_a_ptr: UnsafePointer[Float32, MutAnyOrigin],
+        q_b_ptr: UnsafePointer[Float32, MutAnyOrigin],
         q_out_ptr: UnsafePointer[Float32, MutAnyOrigin],
-        a: Float32, b: Float32, cc: Float32, dt: Float32,
+        a: Float32,
+        b: Float32,
+        cc: Float32,
+        dt: Float32,
     ) raises:
         if num_elems == 0:
             return
@@ -1054,7 +1098,10 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         comptime kernel = rk_stage_kernel[Self.NC, EPB, Self.P, Self.PhysT]
         self.ctx.enqueue_function[kernel, kernel](
             self.physics,
-            q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
+            q_in_ptr,
+            q_a_ptr,
+            q_b_ptr,
+            q_out_ptr,
             self.mesh.local.d_elem_invJ.unsafe_ptr(),
             self.mesh.local.d_elem_inv_6V.unsafe_ptr(),
             self.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -1068,8 +1115,12 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
             self.mesh.local.d_face_bc_type.unsafe_ptr(),
             self.d_D_ref.unsafe_ptr(),
             self.d_Lift_ref.unsafe_ptr(),
-            elem_base, num_elems,
-            a, b, cc, dt,
+            elem_base,
+            num_elems,
+            a,
+            b,
+            cc,
+            dt,
             grid_dim=ceildiv(num_elems, EPB),
             block_dim=EPB * Self.NP,
         )
@@ -1084,11 +1135,14 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
     #    launch over all owned elements (`num_interior == num_owned`).
     def _step_stage_overlapped(
         mut self,
-        q_in_ptr:  UnsafePointer[Float32, MutAnyOrigin],
-        q_a_ptr:   UnsafePointer[Float32, MutAnyOrigin],
-        q_b_ptr:   UnsafePointer[Float32, MutAnyOrigin],
+        q_in_ptr: UnsafePointer[Float32, MutAnyOrigin],
+        q_a_ptr: UnsafePointer[Float32, MutAnyOrigin],
+        q_b_ptr: UnsafePointer[Float32, MutAnyOrigin],
         q_out_ptr: UnsafePointer[Float32, MutAnyOrigin],
-        a: Float32, b: Float32, cc: Float32, dt: Float32,
+        a: Float32,
+        b: Float32,
+        cc: Float32,
+        dt: Float32,
         mut nvtx: NvtxContext,
     ) raises:
         if self.mesh.num_halo_elements == 0:
@@ -1096,9 +1150,16 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
             # One kernel, no MPI, no split.
             nvtx.push_range("rk_stage")
             self._launch_rk_stage(
-                0, self.mesh.num_owned_elements,
-                q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
-                a, b, cc, dt,
+                0,
+                self.mesh.num_owned_elements,
+                q_in_ptr,
+                q_a_ptr,
+                q_b_ptr,
+                q_out_ptr,
+                a,
+                b,
+                cc,
+                dt,
             )
             nvtx.pop_range()
             nvtx.push_range("cell_limiter")
@@ -1117,9 +1178,16 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         # interior ids are [0, num_interior).
         nvtx.push_range("rk_stage_interior")
         self._launch_rk_stage(
-            0, self.mesh.num_interior_elements,
-            q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
-            a, b, cc, dt,
+            0,
+            self.mesh.num_interior_elements,
+            q_in_ptr,
+            q_a_ptr,
+            q_b_ptr,
+            q_out_ptr,
+            a,
+            b,
+            cc,
+            dt,
         )
         nvtx.pop_range()
 
@@ -1133,9 +1201,16 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         # [num_interior, num_interior + num_halo).
         nvtx.push_range("rk_stage_halo")
         self._launch_rk_stage(
-            self.mesh.num_interior_elements, self.mesh.num_halo_elements,
-            q_in_ptr, q_a_ptr, q_b_ptr, q_out_ptr,
-            a, b, cc, dt,
+            self.mesh.num_interior_elements,
+            self.mesh.num_halo_elements,
+            q_in_ptr,
+            q_a_ptr,
+            q_b_ptr,
+            q_out_ptr,
+            a,
+            b,
+            cc,
+            dt,
         )
         nvtx.pop_range()
 
@@ -1148,18 +1223,26 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
 
     # --- SSPRK3 time step with comm-compute overlap ------------------
     def step_ssprk3(
-        mut self, dt: Float32, mut nvtx: NvtxContext,
+        mut self,
+        dt: Float32,
+        mut nvtx: NvtxContext,
     ) raises:
         nvtx.push_range("ssprk3_step")
-        var p_q  = self.d_q.unsafe_ptr()
+        var p_q = self.d_q.unsafe_ptr()
         var p_q1 = self.d_q1.unsafe_ptr()
         var p_q2 = self.d_q2.unsafe_ptr()
 
         # Stage 1: rhs(q) -> q1
         nvtx.push_range("rk_stage_1")
         self._step_stage_overlapped(
-            p_q, p_q, p_q, p_q1,
-            Float32(1.0), Float32(0.0), Float32(1.0), dt,
+            p_q,
+            p_q,
+            p_q,
+            p_q1,
+            Float32(1.0),
+            Float32(0.0),
+            Float32(1.0),
+            dt,
             nvtx,
         )
         nvtx.pop_range()
@@ -1167,8 +1250,14 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         # Stage 2: rhs(q1) -> q2
         nvtx.push_range("rk_stage_2")
         self._step_stage_overlapped(
-            p_q1, p_q, p_q1, p_q2,
-            Float32(0.75), Float32(0.25), Float32(0.25), dt,
+            p_q1,
+            p_q,
+            p_q1,
+            p_q2,
+            Float32(0.75),
+            Float32(0.25),
+            Float32(0.25),
+            dt,
             nvtx,
         )
         nvtx.pop_range()
@@ -1176,9 +1265,14 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         # Stage 3: rhs(q2) -> q
         nvtx.push_range("rk_stage_3")
         self._step_stage_overlapped(
-            p_q2, p_q, p_q2, p_q,
-            Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-            Float32(2.0 / 3.0), dt,
+            p_q2,
+            p_q,
+            p_q2,
+            p_q,
+            Float32(1.0 / 3.0),
+            Float32(2.0 / 3.0),
+            Float32(2.0 / 3.0),
+            dt,
             nvtx,
         )
         nvtx.pop_range()

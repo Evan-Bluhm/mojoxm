@@ -45,7 +45,7 @@ from src.solver import Physics
 from src.boundary import BC_WALL, BC_OUTFLOW, BC_INFLOW
 
 
-struct Maxwell(Physics, ImplicitlyCopyable):
+struct Maxwell(ImplicitlyCopyable, Physics):
     comptime NUM_COMPONENTS = 6
 
     # Speed of light.  1 in natural units; drivers that want dimensional
@@ -76,8 +76,12 @@ struct Maxwell(Physics, ImplicitlyCopyable):
     def __init__(
         out self,
         c: Float32,
-        Jx: Float32, Jy: Float32, Jz: Float32,
-        Mx: Float32, My: Float32, Mz: Float32,
+        Jx: Float32,
+        Jy: Float32,
+        Jz: Float32,
+        Mx: Float32,
+        My: Float32,
+        Mz: Float32,
         inflow_Ex: Float32 = Float32(0.0),
         inflow_Ey: Float32 = Float32(0.0),
         inflow_Ez: Float32 = Float32(0.0),
@@ -86,8 +90,12 @@ struct Maxwell(Physics, ImplicitlyCopyable):
         inflow_Bz: Float32 = Float32(0.0),
     ):
         self.c = c
-        self.Jx = Jx; self.Jy = Jy; self.Jz = Jz
-        self.Mx = Mx; self.My = My; self.Mz = Mz
+        self.Jx = Jx
+        self.Jy = Jy
+        self.Jz = Jz
+        self.Mx = Mx
+        self.My = My
+        self.Mz = Mz
         self.inflow_Ex = inflow_Ex
         self.inflow_Ey = inflow_Ey
         self.inflow_Ez = inflow_Ez
@@ -98,9 +106,9 @@ struct Maxwell(Physics, ImplicitlyCopyable):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[origin: MutOrigin](
-        self, target: UnsafePointer[NoneType, origin]
-    ):
+    def _to_device_type[
+        origin: MutOrigin
+    ](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -120,11 +128,15 @@ struct Maxwell(Physics, ImplicitlyCopyable):
     # F^z_B = z^ x E          = (-Ey, Ex, 0)
     def internal_flux(
         self,
-        q:    UnsafePointer[Float32, MutAnyOrigin],
+        q: UnsafePointer[Float32, MutAnyOrigin],
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
-        var Ex = q[0]; var Ey = q[1]; var Ez = q[2]
-        var Bx = q[3]; var By = q[4]; var Bz = q[5]
+        var Ex = q[0]
+        var Ey = q[1]
+        var Ez = q[2]
+        var Bx = q[3]
+        var By = q[4]
+        var Bz = q[5]
         var c2 = self.c * self.c
         # F^x
         flux[0 * 6 + 0] = Float32(0.0)
@@ -156,13 +168,23 @@ struct Maxwell(Physics, ImplicitlyCopyable):
         self,
         q_l: UnsafePointer[Float32, MutAnyOrigin],
         q_r: UnsafePointer[Float32, MutAnyOrigin],
-        nx: Float32, ny: Float32, nz: Float32,
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
-        var Elx = q_l[0]; var Ely = q_l[1]; var Elz = q_l[2]
-        var Blx = q_l[3]; var Bly = q_l[4]; var Blz = q_l[5]
-        var Erx = q_r[0]; var Ery = q_r[1]; var Erz = q_r[2]
-        var Brx = q_r[3]; var Bry = q_r[4]; var Brz = q_r[5]
+        var Elx = q_l[0]
+        var Ely = q_l[1]
+        var Elz = q_l[2]
+        var Blx = q_l[3]
+        var Bly = q_l[4]
+        var Blz = q_l[5]
+        var Erx = q_r[0]
+        var Ery = q_r[1]
+        var Erz = q_r[2]
+        var Brx = q_r[3]
+        var Bry = q_r[4]
+        var Brz = q_r[5]
         var c2 = self.c * self.c
 
         # (F . n)_E = c^2 * (B x n);  (B x n)_x = By nz - Bz ny
@@ -198,7 +220,9 @@ struct Maxwell(Physics, ImplicitlyCopyable):
         self,
         q_int: UnsafePointer[Float32, MutAnyOrigin],
         bc_type: Int32,
-        nx: Float32, ny: Float32, nz: Float32,
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         var q_ghost = InlineArray[Float32, 6](fill=0.0)
@@ -237,7 +261,9 @@ struct Maxwell(Physics, ImplicitlyCopyable):
     def source_term(
         self,
         q: UnsafePointer[Float32, MutAnyOrigin],
-        x: Float32, y: Float32, z: Float32,
+        x: Float32,
+        y: Float32,
+        z: Float32,
         source_out: UnsafePointer[Float32, MutAnyOrigin],
     ):
         var c2 = self.c * self.c

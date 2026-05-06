@@ -20,7 +20,11 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
-from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
+from src.reference_2d import (
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
+)
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -60,7 +64,7 @@ def main() raises:
     var Bz0 = Float32(-0.6)
 
     var n_q = gpu.num_elements * NP_p * NC
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -80,54 +84,84 @@ def main() raises:
 
     var dt = Float32(2.0e-4)
     maxwell_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        c, Float32(1.0), Float32(0.0), Float32(1.0), dt,
+        c,
+        Float32(1.0),
+        Float32(0.0),
+        Float32(1.0),
+        dt,
     )
     maxwell_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        c, Float32(0.75), Float32(0.25), Float32(0.25), dt,
+        c,
+        Float32(0.75),
+        Float32(0.25),
+        Float32(0.25),
+        dt,
     )
     maxwell_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        c, Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt,
+        c,
+        Float32(1.0 / 3.0),
+        Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0),
+        dt,
     )
     ctx.enqueue_copy(hbuf, d_q)
     ctx.synchronize()
 
     var max_err: Float32 = 0.0
     var ic = List[Float32]()
-    ic.append(Ex0); ic.append(Ey0); ic.append(Ez0)
-    ic.append(Bx0); ic.append(By0); ic.append(Bz0)
+    ic.append(Ex0)
+    ic.append(Ey0)
+    ic.append(Ez0)
+    ic.append(Bx0)
+    ic.append(By0)
+    ic.append(Bz0)
     for k in range(gpu.num_elements * NP_p):
         var base = k * NC
         for c_idx in range(NC):
             var v = hptr[base + c_idx]
             if isnan(v) or isinf(v):
-                raise Error("Maxwell: non-finite at node "
-                            + String(k) + " comp " + String(c_idx))
+                raise Error(
+                    "Maxwell: non-finite at node "
+                    + String(k)
+                    + " comp "
+                    + String(c_idx)
+                )
             var err = _abs32(v - ic[c_idx])
-            if err > max_err: max_err = err
+            if err > max_err:
+                max_err = err
     print("  Maxwell max |q - q_IC| =", max_err)
     if max_err > Float32(1.0e-4):
         raise Error(
             "Maxwell: constant state not preserved (max err "
-            + String(max_err) + ")"
+            + String(max_err)
+            + ")"
         )
 
     print("=== maxwell_2d_gpu_test PASSED ===")

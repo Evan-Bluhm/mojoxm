@@ -26,11 +26,15 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_2d
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.vtu_2d import (
-    dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name,
+    dump_vtu_2d_frame_multi,
+    dump_pvd_collection,
+    vtu_frame_name,
 )
 from src.memory_report import MemoryReport, ThroughputReport
 from src.ssprk3 import ssprk3_stage_plans
@@ -56,8 +60,10 @@ comptime CY0 = 5.0
 
 def _periodic_delta(a: Float64, b: Float64, L: Float64) -> Float64:
     var d = a - b
-    if d >  L * 0.5: d -= L
-    if d < -L * 0.5: d += L
+    if d > L * 0.5:
+        d -= L
+    if d < -L * 0.5:
+        d += L
     return d
 
 
@@ -86,10 +92,16 @@ def main() raises:
     var mesh_coords = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY)
     var gpu_mesh = LocalMesh2DGpu[P](ctx=ctx, host=host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx=ctx, host=host_re)
-    print("  elements:", gpu_mesh.num_elements,
-          " faces:", gpu_mesh.num_faces,
-          "  nodes/elem:", NP_p,
-          "  total DOF:", gpu_mesh.num_elements * NP_p * NC)
+    print(
+        "  elements:",
+        gpu_mesh.num_elements,
+        " faces:",
+        gpu_mesh.num_faces,
+        "  nodes/elem:",
+        NP_p,
+        "  total DOF:",
+        gpu_mesh.num_elements * NP_p * NC,
+    )
 
     # IC: isentropic vortex (Shu 1998).
     var n_q = gpu_mesh.num_elements * NP_p * NC
@@ -121,7 +133,7 @@ def main() raises:
             host_ic.append(Float32(rho * v))
             host_ic.append(Float32(E))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar_count = gpu_mesh.num_faces * NFP_e * NC
@@ -132,13 +144,11 @@ def main() raises:
     # owner's device_bytes() helper plus the locally-allocated state /
     # face-flux scratch.
     MemoryReport(
-        rk_stage_bytes=3 * n_q * 4,                # d_q + d_q1 + d_q2
+        rk_stage_bytes=3 * n_q * 4,  # d_q + d_q1 + d_q2
         dg_operators_bytes=gpu_re.device_bytes(),
-        limiter_bytes=0,                           # (vortex doesn't use BJ)
-        mesh_connectivity_bytes=(
-            gpu_mesh.device_bytes() + d_fstar_count * 4
-        ),
-        halo_device_bytes=0,                       # 2D is np=1 only
+        limiter_bytes=0,  # (vortex doesn't use BJ)
+        mesh_connectivity_bytes=(gpu_mesh.device_bytes() + d_fstar_count * 4),
+        halo_device_bytes=0,  # 2D is np=1 only
         halo_pinned_bytes=0,
     ).print()
 
@@ -158,8 +168,14 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = Float32(T_FINAL / Float64(total_steps))
-    print("  dt=", dt, "  steps/frame=", steps_per_frame,
-          "  total steps=", total_steps)
+    print(
+        "  dt=",
+        dt,
+        "  steps/frame=",
+        steps_per_frame,
+        "  total steps=",
+        total_steps,
+    )
 
     var gamma = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
@@ -187,9 +203,9 @@ def main() raises:
         var n_nodes = gpu_mesh.num_elements * NP_p
         for i in range(n_nodes):
             var rho = Float64(src[i * NC + 0])
-            var mx  = Float64(src[i * NC + 1])
-            var my  = Float64(src[i * NC + 2])
-            var E   = Float64(src[i * NC + 3])
+            var mx = Float64(src[i * NC + 1])
+            var my = Float64(src[i * NC + 2])
+            var E = Float64(src[i * NC + 3])
             var rho_safe = rho if rho > 1.0e-12 else 1.0e-12
             var u = mx / rho_safe
             var v = my / rho_safe
@@ -207,7 +223,9 @@ def main() raises:
     fields.append(vmag.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
     dump_vtu_2d_frame_multi[P](
-        mesh_coords, field_names, fields,
+        mesh_coords,
+        field_names,
+        fields,
         String("output/") + f0_name,
     )
     paths.append(f0_name)
@@ -237,7 +255,10 @@ def main() raises:
                     gamma=gamma,
                     min_density=min_rho,
                     min_pressure=min_p,
-                    a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                    a=stage.a,
+                    b=stage.b,
+                    cc=stage.c,
+                    dt=dt,
                 )
         ctx.synchronize()
         var c_end = perf_counter_ns()
@@ -253,7 +274,9 @@ def main() raises:
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
         dump_vtu_2d_frame_multi[P](
-            mesh_coords, field_names, fi_fields,
+            mesh_coords,
+            field_names,
+            fi_fields,
             String("output/") + fname,
         )
         paths.append(fname)
@@ -287,14 +310,18 @@ def main() raises:
         sum_ic += ic * ic
     var l2 = sqrt(sum_sq / Float64(n_q))
     var l2_ic = sqrt(sum_ic / Float64(n_q))
-    print("  L2 err =", l2, "  rel err =", l2 / l2_ic,
-          "  (IC L2 =", l2_ic, ")")
+    print("  L2 err =", l2, "  rel err =", l2 / l2_ic, "  (IC L2 =", l2_ic, ")")
 
     # PVD collection -- `scripts/animate_2d.py` walks this directly.
     dump_pvd_collection(
-        String("output/solution_euler2d_gpu.pvd"), paths, times,
+        String("output/solution_euler2d_gpu.pvd"),
+        paths,
+        times,
     )
-    print("  wrote output/solution_euler2d_gpu.pvd +",
-          NUM_FRAMES + 1, "VTU frames")
+    print(
+        "  wrote output/solution_euler2d_gpu.pvd +",
+        NUM_FRAMES + 1,
+        "VTU frames",
+    )
 
     mpi.finalize()

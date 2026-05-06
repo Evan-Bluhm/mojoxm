@@ -28,7 +28,10 @@ from std.math import sqrt, ceildiv, exp, isnan, isinf
 from src import mpi
 from src.partition import build_partition
 from src.reference import (
-    ReferenceElement, to_float32, num_tet_nodes, build_reference_operators,
+    ReferenceElement,
+    to_float32,
+    num_tet_nodes,
+    build_reference_operators,
     N_P,
 )
 from src.mesh import Mesh
@@ -65,7 +68,7 @@ comptime DRAIN_TOL_REL: Float64 = 1.0e-9
 def gaussian_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
     inv_two_sigma2: Float32,
 ):
@@ -82,9 +85,7 @@ def gaussian_ic_kernel(
     var dx = px - CX
     var dy = py - CY
     var dz = pz - CZ
-    q[e * N_P + nn] = exp(
-        -(dx * dx + dy * dy + dz * dz) * inv_two_sigma2
-    )
+    q[e * N_P + nn] = exp(-(dx * dx + dy * dy + dz * dz) * inv_two_sigma2)
 
 
 def main() raises:
@@ -105,21 +106,37 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions(
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_OUTFLOW, BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
     )
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        Advection.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = Advection(VX, VY, VZ)
     var solver = Solver[Advection](
-        ctx^, mesh^, halo^, physics^,
-        refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     var inv_two_sigma2 = Float32(1.0) / (
@@ -174,18 +191,28 @@ def main() raises:
                 raise Error("bench_advection_outflow_3d: non-finite output")
             mass_fin += Float64(v_now) * Float64(node_w[nn])
             var av = v_now if v_now >= Float32(0.0) else -v_now
-            if av > max_abs: max_abs = av
+            if av > max_abs:
+                max_abs = av
 
     var rel = mass_fin / mass_ic
-    if rel < 0.0: rel = -rel
-    print("  mass(IC)=", mass_ic,
-          "  mass(t=T)=", mass_fin,
-          "  rel=", rel,
-          "  max |q|=", max_abs)
+    if rel < 0.0:
+        rel = -rel
+    print(
+        "  mass(IC)=",
+        mass_ic,
+        "  mass(t=T)=",
+        mass_fin,
+        "  rel=",
+        rel,
+        "  max |q|=",
+        max_abs,
+    )
     if rel > DRAIN_TOL_REL:
         raise Error(
             String("bench_advection_outflow_3d FAILED: residual mass ")
-            + String(rel) + " > " + String(DRAIN_TOL_REL)
+            + String(rel)
+            + " > "
+            + String(DRAIN_TOL_REL)
         )
 
     print("=== bench_advection_outflow_3d PASSED ===")

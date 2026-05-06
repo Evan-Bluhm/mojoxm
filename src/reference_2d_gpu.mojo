@@ -16,7 +16,9 @@
 # ======================================================================
 
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from std.gpu.host import DeviceContext, DeviceBuffer
 
@@ -46,6 +48,7 @@ struct ReferenceElement2DGpu[P: Int = 2](Movable):
       d_node_weights: [NP]                   (cell-mean quadrature
                                               weights, sum = 1)
     """
+
     comptime NP = num_tri_nodes_2d(Self.P)
     comptime NFP_edge = num_edge_nodes(Self.P)
 
@@ -67,11 +70,11 @@ struct ReferenceElement2DGpu[P: Int = 2](Movable):
         """Total device footprint of this reference element's
         operator tables.  Used by `MemoryReport` 2D-side construction
         in drivers."""
-        comptime SZ = 4   # Float32 == 4 bytes
+        comptime SZ = 4  # Float32 == 4 bytes
         comptime NP = Self.NP
         comptime NFP = Self.NFP_edge
         return SZ * (
-            2 * NP * NP        # D_ref (r + s directions)
-            + 3 * NP * NFP     # Lift_ref (3 edges)
-            + NP               # node_weights
+            2 * NP * NP  # D_ref (r + s directions)
+            + 3 * NP * NFP  # Lift_ref (3 edges)
+            + NP  # node_weights
         )

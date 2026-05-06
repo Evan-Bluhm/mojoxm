@@ -82,14 +82,22 @@ def fill_checkerboard_kernel(
     q[e * N_P + nn] = sign * amplitude
 
 
-def assert_close(name: String, got: Float64, expected: Float64,
-                 tol: Float64) raises:
+def assert_close(
+    name: String, got: Float64, expected: Float64, tol: Float64
+) raises:
     var d = got - expected
     var ad = d if d >= 0.0 else -d
     if ad > tol:
         raise Error(
-            name + ": got=" + String(got) + " expected=" + String(expected)
-            + " |diff|=" + String(ad) + " tol=" + String(tol)
+            name
+            + ": got="
+            + String(got)
+            + " expected="
+            + String(expected)
+            + " |diff|="
+            + String(ad)
+            + " tol="
+            + String(tol)
         )
 
 
@@ -104,7 +112,8 @@ def test_uniform_field(
     solver.ctx.enqueue_function[fill_constant_kernel, fill_constant_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        num_owned, value,
+        num_owned,
+        value,
         grid_dim=ceildiv(num_owned * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
@@ -118,8 +127,14 @@ def test_uniform_field(
     var ma = List[NamedComponent]()
     ma.append(NamedComponent("max_abs_q", 0))
     var diag = DiagnosticsWriter[Advection](
-        solver, "output/_test_uniform.csv",
-        lin, sq, ma, LX, LY, LZ,
+        solver,
+        "output/_test_uniform.csv",
+        lin,
+        sq,
+        ma,
+        LX,
+        LY,
+        LZ,
     )
     diag.record(0.0, solver, nvtx)
 
@@ -145,11 +160,13 @@ def test_checkerboard(
     var amp: Float32 = 7.0
     var num_owned = solver.num_owned_elements
     solver.ctx.enqueue_function[
-        fill_checkerboard_kernel, fill_checkerboard_kernel,
+        fill_checkerboard_kernel,
+        fill_checkerboard_kernel,
     ](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        num_owned, amp,
+        num_owned,
+        amp,
         grid_dim=ceildiv(num_owned * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
@@ -160,8 +177,14 @@ def test_checkerboard(
     var sq = List[NamedComponent]()
     sq.append(NamedComponent("l2_sq", 0))
     var diag = DiagnosticsWriter[Advection](
-        solver, "output/_test_checker.csv",
-        List[NamedComponent](), sq, ma, LX, LY, LZ,
+        solver,
+        "output/_test_checker.csv",
+        List[NamedComponent](),
+        sq,
+        ma,
+        LX,
+        LY,
+        LZ,
     )
     diag.record(0.0, solver, nvtx)
 
@@ -180,11 +203,14 @@ def test_empty_writer(
 ) raises:
     print("zero-column writer...")
     var diag = DiagnosticsWriter[Advection](
-        solver, "output/_test_empty.csv",
+        solver,
+        "output/_test_empty.csv",
         List[NamedComponent](),
         List[NamedComponent](),
         List[NamedComponent](),
-        LX, LY, LZ,
+        LX,
+        LY,
+        LZ,
     )
     diag.record(1.5, solver, nvtx)
     if len(diag.last_row) != 0:
@@ -208,16 +234,28 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh(
-        ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(0, 1, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Advection.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        Advection.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = Advection(VX, VY, VZ)
     var solver = Solver[Advection](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     test_uniform_field(solver, nvtx)

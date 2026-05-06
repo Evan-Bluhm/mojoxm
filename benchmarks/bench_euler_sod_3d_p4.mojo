@@ -39,11 +39,16 @@ from std.math import sqrt, ceildiv, tanh, isnan, isinf
 from src import mpi
 from src.partition import build_partition
 from src.reference import (
-    ReferenceElement, to_float32, num_tet_nodes,
+    ReferenceElement,
+    to_float32,
+    num_tet_nodes,
 )
 from src.mesh import Mesh
 from src.boundary import (
-    BoundaryConditions, BC_INTERIOR, BC_WALL, BC_OUTFLOW,
+    BoundaryConditions,
+    BC_INTERIOR,
+    BC_WALL,
+    BC_OUTFLOW,
 )
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
@@ -52,7 +57,7 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 4
-comptime NP = num_tet_nodes(P)   # 35 at P=4
+comptime NP = num_tet_nodes(P)  # 35 at P=4
 comptime NX = 40
 comptime NY = 4
 comptime NZ = 4
@@ -62,9 +67,9 @@ comptime LZ = Float64(4.0 / 40.0)
 
 comptime GAMMA: Float32 = 1.4
 comptime RHO_L: Float32 = 1.0
-comptime P_L:   Float32 = 1.0
+comptime P_L: Float32 = 1.0
 comptime RHO_R: Float32 = 0.125
-comptime P_R:   Float32 = 0.1
+comptime P_R: Float32 = 0.1
 comptime T_FINAL: Float32 = 0.20
 comptime CFL = Float32(0.10)
 comptime IC_BLOCK = 256
@@ -77,7 +82,7 @@ comptime MASS_TOL_REL: Float64 = 5.0e-3
 def sod_ic_kernel_p4(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -88,11 +93,12 @@ def sod_ic_kernel_p4(
     var nn = idx % NP
     var e = Int(owned_elem_ids[i])
     var px = elem_node_xyz[(e * NP + nn) * 3 + 0]
-    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) \
-            * Float32(0.5)
+    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(
+        0.5
+    )
     var rho = RHO_L + s * (RHO_R - RHO_L)
-    var p   = P_L   + s * (P_R - P_L)
-    var E   = p / (GAMMA - Float32(1.0))
+    var p = P_L + s * (P_R - P_L)
+    var E = p / (GAMMA - Float32(1.0))
     var base = (e * NP + nn) * 5
     q[base + 0] = rho
     q[base + 1] = Float32(0.0)
@@ -111,8 +117,9 @@ def main() raises:
         return
 
     print("bench_euler_sod_3d_p4 (3D Sod shock tube at P=4, BJ-limited)")
-    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ,
-          "  T=", T_FINAL)
+    print(
+        "  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -124,23 +131,43 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var bcs = BoundaryConditions(
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_WALL,    BC_WALL,
-        BC_WALL,    BC_WALL,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
     )
     var mesh = Mesh[P](
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        Euler.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = Euler(
-        GAMMA, Float32(1.0e-6), Float32(1.0e-6),
-        FLUX_HLLEC, False,
+        GAMMA,
+        Float32(1.0e-6),
+        Float32(1.0e-6),
+        FLUX_HLLEC,
+        False,
     )
     var solver = Solver[Euler, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
     solver.enable_cell_limiter(True, Float32(0.1))
 
@@ -180,14 +207,16 @@ def main() raises:
 
     solver.download_owned_component(0, rho_buf, nvtx)
     var rho_max: Float32 = Float32(-1.0e30)
-    var rho_min: Float32 = Float32( 1.0e30)
+    var rho_min: Float32 = Float32(1.0e30)
     var mass_fin: Float64 = 0.0
     for i in range(n_dof):
         var v = rho_buf[i]
         if isnan(v) or isinf(v):
             raise Error("bench_euler_sod_3d_p4: non-finite density")
-        if v > rho_max: rho_max = v
-        if v < rho_min: rho_min = v
+        if v > rho_max:
+            rho_max = v
+        if v < rho_min:
+            rho_min = v
         mass_fin += Float64(v)
     mass_fin /= Float64(n_dof)
 
@@ -198,27 +227,35 @@ def main() raises:
     if rho_max > RHO_L + BOUNDS_SLACK:
         raise Error(
             String("bench_euler_sod_3d_p4 FAILED: rho_max ")
-            + String(rho_max) + " overshot RHO_L=" + String(RHO_L)
+            + String(rho_max)
+            + " overshot RHO_L="
+            + String(RHO_L)
         )
     if rho_min < Float32(0.0):
         raise Error(
             String("bench_euler_sod_3d_p4 FAILED: rho_min ")
-            + String(rho_min) + " negative (positivity lost)"
+            + String(rho_min)
+            + " negative (positivity lost)"
         )
     if rho_min < RHO_R - BOUNDS_SLACK:
         raise Error(
             String("bench_euler_sod_3d_p4 FAILED: rho_min ")
-            + String(rho_min) + " undershot RHO_R=" + String(RHO_R)
+            + String(rho_min)
+            + " undershot RHO_R="
+            + String(RHO_R)
         )
 
     var dmass = mass_fin - mass_ic
-    if dmass < 0.0: dmass = -dmass
+    if dmass < 0.0:
+        dmass = -dmass
     var rel = dmass / mass_ic
     if rel > MASS_TOL_REL:
         raise Error(
             String("bench_euler_sod_3d_p4 FAILED: mass drift ")
-            + String(rel * 100.0) + "%% > tol "
-            + String(MASS_TOL_REL * 100.0) + "%%"
+            + String(rel * 100.0)
+            + "%% > tol "
+            + String(MASS_TOL_REL * 100.0)
+            + "%%"
         )
 
     print("=== bench_euler_sod_3d_p4 PASSED ===")

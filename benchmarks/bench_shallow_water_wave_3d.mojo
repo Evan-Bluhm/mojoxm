@@ -53,7 +53,7 @@ comptime LX = 1.0
 comptime LY = 1.0
 comptime LZ = 0.1
 comptime GRAVITY: Float32 = 1.0
-comptime H_REST:  Float32 = 1.0
+comptime H_REST: Float32 = 1.0
 comptime AMPLITUDE: Float32 = 0.01
 comptime H_MIN: Float32 = 1.0e-6
 comptime CFL = Float32(0.2)
@@ -61,7 +61,7 @@ comptime IC_BLOCK = 256
 comptime PI_F: Float32 = 3.14159265358979323846
 
 # One wave period: T = Lx / c where c = sqrt(g H).
-comptime T_FINAL: Float32 = Float32(LX / 1.0)   # c = sqrt(1*1) = 1
+comptime T_FINAL: Float32 = Float32(LX / 1.0)  # c = sqrt(1*1) = 1
 
 # Measured ~1.7e-4 across N = 16, 24, 32 (nonlinear O((A/H)^2) floor
 # at A=0.01).  3e-4 is ~1.7x actual, catches SW flux regressions.
@@ -76,7 +76,7 @@ comptime MASS_TOL_REL: Float64 = 1.0e-4
 def wave_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -91,8 +91,8 @@ def wave_ic_kernel(
     var h = H_REST + AMPLITUDE * sin(k * px)
     var base = (e * N_P + nn) * 3
     q[base + 0] = h
-    q[base + 1] = Float32(0.0)    # hu
-    q[base + 2] = Float32(0.0)    # hv
+    q[base + 1] = Float32(0.0)  # hu
+    q[base + 2] = Float32(0.0)  # hv
 
 
 @fieldwise_init
@@ -111,17 +111,28 @@ def _run(N: Int) raises -> RunResult:
 
     var NZ = 2
     var mesh = Mesh(
-        ctx, build_partition(rank, size, N, N, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(rank, size, N, N, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, ShallowWater.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        ShallowWater.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = ShallowWater(GRAVITY, H_MIN)
     var solver = Solver[ShallowWater](
-        ctx^, mesh^, halo^, physics^,
-        refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[wave_ic_kernel, wave_ic_kernel](
@@ -135,8 +146,12 @@ def _run(N: Int) raises -> RunResult:
     solver.ctx.synchronize()
 
     # Snapshot IC.
-    var n_owned_dof = solver.num_owned_elements * N_P * ShallowWater.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var n_owned_dof = (
+        solver.num_owned_elements * N_P * ShallowWater.NUM_COMPONENTS
+    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_ic,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -158,7 +173,9 @@ def _run(N: Int) raises -> RunResult:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -190,7 +207,8 @@ def _run(N: Int) raises -> RunResult:
         mass_ic += Float64(host_ic[i * 3 + 0])
         mass_fin += Float64(q_ptr[i * 3 + 0])
     var dmass = mass_fin - mass_ic
-    if dmass < 0.0: dmass = -dmass
+    if dmass < 0.0:
+        dmass = -dmass
     var mass_rel = dmass / mass_ic
 
     return RunResult(rel_l2, mass_rel)

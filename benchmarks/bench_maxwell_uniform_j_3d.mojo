@@ -52,7 +52,7 @@ comptime LY = 1.0
 comptime LZ = 1.0
 
 comptime C_LIGHT: Float32 = 1.0
-comptime JX:     Float32 = 1.0
+comptime JX: Float32 = 1.0
 comptime T_FINAL: Float32 = 0.5
 comptime CFL = Float32(0.2)
 
@@ -71,8 +71,9 @@ def main() raises:
         return
 
     print("bench_maxwell_uniform_j_3d (uniform J source-term gate)")
-    print("  P= 2   mesh=", NX, "x", NY, "x", NZ,
-          "   Jx=", JX, "   T=", T_FINAL)
+    print(
+        "  P= 2   mesh=", NX, "x", NY, "x", NZ, "   Jx=", JX, "   T=", T_FINAL
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -81,20 +82,37 @@ def main() raises:
 
     var bcs = BoundaryConditions.periodic()
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Maxwell.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        Maxwell.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = Maxwell(
         C_LIGHT,
-        JX, Float32(0.0), Float32(0.0),       # J = (Jx, 0, 0)
-        Float32(0.0), Float32(0.0), Float32(0.0),  # M = 0
+        JX,
+        Float32(0.0),
+        Float32(0.0),  # J = (Jx, 0, 0)
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),  # M = 0
     )
     var solver = Solver[Maxwell](
-        ctx^, mesh^, halo^, physics^,
-        refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     # IC: all components zero.  d_q is created zero-initialised by
@@ -113,9 +131,12 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
-        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
+        hbuf_q,
+        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
     )
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
@@ -133,39 +154,75 @@ def main() raises:
         var bx = q_ptr[i * 6 + 3]
         var by = q_ptr[i * 6 + 4]
         var bz = q_ptr[i * 6 + 5]
-        if (isnan(ex) or isinf(ex) or isnan(ey) or isinf(ey)
-            or isnan(ez) or isinf(ez) or isnan(bx) or isinf(bx)
-            or isnan(by) or isinf(by) or isnan(bz) or isinf(bz)):
+        if (
+            isnan(ex)
+            or isinf(ex)
+            or isnan(ey)
+            or isinf(ey)
+            or isnan(ez)
+            or isinf(ez)
+            or isnan(bx)
+            or isinf(bx)
+            or isnan(by)
+            or isinf(by)
+            or isnan(bz)
+            or isinf(bz)
+        ):
             raise Error("bench_maxwell_uniform_j_3d: non-finite output")
         var ex_dev = Float64(ex - ex_exact)
-        if ex_dev < 0.0: ex_dev = -ex_dev
-        if ex_dev > max_ex_dev: max_ex_dev = ex_dev
+        if ex_dev < 0.0:
+            ex_dev = -ex_dev
+        if ex_dev > max_ex_dev:
+            max_ex_dev = ex_dev
         var other_max = Float64(0.0)
-        var values = [Float64(ey), Float64(ez), Float64(bx),
-                      Float64(by), Float64(bz)]
+        var values = [
+            Float64(ey),
+            Float64(ez),
+            Float64(bx),
+            Float64(by),
+            Float64(bz),
+        ]
         for k in range(5):
             var v = values[k]
-            if v < 0.0: v = -v
-            if v > other_max: other_max = v
-        if other_max > max_other: max_other = other_max
+            if v < 0.0:
+                v = -v
+            if v > other_max:
+                other_max = v
+        if other_max > max_other:
+            max_other = other_max
 
     var ex_rel = max_ex_dev / Float64(ex_exact)
-    if ex_rel < 0.0: ex_rel = -ex_rel
+    if ex_rel < 0.0:
+        ex_rel = -ex_rel
     print("  Ex exact       =", ex_exact)
-    print("  max |Ex - Ex_exact| / |Ex_exact| =", ex_rel,
-          "  (threshold", EX_REL_TOL, ")")
-    print("  max |Ey, Ez, Bx, By, Bz| =", max_other,
-          "  (threshold", ZERO_COMPONENT_TOL, ")")
+    print(
+        "  max |Ex - Ex_exact| / |Ex_exact| =",
+        ex_rel,
+        "  (threshold",
+        EX_REL_TOL,
+        ")",
+    )
+    print(
+        "  max |Ey, Ez, Bx, By, Bz| =",
+        max_other,
+        "  (threshold",
+        ZERO_COMPONENT_TOL,
+        ")",
+    )
 
     if ex_rel > EX_REL_TOL:
         raise Error(
             "bench_maxwell_uniform_j_3d FAILED: Ex deviation "
-            + String(ex_rel) + " > " + String(EX_REL_TOL)
+            + String(ex_rel)
+            + " > "
+            + String(EX_REL_TOL)
         )
     if max_other > ZERO_COMPONENT_TOL:
         raise Error(
             "bench_maxwell_uniform_j_3d FAILED: zero-component leak "
-            + String(max_other) + " > " + String(ZERO_COMPONENT_TOL)
+            + String(max_other)
+            + " > "
+            + String(ZERO_COMPONENT_TOL)
         )
 
     print("=== bench_maxwell_uniform_j_3d PASSED ===")

@@ -34,7 +34,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd import mhd_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -47,14 +49,14 @@ comptime LX = 1.0
 # rather than resolving more scales -- rel L2 plateaus instead of
 # converging.
 
-comptime GAMMA     = 5.0 / 3.0
-comptime RHO0      = 1.0
-comptime B0        = 1.0
-comptime P0        = 0.1
+comptime GAMMA = 5.0 / 3.0
+comptime RHO0 = 1.0
+comptime B0 = 1.0
+comptime P0 = 0.1
 comptime AMPLITUDE = 0.1
 
-comptime T_FINAL   = 1.0   # one wave period exactly (L / c_A = 1)
-comptime CFL       = 0.15
+comptime T_FINAL = 1.0  # one wave period exactly (L / c_A = 1)
+comptime CFL = 0.15
 
 # Measured ~3.6e-3 (nonlinear O(A^2) corrections are the error floor
 # at A=0.1, not scheme dissipation).  5e-3 is a ~1.4x gate around
@@ -92,15 +94,21 @@ def _run(NX: Int) raises -> Float64:
             var my = RHO0 * uy
             var ke = 0.5 * RHO0 * (uy * uy)
             var mp = 0.5 * (Bx * Bx + By * By)
-            var E  = P0 / (GAMMA - 1.0) + ke + mp
-            host_q.append(Float32(RHO0));  host_ic.append(Float32(RHO0))
-            host_q.append(Float32(mx));     host_ic.append(Float32(mx))
-            host_q.append(Float32(my));     host_ic.append(Float32(my))
-            host_q.append(Float32(Bx));     host_ic.append(Float32(Bx))
-            host_q.append(Float32(By));     host_ic.append(Float32(By))
-            host_q.append(Float32(E));      host_ic.append(Float32(E))
+            var E = P0 / (GAMMA - 1.0) + ke + mp
+            host_q.append(Float32(RHO0))
+            host_ic.append(Float32(RHO0))
+            host_q.append(Float32(mx))
+            host_ic.append(Float32(mx))
+            host_q.append(Float32(my))
+            host_ic.append(Float32(my))
+            host_q.append(Float32(Bx))
+            host_ic.append(Float32(Bx))
+            host_q.append(Float32(By))
+            host_ic.append(Float32(By))
+            host_q.append(Float32(E))
+            host_ic.append(Float32(E))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -123,7 +131,7 @@ def _run(NX: Int) raises -> Float64:
 
     var gamma_f = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
-    var min_p   = Float32(1.0e-6)
+    var min_p = Float32(1.0e-6)
 
     var stage_plans = ssprk3_stage_plans(
         d_q=d_q.unsafe_ptr(),
@@ -145,7 +153,10 @@ def _run(NX: Int) raises -> Float64:
                 gamma=gamma_f,
                 min_density=min_rho,
                 min_pressure=min_p,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -156,8 +167,9 @@ def _run(NX: Int) raises -> Float64:
     for k in range(n_q):
         var v = hptr_q[k]
         if isnan(v) or isinf(v):
-            raise Error("bench_mhd_alfven_2d: non-finite output at index "
-                        + String(k))
+            raise Error(
+                "bench_mhd_alfven_2d: non-finite output at index " + String(k)
+            )
         var e = Float64(v - host_ic[k])
         sum_sq += e * e
         var ic = Float64(host_ic[k])
@@ -180,8 +192,7 @@ def main() raises:
     print("  P=", P, "  NX=64   NY=", NY)
 
     var rel_l2 = _run(64)
-    print("  rel L2(state) =", rel_l2,
-          "  (threshold", L2_MAX_REL, ")")
+    print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
 
     if rel_l2 > L2_MAX_REL:
         raise Error(

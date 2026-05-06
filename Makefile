@@ -36,7 +36,11 @@
 SHELL := /bin/bash
 
 # Compiler invocations.  Override on the command line for cluster use.
-MOJO        ?= .venv/bin/mojo
+# Default: invoke Mojo through `pixi run` so MODULAR_HOME / CONDA_PREFIX
+# are set up.  The bare `.pixi/envs/default/bin/mojo` won't find its
+# stdlib without those vars.  Override with `make MOJO=mojo` if you've
+# already activated the env (`pixi shell`).
+MOJO        ?= pixi run mojo
 MPICC       ?= mpicc
 
 # Default MPI_LIBDIR picks up the system convention for each platform:
@@ -197,7 +201,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help format install-hooks test test-bc test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -342,14 +346,14 @@ test-bc: $(TEST_DRIVERS)
 # checks.  Host math only, but the same tables are uploaded to the
 # GPU by ReferenceElement[P].
 test-reference:
-	.venv/bin/mojo run -I . test/reference_element_test.mojo
+	$(MOJO) run -I . test/reference_element_test.mojo
 
 # Same for the 2D triangular reference element (ReferenceElement2D[P]).
 # Covers node positions, SPD 2D mass matrix, edge-to-element map.
 # ReferenceElement2DGpu uploads from this; validating the host tables
 # catches the bulk of basis-construction bugs before a GPU run.
 test-reference-2d:
-	.venv/bin/mojo run -I . test/reference_element_2d_test.mojo
+	$(MOJO) run -I . test/reference_element_2d_test.mojo
 
 # 2D triangulated Cartesian mesh topology: element / face counts,
 # elem_faces <-> face_elem round-trip, side-0 / side-1 node coordinate
@@ -357,7 +361,7 @@ test-reference-2d:
 # LocalMesh2D uploads is built here; catching topology errors on the
 # host side avoids expensive GPU debugging.
 test-local-mesh-2d:
-	.venv/bin/mojo run -I . test/local_mesh_2d_test.mojo
+	$(MOJO) run -I . test/local_mesh_2d_test.mojo
 
 # GPU diagnostics writer test: uniform-field integrals recover
 # analytic values; max_abs reports the peak on a checkerboard field;
@@ -1379,6 +1383,20 @@ $(BUILD_DIR)/mpi_shim.o: src/mpi_shim.c | $(BUILD_DIR)
 
 $(BUILD_DIR):
 	mkdir -p $@
+
+# `make format` rewrites every .mojo file in place via `mojo format`.
+# `make install-hooks` points git's hooksPath at scripts/git-hooks/,
+# enabling the pre-commit formatter check.  Each contributor must run
+# `make install-hooks` once per clone (git intentionally won't auto-
+# enable hooks from a freshly-cloned repo).
+MOJO_SOURCES := $(shell find src benchmarks examples test -name '*.mojo')
+
+format:
+	$(MOJO) format $(MOJO_SOURCES)
+
+install-hooks:
+	git config core.hooksPath scripts/git-hooks
+	@echo 'pre-commit hook enabled (scripts/git-hooks/pre-commit).'
 
 clean:
 	rm -f $(ALL_DRIVERS) $(TEST_DRIVERS)

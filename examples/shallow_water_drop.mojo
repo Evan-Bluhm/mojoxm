@@ -43,16 +43,16 @@ comptime NY = 32
 comptime NZ = 2
 comptime LX = 1.0
 comptime LY = 1.0
-comptime LZ = Float64(2.0 / 32.0)   # dz matches dx = dy
+comptime LZ = Float64(2.0 / 32.0)  # dz matches dx = dy
 
 comptime GRAVITY: Float32 = 1.0
-comptime H_MIN:   Float32 = 1.0e-4
+comptime H_MIN: Float32 = 1.0e-4
 
-comptime H_REST: Float32 = 1.0     # still-water depth
+comptime H_REST: Float32 = 1.0  # still-water depth
 comptime DROP_AMPLITUDE: Float32 = 0.2
-comptime DROP_SIGMA:     Float32 = 0.07
-comptime DROP_X0:        Float32 = 0.5
-comptime DROP_Y0:        Float32 = 0.5
+comptime DROP_SIGMA: Float32 = 0.07
+comptime DROP_X0: Float32 = 0.5
+comptime DROP_Y0: Float32 = 0.5
 
 comptime T_FINAL: Float32 = 1.0
 comptime NUM_FRAMES = 20
@@ -65,10 +65,13 @@ comptime IC_BLOCK = 256
 def drop_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
-    h0: Float32, amp: Float32, sigma: Float32,
-    x0: Float32, y0: Float32,
+    h0: Float32,
+    amp: Float32,
+    sigma: Float32,
+    x0: Float32,
+    y0: Float32,
 ):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
@@ -105,10 +108,20 @@ def main() raises:
     if rank == 0:
         print(
             "shallow_water_drop: GPU DG shallow water, P2 tet, Rusanov,",
-            size, "rank(s)",
+            size,
+            "rank(s)",
         )
-        print("  global mesh: ", NX, "x", NY, "x", NZ,
-              " cells -> ", NX * NY * NZ * 6, "tets")
+        print(
+            "  global mesh: ",
+            NX,
+            "x",
+            NY,
+            "x",
+            NZ,
+            " cells -> ",
+            NX * NY * NZ * 6,
+            "tets",
+        )
 
     var nvtx = NvtxContext()
 
@@ -119,21 +132,38 @@ def main() raises:
     # Slip walls on x and y; z is periodic (z-direction is trivial for
     # pure 2D shallow water).
     var bcs = BoundaryConditions(
-        BC_WALL,     BC_WALL,       # -x, +x
-        BC_WALL,     BC_WALL,       # -y, +y
-        BC_INTERIOR, BC_INTERIOR,   # -z, +z
+        BC_WALL,
+        BC_WALL,  # -x, +x
+        BC_WALL,
+        BC_WALL,  # -y, +y
+        BC_INTERIOR,
+        BC_INTERIOR,  # -z, +z
     )
 
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, ShallowWater.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        ShallowWater.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = ShallowWater(GRAVITY, H_MIN)
     var solver = Solver[ShallowWater](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[drop_ic_kernel, drop_ic_kernel](
@@ -141,10 +171,12 @@ def main() raises:
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
-        H_REST, DROP_AMPLITUDE, DROP_SIGMA, DROP_X0, DROP_Y0,
-        grid_dim=ceildiv(
-            solver.num_owned_elements * N_P, IC_BLOCK
-        ),
+        H_REST,
+        DROP_AMPLITUDE,
+        DROP_SIGMA,
+        DROP_X0,
+        DROP_Y0,
+        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
     solver.ctx.synchronize()
@@ -169,15 +201,20 @@ def main() raises:
     # zero as the radial wave hits and rebounds.  max|h| shows the
     # peak amplitude decay (Rusanov dissipation smooths the ring).
     var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass",       0))
+    diag_linear.append(NamedComponent("mass", 0))
     diag_linear.append(NamedComponent("momentum_x", 1))
     diag_linear.append(NamedComponent("momentum_y", 2))
     var diag_maxabs = List[NamedComponent]()
     diag_maxabs.append(NamedComponent("max_h", 0))
     var diag = DiagnosticsWriter[ShallowWater](
-        solver, "output/diagnostics.csv",
-        diag_linear, List[NamedComponent](), diag_maxabs,
-        LX, LY, LZ,
+        solver,
+        "output/diagnostics.csv",
+        diag_linear,
+        List[NamedComponent](),
+        diag_maxabs,
+        LX,
+        LY,
+        LZ,
     )
 
     var dt = choose_dt()
@@ -185,7 +222,13 @@ def main() raises:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
     var result = run_ssprk3_loop_with_diagnostics[ShallowWater](
-        solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx,
+        solver,
+        writer,
+        diag,
+        dt,
+        T_FINAL,
+        NUM_FRAMES,
+        nvtx,
     )
 
     writer.finalize("output/solution.pvd", nvtx)
@@ -198,24 +241,24 @@ def main() raises:
     var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
     if nprocs == 1:
         var n_owned_dof = solver.num_owned_elements * N_P
-        var snap_h  = List[Float32]()
+        var snap_h = List[Float32]()
         var snap_hu = List[Float32]()
         var snap_hv = List[Float32]()
         for _ in range(n_owned_dof):
             snap_h.append(Float32(0.0))
             snap_hu.append(Float32(0.0))
             snap_hv.append(Float32(0.0))
-        solver.download_owned_component(0, snap_h,  nvtx)
+        solver.download_owned_component(0, snap_h, nvtx)
         solver.download_owned_component(1, snap_hu, nvtx)
         solver.download_owned_component(2, snap_hv, nvtx)
-        var f_h    = List[Float64]()
+        var f_h = List[Float64]()
         var f_umag = List[Float64]()
         for k in range(n_owned_dof):
             var h = snap_h[k]
             var u = snap_hu[k] / h
             var v = snap_hv[k] / h
             f_h.append(Float64(h))
-            f_umag.append(Float64(sqrt(u*u + v*v)))
+            f_umag.append(Float64(sqrt(u * u + v * v)))
         var fields = List[List[Float64]]()
         fields.append(f_h^)
         fields.append(f_umag^)
@@ -223,21 +266,36 @@ def main() raises:
         names.append(String("h"))
         names.append(String("|u|"))
         write_snapshot_3d_multi(
-            solver=solver, field_names=names, field_data=fields,
-            path=String("output/snapshot_t_final.vtu"), nvtx=nvtx,
+            solver=solver,
+            field_names=names,
+            field_data=fields,
+            path=String("output/snapshot_t_final.vtu"),
+            nvtx=nvtx,
         )
         if rank == 0:
-            print("  wrote output/snapshot_t_final.vtu (h + |u|, t=", T_FINAL, ")")
+            print(
+                "  wrote output/snapshot_t_final.vtu (h + |u|, t=", T_FINAL, ")"
+            )
 
     if size == 1:
         var mass_final = _total_mass(solver, nvtx)
         var mass_drift = mass_final - mass_ic
         print("  integrated mass at t=", T_FINAL, " :", mass_final)
-        print("  mass drift                   :", mass_drift,
-              "  (relative:", mass_drift / mass_ic, ")")
+        print(
+            "  mass drift                   :",
+            mass_drift,
+            "  (relative:",
+            mass_drift / mass_ic,
+            ")",
+        )
     if rank == 0:
-        print("  total steps:", result.total_steps,
-              " wall time:", result.wall_sec, "s")
+        print(
+            "  total steps:",
+            result.total_steps,
+            " wall time:",
+            result.wall_sec,
+            "s",
+        )
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
     var tput = solver.bench_step_loop(dt, nvtx)
@@ -254,7 +312,8 @@ def main() raises:
 # diagnostic, not a scheme invariant (nodal sum is not exact
 # L^2(ref-tet) integration at P2).
 def _total_mass(
-    mut solver: Solver[ShallowWater], mut nvtx: NvtxContext,
+    mut solver: Solver[ShallowWater],
+    mut nvtx: NvtxContext,
 ) raises -> Float32:
     var num_owned = solver.num_owned_elements
     var total_dof = num_owned * N_P
@@ -265,5 +324,6 @@ def _total_mass(
     var tot: Float64 = 0.0
     for i in range(total_dof):
         tot += Float64(h_buf[i])
-    return Float32(tot / Float64(total_dof)
-                    * Float64(LX) * Float64(LY) * Float64(LZ))
+    return Float32(
+        tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ)
+    )

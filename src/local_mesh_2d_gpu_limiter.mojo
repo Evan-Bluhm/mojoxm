@@ -70,14 +70,17 @@ from std.math import ceildiv
 # range -- matching the CPU convention for bc-limited cells.
 # ----------------------------------------------------------------------
 
-def bj_limit_compute_theta_kernel_2d[NP: Int, NC: Int](
-    q:            UnsafePointer[Float32, MutAnyOrigin],
-    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:   UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem:    UnsafePointer[Int32,   MutAnyOrigin],
+
+def bj_limit_compute_theta_kernel_2d[
+    NP: Int, NC: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
     num_elements: Int,
-    venkat_eps2:  Float32,
-    theta_out:    UnsafePointer[Float32, MutAnyOrigin],
+    venkat_eps2: Float32,
+    theta_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var elem = Int(global_idx.x)
     if elem >= num_elements:
@@ -92,19 +95,23 @@ def bj_limit_compute_theta_kernel_2d[NP: Int, NC: Int](
         var e_r = Int(face_elem[fid * 2 + 1])
         var n = e_r if e_l == elem else e_l
         if n == elem:
-            continue   # boundary face: don't constrain
+            continue  # boundary face: don't constrain
         var a = cell_mean[n * NC + 0]
-        if a < nbr_min: nbr_min = a
-        if a > nbr_max: nbr_max = a
+        if a < nbr_min:
+            nbr_min = a
+        if a > nbr_max:
+            nbr_max = a
 
     # Venkat-smoothed theta on the density component.
     # Hoist neighbor-range differences out of the per-node loop --
     # they don't depend on nn.  Clamp at hoist time so the branch
     # inside the loop just picks one of two precomputed values.
     var pos_D = nbr_max - own_mean
-    if pos_D < Float32(0.0): pos_D = Float32(0.0)
+    if pos_D < Float32(0.0):
+        pos_D = Float32(0.0)
     var neg_D = own_mean - nbr_min
-    if neg_D < Float32(0.0): neg_D = Float32(0.0)
+    if neg_D < Float32(0.0):
+        neg_D = Float32(0.0)
     var theta: Float32 = 1.0
     var tiny: Float32 = 1.0e-30
     for nn in range(NP):
@@ -126,10 +133,12 @@ def bj_limit_compute_theta_kernel_2d[NP: Int, NC: Int](
     theta_out[elem] = theta
 
 
-def bj_limit_apply_kernel_2d[NP: Int, NC: Int](
-    q:            UnsafePointer[Float32, MutAnyOrigin],
-    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
-    theta_in:     UnsafePointer[Float32, MutAnyOrigin],
+def bj_limit_apply_kernel_2d[
+    NP: Int, NC: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
+    theta_in: UnsafePointer[Float32, MutAnyOrigin],
     num_elements: Int,
 ):
     # One thread per (elem, nn, c) -- coalesced apply pass.
@@ -149,36 +158,48 @@ def bj_limit_apply_kernel_2d[NP: Int, NC: Int](
     q[idx] = bm + theta * (v - bm)
 
 
-def launch_bj_limit_compute_theta_2d[NP: Int, NC: Int](
+def launch_bj_limit_compute_theta_2d[
+    NP: Int, NC: Int
+](
     mut ctx: DeviceContext,
-    q:            UnsafePointer[Float32, MutAnyOrigin],
-    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:   UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem:    UnsafePointer[Int32,   MutAnyOrigin],
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
     num_elements: Int,
-    venkat_eps2:  Float32,
-    theta_out:    UnsafePointer[Float32, MutAnyOrigin],
+    venkat_eps2: Float32,
+    theta_out: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     comptime _kernel = bj_limit_compute_theta_kernel_2d[NP, NC]
     ctx.enqueue_function[_kernel, _kernel](
-        q, cell_mean, elem_faces, face_elem, num_elements,
-        venkat_eps2, theta_out,
+        q,
+        cell_mean,
+        elem_faces,
+        face_elem,
+        num_elements,
+        venkat_eps2,
+        theta_out,
         grid_dim=ceildiv(num_elements, 256),
         block_dim=256,
     )
 
 
-def launch_bj_limit_apply_2d[NP: Int, NC: Int](
+def launch_bj_limit_apply_2d[
+    NP: Int, NC: Int
+](
     mut ctx: DeviceContext,
-    q:            UnsafePointer[Float32, MutAnyOrigin],
-    cell_mean:    UnsafePointer[Float32, MutAnyOrigin],
-    theta_in:     UnsafePointer[Float32, MutAnyOrigin],
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
+    theta_in: UnsafePointer[Float32, MutAnyOrigin],
     num_elements: Int,
 ) raises:
     comptime _kernel = bj_limit_apply_kernel_2d[NP, NC]
     var total = num_elements * NP * NC
     ctx.enqueue_function[_kernel, _kernel](
-        q, cell_mean, theta_in, num_elements,
+        q,
+        cell_mean,
+        theta_in,
+        num_elements,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
@@ -199,21 +220,30 @@ def launch_bj_limit_apply_2d[NP: Int, NC: Int](
 # the trailing num_elements slots hold the per-element theta written
 # by compute_theta and read by apply.
 
-def bj_limit_full_2d[P: Int, NC: Int](
+
+def bj_limit_full_2d[
+    P: Int, NC: Int
+](
     mut ctx: DeviceContext,
     mesh: LocalMesh2DGpu[P],
-    q:             UnsafePointer[Float32, MutAnyOrigin],
-    node_weights:  UnsafePointer[Float32, MutAnyOrigin],
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    node_weights: UnsafePointer[Float32, MutAnyOrigin],
     cell_mean_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    venkat_eps:    Float32 = Float32(0.1),
+    venkat_eps: Float32 = Float32(0.1),
 ) raises:
     comptime NP = num_tri_nodes_2d(P)
     var theta_scratch = cell_mean_scratch + mesh.num_elements * NC
     launch_cell_mean_2d[NP, NC](
-        ctx, q, node_weights, mesh.num_elements, cell_mean_scratch,
+        ctx,
+        q,
+        node_weights,
+        mesh.num_elements,
+        cell_mean_scratch,
     )
     launch_bj_limit_compute_theta_2d[NP, NC](
-        ctx, q, cell_mean_scratch,
+        ctx,
+        q,
+        cell_mean_scratch,
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_face_elem.unsafe_ptr(),
         mesh.num_elements,
@@ -221,6 +251,9 @@ def bj_limit_full_2d[P: Int, NC: Int](
         theta_scratch,
     )
     launch_bj_limit_apply_2d[NP, NC](
-        ctx, q, cell_mean_scratch, theta_scratch,
+        ctx,
+        q,
+        cell_mean_scratch,
+        theta_scratch,
         mesh.num_elements,
     )

@@ -17,7 +17,9 @@
 
 from src.reference import mat_inv
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 
 
@@ -35,7 +37,7 @@ def _cholesky_succeeds(m: List[Float64], n: Int) raises -> Bool:
             if i == j:
                 if s <= 0.0:
                     return False
-                L[i * n + j] = s ** 0.5
+                L[i * n + j] = s**0.5
             else:
                 L[i * n + j] = s / L[j * n + j]
     return True
@@ -65,8 +67,12 @@ def check[P: Int]() raises:
         var s = re.node_pos[i * 2 + 1]
         if r < -1.0e-12 or s < -1.0e-12 or r + s > 1.0 + 1.0e-12:
             raise Error(
-                "node " + String(i) + " outside reference simplex: "
-                "r=" + String(r) + " s=" + String(s)
+                "node "
+                + String(i)
+                + " outside reference simplex: r="
+                + String(r)
+                + " s="
+                + String(s)
             )
     print("  node positions OK (", NP_P, "nodes)")
 
@@ -81,16 +87,25 @@ def check[P: Int]() raises:
         var v = Int(re.edge_to_elem[i])
         if v < 0 or v >= NP_P:
             raise Error(
-                "edge_to_elem[" + String(i) + "] = " + String(v)
-                + " out of range [0, " + String(NP_P) + ")"
+                "edge_to_elem["
+                + String(i)
+                + "] = "
+                + String(v)
+                + " out of range [0, "
+                + String(NP_P)
+                + ")"
             )
     # Spot-check vertex entries: edge 0 (v0, v1) must start at node 0,
     # end at node 1.  Edge 1 (v1, v2) starts at 1, ends at 2.  Edge 2
     # (v2, v0) starts at 2, ends at 0.
     var vstart = List[Int]()
-    vstart.append(0); vstart.append(1); vstart.append(2)
+    vstart.append(0)
+    vstart.append(1)
+    vstart.append(2)
     var vend = List[Int]()
-    vend.append(1); vend.append(2); vend.append(0)
+    vend.append(1)
+    vend.append(2)
+    vend.append(0)
     for e in range(3):
         if Int(re.edge_to_elem[e * NFP_edge + 0]) != vstart[e]:
             raise Error(
@@ -117,16 +132,18 @@ def check[P: Int]() raises:
     var a_wsum_err = wsum_err if wsum_err >= 0.0 else -wsum_err
     if a_wsum_err > 1.0e-12:
         raise Error(
-            "node_weights sum " + String(wsum)
-            + " != 1 (partition of unity)"
+            "node_weights sum " + String(wsum) + " != 1 (partition of unity)"
         )
     if P <= 3:
         for i in range(NP_P):
             var w = re.node_weights[i]
             if w < -1.0e-12:
                 raise Error(
-                    "P<=3 node_weights[" + String(i) + "] = "
-                    + String(w) + " is negative"
+                    "P<=3 node_weights["
+                    + String(i)
+                    + "] = "
+                    + String(w)
+                    + " is negative"
                 )
     # P=2-specific spot check -- exact Lagrange-P=2 quadrature.
     if P == 2:
@@ -135,8 +152,11 @@ def check[P: Int]() raises:
             var aw = w if w >= 0.0 else -w
             if aw > 1.0e-12:
                 raise Error(
-                    "P=2 vertex " + String(i) + " weight "
-                    + String(w) + " expected 0"
+                    "P=2 vertex "
+                    + String(i)
+                    + " weight "
+                    + String(w)
+                    + " expected 0"
                 )
         var third = 1.0 / 3.0
         for i in range(3, 6):
@@ -145,8 +165,11 @@ def check[P: Int]() raises:
             var a_err = err if err >= 0.0 else -err
             if a_err > 1.0e-12:
                 raise Error(
-                    "P=2 midpoint " + String(i) + " weight "
-                    + String(w) + " expected 1/3"
+                    "P=2 midpoint "
+                    + String(i)
+                    + " weight "
+                    + String(w)
+                    + " expected 1/3"
                 )
     print("  node_weights OK (sum=", wsum, ")")
 

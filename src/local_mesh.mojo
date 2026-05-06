@@ -43,7 +43,9 @@
 
 from src.reference import (
     N_F,
-    num_tet_nodes, num_tri_nodes, ReferenceElement,
+    num_tet_nodes,
+    num_tri_nodes,
+    ReferenceElement,
 )
 from src.boundary import BoundaryConditions, BC_INTERIOR
 from std.math import sqrt, ceildiv
@@ -55,7 +57,7 @@ comptime mesh_f = DType.float32
 comptime mesh_i = DType.int32
 
 comptime KUHN_TETS_PER_CELL = 6
-comptime FACES_PER_CELL = 12     # 6 internal + 6 owned external (+x/+y/+z)
+comptime FACES_PER_CELL = 12  # 6 internal + 6 owned external (+x/+y/+z)
 
 comptime MESH_BLOCK = 256
 
@@ -63,51 +65,77 @@ comptime MESH_BLOCK = 256
 # Host-side helpers (fast, small tables)
 # ======================================================================
 
+
 def kuhn_vertex(t: Int, k: Int) -> Int:
     # Cube-corner index of each tet-local vertex (0..3).  Corner layout:
     #   0=(0,0,0) 1=(1,0,0) 2=(0,1,0) 3=(1,1,0)
     #   4=(0,0,1) 5=(1,0,1) 6=(0,1,1) 7=(1,1,1)
     if t == 0:
-        if k == 0: return 0
-        if k == 1: return 1
-        if k == 2: return 3
+        if k == 0:
+            return 0
+        if k == 1:
+            return 1
+        if k == 2:
+            return 3
         return 7
     if t == 1:
-        if k == 0: return 0
-        if k == 1: return 3
-        if k == 2: return 2
+        if k == 0:
+            return 0
+        if k == 1:
+            return 3
+        if k == 2:
+            return 2
         return 7
     if t == 2:
-        if k == 0: return 0
-        if k == 1: return 2
-        if k == 2: return 6
+        if k == 0:
+            return 0
+        if k == 1:
+            return 2
+        if k == 2:
+            return 6
         return 7
     if t == 3:
-        if k == 0: return 0
-        if k == 1: return 6
-        if k == 2: return 4
+        if k == 0:
+            return 0
+        if k == 1:
+            return 6
+        if k == 2:
+            return 4
         return 7
     if t == 4:
-        if k == 0: return 0
-        if k == 1: return 4
-        if k == 2: return 5
+        if k == 0:
+            return 0
+        if k == 1:
+            return 4
+        if k == 2:
+            return 5
         return 7
-    if k == 0: return 0
-    if k == 1: return 5
-    if k == 2: return 1
+    if k == 0:
+        return 0
+    if k == 1:
+        return 5
+    if k == 2:
+        return 1
     return 7
 
+
 def corner_dx(c: Int) -> Int:
-    if c == 1 or c == 3 or c == 5 or c == 7: return 1
+    if c == 1 or c == 3 or c == 5 or c == 7:
+        return 1
     return 0
+
 
 def corner_dy(c: Int) -> Int:
-    if c == 2 or c == 3 or c == 6 or c == 7: return 1
+    if c == 2 or c == 3 or c == 6 or c == 7:
+        return 1
     return 0
 
+
 def corner_dz(c: Int) -> Int:
-    if c >= 4: return 1
+    if c >= 4:
+        return 1
     return 0
+
 
 def edge_mid_node(a: Int, b: Int) raises -> Int:
     # Element-local P2 node index for the edge between two tet-local
@@ -118,13 +146,20 @@ def edge_mid_node(a: Int, b: Int) raises -> Int:
         var t = x
         x = y
         y = t
-    if x == 0 and y == 1: return 4
-    if x == 1 and y == 2: return 5
-    if x == 0 and y == 2: return 6
-    if x == 0 and y == 3: return 7
-    if x == 1 and y == 3: return 8
-    if x == 2 and y == 3: return 9
+    if x == 0 and y == 1:
+        return 4
+    if x == 1 and y == 2:
+        return 5
+    if x == 0 and y == 2:
+        return 6
+    if x == 0 and y == 3:
+        return 7
+    if x == 1 and y == 3:
+        return 8
+    if x == 2 and y == 3:
+        return 9
     raise Error("edge_mid_node: invalid edge")
+
 
 @fieldwise_init
 struct TetFaceInfo(ImplicitlyCopyable, Movable):
@@ -134,88 +169,133 @@ struct TetFaceInfo(ImplicitlyCopyable, Movable):
     var dk: Int
     var side: Int
 
+
 def tet_face_info(t: Int, f: Int) -> TetFaceInfo:
     # (tet, local_face) -> (face_type, owner_offset, side).
     if t == 0:
-        if f == 0: return TetFaceInfo(6, 0, 0, 0, 0)
-        if f == 1: return TetFaceInfo(1, 0, 0, 0, 0)
-        if f == 2: return TetFaceInfo(0, 0, 0, 0, 0)
+        if f == 0:
+            return TetFaceInfo(6, 0, 0, 0, 0)
+        if f == 1:
+            return TetFaceInfo(1, 0, 0, 0, 0)
+        if f == 2:
+            return TetFaceInfo(0, 0, 0, 0, 0)
         return TetFaceInfo(11, 0, 0, -1, 1)
     if t == 1:
-        if f == 0: return TetFaceInfo(8, 0, 0, 0, 0)
-        if f == 1: return TetFaceInfo(2, 0, 0, 0, 0)
-        if f == 2: return TetFaceInfo(1, 0, 0, 0, 1)
+        if f == 0:
+            return TetFaceInfo(8, 0, 0, 0, 0)
+        if f == 1:
+            return TetFaceInfo(2, 0, 0, 0, 0)
+        if f == 2:
+            return TetFaceInfo(1, 0, 0, 0, 1)
         return TetFaceInfo(10, 0, 0, -1, 1)
     if t == 2:
-        if f == 0: return TetFaceInfo(9, 0, 0, 0, 0)
-        if f == 1: return TetFaceInfo(3, 0, 0, 0, 0)
-        if f == 2: return TetFaceInfo(2, 0, 0, 0, 1)
+        if f == 0:
+            return TetFaceInfo(9, 0, 0, 0, 0)
+        if f == 1:
+            return TetFaceInfo(3, 0, 0, 0, 0)
+        if f == 2:
+            return TetFaceInfo(2, 0, 0, 0, 1)
         return TetFaceInfo(6, -1, 0, 0, 1)
     if t == 3:
-        if f == 0: return TetFaceInfo(10, 0, 0, 0, 0)
-        if f == 1: return TetFaceInfo(4, 0, 0, 0, 0)
-        if f == 2: return TetFaceInfo(3, 0, 0, 0, 1)
+        if f == 0:
+            return TetFaceInfo(10, 0, 0, 0, 0)
+        if f == 1:
+            return TetFaceInfo(4, 0, 0, 0, 0)
+        if f == 2:
+            return TetFaceInfo(3, 0, 0, 0, 1)
         return TetFaceInfo(7, -1, 0, 0, 1)
     if t == 4:
-        if f == 0: return TetFaceInfo(11, 0, 0, 0, 0)
-        if f == 1: return TetFaceInfo(5, 0, 0, 0, 0)
-        if f == 2: return TetFaceInfo(4, 0, 0, 0, 1)
+        if f == 0:
+            return TetFaceInfo(11, 0, 0, 0, 0)
+        if f == 1:
+            return TetFaceInfo(5, 0, 0, 0, 0)
+        if f == 2:
+            return TetFaceInfo(4, 0, 0, 0, 1)
         return TetFaceInfo(9, 0, -1, 0, 1)
     # t == 5
-    if f == 0: return TetFaceInfo(7, 0, 0, 0, 0)
-    if f == 1: return TetFaceInfo(0, 0, 0, 0, 1)
-    if f == 2: return TetFaceInfo(5, 0, 0, 0, 1)
+    if f == 0:
+        return TetFaceInfo(7, 0, 0, 0, 0)
+    if f == 1:
+        return TetFaceInfo(0, 0, 0, 0, 1)
+    if f == 2:
+        return TetFaceInfo(5, 0, 0, 0, 1)
     return TetFaceInfo(8, 0, -1, 0, 1)
+
 
 def face_type_corner(ft: Int, idx: Int) -> Int:
     # Owner-cell cube-corner index at canonical position (0..2).
     if ft == 0:
-        if idx == 0: return 0
-        if idx == 1: return 1
+        if idx == 0:
+            return 0
+        if idx == 1:
+            return 1
         return 7
     if ft == 1:
-        if idx == 0: return 0
-        if idx == 1: return 3
+        if idx == 0:
+            return 0
+        if idx == 1:
+            return 3
         return 7
     if ft == 2:
-        if idx == 0: return 0
-        if idx == 1: return 2
+        if idx == 0:
+            return 0
+        if idx == 1:
+            return 2
         return 7
     if ft == 3:
-        if idx == 0: return 0
-        if idx == 1: return 6
+        if idx == 0:
+            return 0
+        if idx == 1:
+            return 6
         return 7
     if ft == 4:
-        if idx == 0: return 0
-        if idx == 1: return 4
+        if idx == 0:
+            return 0
+        if idx == 1:
+            return 4
         return 7
     if ft == 5:
-        if idx == 0: return 0
-        if idx == 1: return 5
+        if idx == 0:
+            return 0
+        if idx == 1:
+            return 5
         return 7
     if ft == 6:
-        if idx == 0: return 1
-        if idx == 1: return 3
+        if idx == 0:
+            return 1
+        if idx == 1:
+            return 3
         return 7
     if ft == 7:
-        if idx == 0: return 1
-        if idx == 1: return 5
+        if idx == 0:
+            return 1
+        if idx == 1:
+            return 5
         return 7
     if ft == 8:
-        if idx == 0: return 2
-        if idx == 1: return 3
+        if idx == 0:
+            return 2
+        if idx == 1:
+            return 3
         return 7
     if ft == 9:
-        if idx == 0: return 2
-        if idx == 1: return 6
+        if idx == 0:
+            return 2
+        if idx == 1:
+            return 6
         return 7
     if ft == 10:
-        if idx == 0: return 4
-        if idx == 1: return 6
+        if idx == 0:
+            return 4
+        if idx == 1:
+            return 6
         return 7
-    if idx == 0: return 4
-    if idx == 1: return 5
+    if idx == 0:
+        return 4
+    if idx == 1:
+        return 5
     return 7
+
 
 # ======================================================================
 # Pre-computed tables on the host (feed into the two GPU kernels)
@@ -241,6 +321,7 @@ def face_type_corner(ft: Int, idx: Int) -> Int:
 # barycentric coords.  Host-side only; called once per LocalMesh init.
 # ----------------------------------------------------------------------
 
+
 @fieldwise_init
 struct _NodeExp(ImplicitlyCopyable, Movable):
     var a0: Int
@@ -264,11 +345,19 @@ def _lagrange_tet_exponents(P: Int) raises -> List[_NodeExp]:
         return out^
     # Edges in VTK Lagrange tet order: (0,1), (1,2), (2,0), (0,3), (1,3), (2,3).
     var edges_a = List[Int]()
-    edges_a.append(0); edges_a.append(1); edges_a.append(2)
-    edges_a.append(0); edges_a.append(1); edges_a.append(2)
+    edges_a.append(0)
+    edges_a.append(1)
+    edges_a.append(2)
+    edges_a.append(0)
+    edges_a.append(1)
+    edges_a.append(2)
     var edges_b = List[Int]()
-    edges_b.append(1); edges_b.append(2); edges_b.append(0)
-    edges_b.append(3); edges_b.append(3); edges_b.append(3)
+    edges_b.append(1)
+    edges_b.append(2)
+    edges_b.append(0)
+    edges_b.append(3)
+    edges_b.append(3)
+    edges_b.append(3)
     for e in range(6):
         var a_idx = edges_a[e]
         var b_idx = edges_b[e]
@@ -289,10 +378,18 @@ def _lagrange_tet_exponents(P: Int) raises -> List[_NodeExp]:
         for a0v in range(P - 2, 0, -1):
             for a1v in range(P - a0v - 1, 0, -1):
                 var a2v = P - a0v - a1v
-                var e0 = a0v if ni[0] == 0 else (a1v if ni[1] == 0 else (a2v if ni[2] == 0 else 0))
-                var e1 = a0v if ni[0] == 1 else (a1v if ni[1] == 1 else (a2v if ni[2] == 1 else 0))
-                var e2 = a0v if ni[0] == 2 else (a1v if ni[1] == 2 else (a2v if ni[2] == 2 else 0))
-                var e3 = a0v if ni[0] == 3 else (a1v if ni[1] == 3 else (a2v if ni[2] == 3 else 0))
+                var e0 = a0v if ni[0] == 0 else (
+                    a1v if ni[1] == 0 else (a2v if ni[2] == 0 else 0)
+                )
+                var e1 = a0v if ni[0] == 1 else (
+                    a1v if ni[1] == 1 else (a2v if ni[2] == 1 else 0)
+                )
+                var e2 = a0v if ni[0] == 2 else (
+                    a1v if ni[1] == 2 else (a2v if ni[2] == 2 else 0)
+                )
+                var e3 = a0v if ni[0] == 3 else (
+                    a1v if ni[1] == 3 else (a2v if ni[2] == 3 else 0)
+                )
                 out.append(_NodeExp(e0, e1, e2, e3))
     if P < 4:
         return out^
@@ -307,7 +404,10 @@ def _lagrange_tet_exponents(P: Int) raises -> List[_NodeExp]:
 
 def _find_tet_node(
     tet_nodes: List[_NodeExp],
-    a0: Int, a1: Int, a2: Int, a3: Int,
+    a0: Int,
+    a1: Int,
+    a2: Int,
+    a3: Int,
 ) raises -> Int:
     """Linear scan for the tet-local node whose exponents match (a0..a3)."""
     for i in range(len(tet_nodes)):
@@ -315,8 +415,15 @@ def _find_tet_node(
         if n.a0 == a0 and n.a1 == a1 and n.a2 == a2 and n.a3 == a3:
             return i
     raise Error(
-        "_find_tet_node: no match for (" + String(a0) + "," + String(a1)
-        + "," + String(a2) + "," + String(a3) + ")"
+        "_find_tet_node: no match for ("
+        + String(a0)
+        + ","
+        + String(a1)
+        + ","
+        + String(a2)
+        + ","
+        + String(a3)
+        + ")"
     )
 
 
@@ -327,23 +434,38 @@ def _canon_face_barycentric(m: Int, P: Int) raises -> List[Int]:
     vertex 0, vertex 1, vertex 2, edge 01, edge 12, edge 20, face-interior."""
     var out = List[Int]()
     if m == 0:
-        out.append(P); out.append(0); out.append(0); return out^
+        out.append(P)
+        out.append(0)
+        out.append(0)
+        return out^
     if m == 1:
-        out.append(0); out.append(P); out.append(0); return out^
+        out.append(0)
+        out.append(P)
+        out.append(0)
+        return out^
     if m == 2:
-        out.append(0); out.append(0); out.append(P); return out^
+        out.append(0)
+        out.append(0)
+        out.append(P)
+        return out^
     # Edge interior, three edges of (P-1) each.
     var edge_len = P - 1
     if m < 3 + 3 * edge_len:
         var which = (m - 3) // edge_len
-        var k = (m - 3) % edge_len + 1   # 1..P-1
+        var k = (m - 3) % edge_len + 1  # 1..P-1
         if which == 0:
-            out.append(P - k); out.append(k); out.append(0)
+            out.append(P - k)
+            out.append(k)
+            out.append(0)
         elif which == 1:
-            out.append(0); out.append(P - k); out.append(k)
+            out.append(0)
+            out.append(P - k)
+            out.append(k)
         else:
             # Edge 2: canon 2 -> canon 0
-            out.append(k); out.append(0); out.append(P - k)
+            out.append(k)
+            out.append(0)
+            out.append(P - k)
         return out^
     # Face interior: iterate (b0, b1, b2) >= 1, sum = P, lex-descending
     # on (b0, b1).  Matches the convention used in the reference module
@@ -354,12 +476,16 @@ def _canon_face_barycentric(m: Int, P: Int) raises -> List[Int]:
         for b1 in range(P - b0 - 1, 0, -1):
             var b2 = P - b0 - b1
             if idx == m:
-                out.append(b0); out.append(b1); out.append(b2)
+                out.append(b0)
+                out.append(b1)
+                out.append(b2)
                 return out^
             idx += 1
     raise Error(
-        "_canon_face_barycentric: index " + String(m)
-        + " out of range for P=" + String(P)
+        "_canon_face_barycentric: index "
+        + String(m)
+        + " out of range for P="
+        + String(P)
     )
 
 
@@ -402,8 +528,11 @@ struct _MeshTables(Movable):
     var face_type_normal: List[Float32]
     var face_type_area: List[Float32]
 
+
 def _compute_tables(
-    dx: Float32, dy: Float32, dz: Float32,
+    dx: Float32,
+    dy: Float32,
+    dz: Float32,
     P: Int,
 ) raises -> _MeshTables:
     """Generic Kuhn-tet mesh table builder for order-P Lagrange.
@@ -443,35 +572,35 @@ def _compute_tables(
 
         # Jacobian (physical): columns = (v1-v0)*scale, (v2-v0)*scale, (v3-v0)*scale
         var Jm = _zeros_f32(9)
-        Jm[0*3+0] = (vpx[1] - vpx[0]) * dx
-        Jm[0*3+1] = (vpx[2] - vpx[0]) * dx
-        Jm[0*3+2] = (vpx[3] - vpx[0]) * dx
-        Jm[1*3+0] = (vpy[1] - vpy[0]) * dy
-        Jm[1*3+1] = (vpy[2] - vpy[0]) * dy
-        Jm[1*3+2] = (vpy[3] - vpy[0]) * dy
-        Jm[2*3+0] = (vpz[1] - vpz[0]) * dz
-        Jm[2*3+1] = (vpz[2] - vpz[0]) * dz
-        Jm[2*3+2] = (vpz[3] - vpz[0]) * dz
+        Jm[0 * 3 + 0] = (vpx[1] - vpx[0]) * dx
+        Jm[0 * 3 + 1] = (vpx[2] - vpx[0]) * dx
+        Jm[0 * 3 + 2] = (vpx[3] - vpx[0]) * dx
+        Jm[1 * 3 + 0] = (vpy[1] - vpy[0]) * dy
+        Jm[1 * 3 + 1] = (vpy[2] - vpy[0]) * dy
+        Jm[1 * 3 + 2] = (vpy[3] - vpy[0]) * dy
+        Jm[2 * 3 + 0] = (vpz[1] - vpz[0]) * dz
+        Jm[2 * 3 + 1] = (vpz[2] - vpz[0]) * dz
+        Jm[2 * 3 + 2] = (vpz[3] - vpz[0]) * dz
 
         var det = (
-              Jm[0]*(Jm[4]*Jm[8] - Jm[5]*Jm[7])
-            - Jm[1]*(Jm[3]*Jm[8] - Jm[5]*Jm[6])
-            + Jm[2]*(Jm[3]*Jm[7] - Jm[4]*Jm[6])
+            Jm[0] * (Jm[4] * Jm[8] - Jm[5] * Jm[7])
+            - Jm[1] * (Jm[3] * Jm[8] - Jm[5] * Jm[6])
+            + Jm[2] * (Jm[3] * Jm[7] - Jm[4] * Jm[6])
         )
         if det <= 0.0:
             raise Error("non-positive Jacobian in tet template")
         var V = det / 6.0
         tet_inv_6V[t] = 1.0 / (6.0 * V)
 
-        tet_invJ[t*9 + 0] = (Jm[4]*Jm[8] - Jm[5]*Jm[7]) / det
-        tet_invJ[t*9 + 1] = (Jm[2]*Jm[7] - Jm[1]*Jm[8]) / det
-        tet_invJ[t*9 + 2] = (Jm[1]*Jm[5] - Jm[2]*Jm[4]) / det
-        tet_invJ[t*9 + 3] = (Jm[5]*Jm[6] - Jm[3]*Jm[8]) / det
-        tet_invJ[t*9 + 4] = (Jm[0]*Jm[8] - Jm[2]*Jm[6]) / det
-        tet_invJ[t*9 + 5] = (Jm[2]*Jm[3] - Jm[0]*Jm[5]) / det
-        tet_invJ[t*9 + 6] = (Jm[3]*Jm[7] - Jm[4]*Jm[6]) / det
-        tet_invJ[t*9 + 7] = (Jm[1]*Jm[6] - Jm[0]*Jm[7]) / det
-        tet_invJ[t*9 + 8] = (Jm[0]*Jm[4] - Jm[1]*Jm[3]) / det
+        tet_invJ[t * 9 + 0] = (Jm[4] * Jm[8] - Jm[5] * Jm[7]) / det
+        tet_invJ[t * 9 + 1] = (Jm[2] * Jm[7] - Jm[1] * Jm[8]) / det
+        tet_invJ[t * 9 + 2] = (Jm[1] * Jm[5] - Jm[2] * Jm[4]) / det
+        tet_invJ[t * 9 + 3] = (Jm[5] * Jm[6] - Jm[3] * Jm[8]) / det
+        tet_invJ[t * 9 + 4] = (Jm[0] * Jm[8] - Jm[2] * Jm[6]) / det
+        tet_invJ[t * 9 + 5] = (Jm[2] * Jm[3] - Jm[0] * Jm[5]) / det
+        tet_invJ[t * 9 + 6] = (Jm[3] * Jm[7] - Jm[4] * Jm[6]) / det
+        tet_invJ[t * 9 + 7] = (Jm[1] * Jm[6] - Jm[0] * Jm[7]) / det
+        tet_invJ[t * 9 + 8] = (Jm[0] * Jm[4] - Jm[1] * Jm[3]) / det
 
         # Node positions in cell-unit coords: each tet-local Lagrange
         # node lives at the affine image of the reference-tet node
@@ -514,11 +643,11 @@ def _compute_tables(
             var di = info.di
             var dj = info.dj
             var dk = info.dk
-            tet_face_type[t*4 + f] = Int32(ft)
-            tet_face_off[(t*4 + f)*3 + 0] = Int32(di)
-            tet_face_off[(t*4 + f)*3 + 1] = Int32(dj)
-            tet_face_off[(t*4 + f)*3 + 2] = Int32(dk)
-            tet_face_side[t*4 + f] = Int32(info.side)
+            tet_face_type[t * 4 + f] = Int32(ft)
+            tet_face_off[(t * 4 + f) * 3 + 0] = Int32(di)
+            tet_face_off[(t * 4 + f) * 3 + 1] = Int32(dj)
+            tet_face_off[(t * 4 + f) * 3 + 2] = Int32(dk)
+            tet_face_side[t * 4 + f] = Int32(info.side)
 
             # Tet-local vertex indices on this face, ascending.
             var fv = List[Int]()
@@ -564,19 +693,28 @@ def _compute_tables(
                 # permutation: weight at fv[ii] = b_k where
                 # c2r_vertex[k] = ii.
                 var w_at_fv = List[Int]()
-                w_at_fv.append(0); w_at_fv.append(0); w_at_fv.append(0)
+                w_at_fv.append(0)
+                w_at_fv.append(0)
+                w_at_fv.append(0)
                 for k in range(3):
                     w_at_fv[c2r_vertex[k]] = b[k]
                 # Tet-local node exponents: a_f = 0 on this face, and
                 # a_{fv[ii]} = w_at_fv[ii] for the three face vertices.
                 var a = List[Int]()
-                a.append(0); a.append(0); a.append(0); a.append(0)
+                a.append(0)
+                a.append(0)
+                a.append(0)
+                a.append(0)
                 for ii in range(3):
                     a[fv[ii]] = w_at_fv[ii]
                 # a[f] stays 0.  Find the tet-local node with these
                 # exponents.
-                var tet_node = _find_tet_node(tet_node_exp, a[0], a[1], a[2], a[3])
-                tet_face_cnode_to_elemnode[(t*4 + f) * N_FP_p + m] = Int32(tet_node)
+                var tet_node = _find_tet_node(
+                    tet_node_exp, a[0], a[1], a[2], a[3]
+                )
+                tet_face_cnode_to_elemnode[(t * 4 + f) * N_FP_p + m] = Int32(
+                    tet_node
+                )
                 # And find the ref face-local index by matching the
                 # tet_node against ref_face_node_map[f, ...].
                 var ref_m = -1
@@ -586,10 +724,14 @@ def _compute_tables(
                         break
                 if ref_m < 0:
                     raise Error(
-                        "canon-to-ref lookup failed for tet=" + String(t)
-                        + " f=" + String(f) + " canon m=" + String(m)
+                        "canon-to-ref lookup failed for tet="
+                        + String(t)
+                        + " f="
+                        + String(f)
+                        + " canon m="
+                        + String(m)
                     )
-                tet_canon_to_ref[(t*4 + f) * N_FP_p + m] = Int32(ref_m)
+                tet_canon_to_ref[(t * 4 + f) * N_FP_p + m] = Int32(ref_m)
 
     # ---- Per-face-type tables --------------------------------------
     var face_type_side0_tet = _zeros_i32(12)
@@ -607,9 +749,9 @@ def _compute_tables(
             else:
                 face_type_side1_tet[ft] = Int32(t)
                 face_type_side1_lf[ft] = Int32(f)
-                face_type_side1_off[ft*3 + 0] = Int32(-info.di)
-                face_type_side1_off[ft*3 + 1] = Int32(-info.dj)
-                face_type_side1_off[ft*3 + 2] = Int32(-info.dk)
+                face_type_side1_off[ft * 3 + 0] = Int32(-info.di)
+                face_type_side1_off[ft * 3 + 1] = Int32(-info.dj)
+                face_type_side1_off[ft * 3 + 2] = Int32(-info.dk)
 
     var face_type_normal = _zeros_f32(12 * 3)
     var face_type_area = _zeros_f32(12)
@@ -626,14 +768,20 @@ def _compute_tables(
         var p2x = Float32(corner_dx(c2)) * dx
         var p2y = Float32(corner_dy(c2)) * dy
         var p2z = Float32(corner_dz(c2)) * dz
-        var e01x = p1x - p0x; var e01y = p1y - p0y; var e01z = p1z - p0z
-        var e02x = p2x - p0x; var e02y = p2y - p0y; var e02z = p2z - p0z
-        var nx = e01y*e02z - e01z*e02y
-        var ny = e01z*e02x - e01x*e02z
-        var nz = e01x*e02y - e01y*e02x
-        var nlen = sqrt(nx*nx + ny*ny + nz*nz)
+        var e01x = p1x - p0x
+        var e01y = p1y - p0y
+        var e01z = p1z - p0z
+        var e02x = p2x - p0x
+        var e02y = p2y - p0y
+        var e02z = p2z - p0z
+        var nx = e01y * e02z - e01z * e02y
+        var ny = e01z * e02x - e01x * e02z
+        var nz = e01x * e02y - e01y * e02x
+        var nlen = sqrt(nx * nx + ny * ny + nz * nz)
         var area = Float32(0.5) * nlen
-        nx = nx / nlen; ny = ny / nlen; nz = nz / nlen
+        nx = nx / nlen
+        ny = ny / nlen
+        nz = nz / nlen
         # Orient away from the side-0 tet's 4th vertex.
         var t0 = Int(face_type_side0_tet[ft])
         var f0 = Int(face_type_side0_lf[ft])
@@ -641,12 +789,14 @@ def _compute_tables(
         var v4x = Float32(corner_dx(v4)) * dx
         var v4y = Float32(corner_dy(v4)) * dy
         var v4z = Float32(corner_dz(v4)) * dz
-        var dot_n = (v4x - p0x)*nx + (v4y - p0y)*ny + (v4z - p0z)*nz
+        var dot_n = (v4x - p0x) * nx + (v4y - p0y) * ny + (v4z - p0z) * nz
         if dot_n > 0.0:
-            nx = -nx; ny = -ny; nz = -nz
-        face_type_normal[ft*3 + 0] = nx
-        face_type_normal[ft*3 + 1] = ny
-        face_type_normal[ft*3 + 2] = nz
+            nx = -nx
+            ny = -ny
+            nz = -nz
+        face_type_normal[ft * 3 + 0] = nx
+        face_type_normal[ft * 3 + 1] = ny
+        face_type_normal[ft * 3 + 2] = nz
         face_type_area[ft] = area
 
     # Per-(face_type, side, canon) element-local node.  Sized by the
@@ -659,8 +809,12 @@ def _compute_tables(
         var t1 = Int(face_type_side1_tet[ft])
         var f1 = Int(face_type_side1_lf[ft])
         for m in range(N_FP_p):
-            face_type_elem_node[(ft*2 + 0)*N_FP_p + m] = tet_face_cnode_to_elemnode[(t0*4 + f0)*N_FP_p + m]
-            face_type_elem_node[(ft*2 + 1)*N_FP_p + m] = tet_face_cnode_to_elemnode[(t1*4 + f1)*N_FP_p + m]
+            face_type_elem_node[
+                (ft * 2 + 0) * N_FP_p + m
+            ] = tet_face_cnode_to_elemnode[(t0 * 4 + f0) * N_FP_p + m]
+            face_type_elem_node[
+                (ft * 2 + 1) * N_FP_p + m
+            ] = tet_face_cnode_to_elemnode[(t1 * 4 + f1) * N_FP_p + m]
 
     return _MeshTables(
         tet_invJ^,
@@ -678,17 +832,21 @@ def _compute_tables(
         face_type_area^,
     )
 
+
 # ======================================================================
 # GPU kernels
 # ======================================================================
 
-def build_elements_kernel[NP: Int, NFP: Int](
+
+def build_elements_kernel[
+    NP: Int, NFP: Int
+](
     # Outputs
-    o_elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],   # [Ne * NP * 3]
-    o_elem_invJ: UnsafePointer[Float32, MutAnyOrigin],        # [Ne * 9]
-    o_elem_inv_6V: UnsafePointer[Float32, MutAnyOrigin],      # [Ne]
-    o_elem_faces: UnsafePointer[Int32, MutAnyOrigin],         # [Ne * 4]
-    o_elem_face_side: UnsafePointer[Int32, MutAnyOrigin],     # [Ne * 4]
+    o_elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],  # [Ne * NP * 3]
+    o_elem_invJ: UnsafePointer[Float32, MutAnyOrigin],  # [Ne * 9]
+    o_elem_inv_6V: UnsafePointer[Float32, MutAnyOrigin],  # [Ne]
+    o_elem_faces: UnsafePointer[Int32, MutAnyOrigin],  # [Ne * 4]
+    o_elem_face_side: UnsafePointer[Int32, MutAnyOrigin],  # [Ne * 4]
     o_elem_canon_to_ref: UnsafePointer[Int32, MutAnyOrigin],  # [Ne * 4 * NFP]
     # Tables (small, uploaded once)
     tet_invJ: UnsafePointer[Float32, MutAnyOrigin],
@@ -699,8 +857,12 @@ def build_elements_kernel[NP: Int, NFP: Int](
     tet_face_side: UnsafePointer[Int32, MutAnyOrigin],
     tet_canon_to_ref: UnsafePointer[Int32, MutAnyOrigin],
     # Dimensions
-    Nx: Int, Ny: Int, Nz: Int,
-    dx: Float32, dy: Float32, dz: Float32,
+    Nx: Int,
+    Ny: Int,
+    Nz: Int,
+    dx: Float32,
+    dy: Float32,
+    dz: Float32,
     num_elements: Int,
 ):
     var elem = Int(global_idx.x)
@@ -721,40 +883,42 @@ def build_elements_kernel[NP: Int, NFP: Int](
     # cell size.  `tet_node_rel_xyz` is laid out [6 tets * NP nodes * 3].
     var node_base = tet_t * NP * 3
     for nn in range(NP):
-        var rx = tet_node_rel_xyz[node_base + nn*3 + 0]
-        var ry = tet_node_rel_xyz[node_base + nn*3 + 1]
-        var rz = tet_node_rel_xyz[node_base + nn*3 + 2]
-        o_elem_node_xyz[(elem*NP + nn)*3 + 0] = cell_ox + rx * dx
-        o_elem_node_xyz[(elem*NP + nn)*3 + 1] = cell_oy + ry * dy
-        o_elem_node_xyz[(elem*NP + nn)*3 + 2] = cell_oz + rz * dz
+        var rx = tet_node_rel_xyz[node_base + nn * 3 + 0]
+        var ry = tet_node_rel_xyz[node_base + nn * 3 + 1]
+        var rz = tet_node_rel_xyz[node_base + nn * 3 + 2]
+        o_elem_node_xyz[(elem * NP + nn) * 3 + 0] = cell_ox + rx * dx
+        o_elem_node_xyz[(elem * NP + nn) * 3 + 1] = cell_oy + ry * dy
+        o_elem_node_xyz[(elem * NP + nn) * 3 + 2] = cell_oz + rz * dz
 
     for idx in range(9):
-        o_elem_invJ[elem*9 + idx] = tet_invJ[tet_t*9 + idx]
+        o_elem_invJ[elem * 9 + idx] = tet_invJ[tet_t * 9 + idx]
     o_elem_inv_6V[elem] = tet_inv_6V[tet_t]
 
     for lf in range(N_F):
-        var ft = Int(tet_face_type[tet_t*N_F + lf])
-        var di = Int(tet_face_off[(tet_t*N_F + lf)*3 + 0])
-        var dj = Int(tet_face_off[(tet_t*N_F + lf)*3 + 1])
-        var dk = Int(tet_face_off[(tet_t*N_F + lf)*3 + 2])
+        var ft = Int(tet_face_type[tet_t * N_F + lf])
+        var di = Int(tet_face_off[(tet_t * N_F + lf) * 3 + 0])
+        var dj = Int(tet_face_off[(tet_t * N_F + lf) * 3 + 1])
+        var dk = Int(tet_face_off[(tet_t * N_F + lf) * 3 + 2])
         var own_i = (i + di + Nx) % Nx
         var own_j = (j + dj + Ny) % Ny
         var own_k = (k + dk + Nz) % Nz
         var owner_cell = own_i + Nx * (own_j + Ny * own_k)
-        o_elem_faces[elem*N_F + lf] = Int32(owner_cell * FACES_PER_CELL + ft)
-        o_elem_face_side[elem*N_F + lf] = tet_face_side[tet_t*N_F + lf]
+        o_elem_faces[elem * N_F + lf] = Int32(owner_cell * FACES_PER_CELL + ft)
+        o_elem_face_side[elem * N_F + lf] = tet_face_side[tet_t * N_F + lf]
         for m in range(NFP):
-            o_elem_canon_to_ref[
-                (elem*N_F + lf)*NFP + m
-            ] = tet_canon_to_ref[(tet_t*N_F + lf)*NFP + m]
+            o_elem_canon_to_ref[(elem * N_F + lf) * NFP + m] = tet_canon_to_ref[
+                (tet_t * N_F + lf) * NFP + m
+            ]
 
 
-def build_faces_kernel[NFP: Int](
+def build_faces_kernel[
+    NFP: Int
+](
     # Outputs
-    o_face_elem: UnsafePointer[Int32, MutAnyOrigin],          # [Nf * 2]
-    o_face_elem_node: UnsafePointer[Int32, MutAnyOrigin],     # [Nf * 2 * NFP]
-    o_face_normal: UnsafePointer[Float32, MutAnyOrigin],      # [Nf * 3]
-    o_face_area: UnsafePointer[Float32, MutAnyOrigin],        # [Nf]
+    o_face_elem: UnsafePointer[Int32, MutAnyOrigin],  # [Nf * 2]
+    o_face_elem_node: UnsafePointer[Int32, MutAnyOrigin],  # [Nf * 2 * NFP]
+    o_face_normal: UnsafePointer[Float32, MutAnyOrigin],  # [Nf * 3]
+    o_face_area: UnsafePointer[Float32, MutAnyOrigin],  # [Nf]
     # Tables
     face_type_side0_tet: UnsafePointer[Int32, MutAnyOrigin],
     face_type_side1_tet: UnsafePointer[Int32, MutAnyOrigin],
@@ -763,7 +927,9 @@ def build_faces_kernel[NFP: Int](
     face_type_normal: UnsafePointer[Float32, MutAnyOrigin],
     face_type_area: UnsafePointer[Float32, MutAnyOrigin],
     # Dimensions
-    Nx: Int, Ny: Int, Nz: Int,
+    Nx: Int,
+    Ny: Int,
+    Nz: Int,
     num_faces: Int,
 ):
     var face = Int(global_idx.x)
@@ -777,25 +943,29 @@ def build_faces_kernel[NFP: Int](
     var i = rem - j * Nx
 
     var t0 = Int(face_type_side0_tet[ft])
-    o_face_elem[face*2 + 0] = Int32(cell * KUHN_TETS_PER_CELL + t0)
+    o_face_elem[face * 2 + 0] = Int32(cell * KUHN_TETS_PER_CELL + t0)
 
-    var off_i = Int(face_type_side1_off[ft*3 + 0])
-    var off_j = Int(face_type_side1_off[ft*3 + 1])
-    var off_k = Int(face_type_side1_off[ft*3 + 2])
+    var off_i = Int(face_type_side1_off[ft * 3 + 0])
+    var off_j = Int(face_type_side1_off[ft * 3 + 1])
+    var off_k = Int(face_type_side1_off[ft * 3 + 2])
     var s1_i = (i + off_i + Nx) % Nx
     var s1_j = (j + off_j + Ny) % Ny
     var s1_k = (k + off_k + Nz) % Nz
     var s1_cell = s1_i + Nx * (s1_j + Ny * s1_k)
     var t1 = Int(face_type_side1_tet[ft])
-    o_face_elem[face*2 + 1] = Int32(s1_cell * KUHN_TETS_PER_CELL + t1)
+    o_face_elem[face * 2 + 1] = Int32(s1_cell * KUHN_TETS_PER_CELL + t1)
 
     for d in range(3):
-        o_face_normal[face*3 + d] = face_type_normal[ft*3 + d]
+        o_face_normal[face * 3 + d] = face_type_normal[ft * 3 + d]
     o_face_area[face] = face_type_area[ft]
 
     for m in range(NFP):
-        o_face_elem_node[(face*2 + 0)*NFP + m] = face_type_elem_node[(ft*2 + 0)*NFP + m]
-        o_face_elem_node[(face*2 + 1)*NFP + m] = face_type_elem_node[(ft*2 + 1)*NFP + m]
+        o_face_elem_node[(face * 2 + 0) * NFP + m] = face_type_elem_node[
+            (ft * 2 + 0) * NFP + m
+        ]
+        o_face_elem_node[(face * 2 + 1) * NFP + m] = face_type_elem_node[
+            (ft * 2 + 1) * NFP + m
+        ]
 
 
 # ======================================================================
@@ -846,7 +1016,9 @@ def build_faces_kernel[NFP: Int](
 def apply_plus_x_bc_kernel(
     face_elem: UnsafePointer[Int32, MutAnyOrigin],
     face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
-    Nx: Int, Ny: Int, Nz: Int,
+    Nx: Int,
+    Ny: Int,
+    Nz: Int,
     bnd_off: Int,
     bc_value: Int32,
 ):
@@ -876,7 +1048,9 @@ def apply_plus_x_bc_kernel(
 def apply_plus_y_bc_kernel(
     face_elem: UnsafePointer[Int32, MutAnyOrigin],
     face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
-    Nx: Int, Ny: Int, Nz: Int,
+    Nx: Int,
+    Ny: Int,
+    Nz: Int,
     bnd_off: Int,
     bc_value: Int32,
 ):
@@ -902,7 +1076,9 @@ def apply_plus_y_bc_kernel(
 def apply_plus_z_bc_kernel(
     face_elem: UnsafePointer[Int32, MutAnyOrigin],
     face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
-    Nx: Int, Ny: Int, Nz: Int,
+    Nx: Int,
+    Ny: Int,
+    Nz: Int,
     bnd_off: Int,
     bc_value: Int32,
 ):
@@ -937,19 +1113,23 @@ def apply_plus_z_bc_kernel(
 # -z at cube (i, j, 0): tet 1 f=3 -> face_type 10, tet 0 f=3 -> face_type 11.
 
 
-def apply_minus_x_bc_kernel[NFP: Int](
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_area:      UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    elem_faces:     UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side: UnsafePointer[Int32,   MutAnyOrigin],
-    ft_elem_node:   UnsafePointer[Int32,   MutAnyOrigin],   # [12 * 2 * NFP]
-    ft_normal:      UnsafePointer[Float32, MutAnyOrigin],   # [12 * 3]
-    ft_area:        UnsafePointer[Float32, MutAnyOrigin],   # [12]
+def apply_minus_x_bc_kernel[
+    NFP: Int
+](
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_area: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    elem_face_side: UnsafePointer[Int32, MutAnyOrigin],
+    ft_elem_node: UnsafePointer[Int32, MutAnyOrigin],  # [12 * 2 * NFP]
+    ft_normal: UnsafePointer[Float32, MutAnyOrigin],  # [12 * 3]
+    ft_area: UnsafePointer[Float32, MutAnyOrigin],  # [12]
     base_fid: Int,
-    Nx: Int, Ny: Int, Nz: Int,
+    Nx: Int,
+    Ny: Int,
+    Nz: Int,
     bnd_off: Int,
     bc_value: Int32,
 ):
@@ -959,7 +1139,7 @@ def apply_minus_x_bc_kernel[NFP: Int](
     var total = 2 * yw * zw
     if tid >= total:
         return
-    var face_offset = tid % 2     # 0 -> tet 2 / ft 6,   1 -> tet 3 / ft 7
+    var face_offset = tid % 2  # 0 -> tet 2 / ft 6,   1 -> tet 3 / ft 7
     var jk = tid // 2
     var k_rel = jk % zw
     var j_rel = jk // zw
@@ -972,7 +1152,7 @@ def apply_minus_x_bc_kernel[NFP: Int](
     var new_fid = base_fid + tid
 
     face_elem[new_fid * 2 + 0] = Int32(elem)
-    face_elem[new_fid * 2 + 1] = Int32(elem)   # safe no-op dereference
+    face_elem[new_fid * 2 + 1] = Int32(elem)  # safe no-op dereference
     for m in range(NFP):
         # Side-1 face-node pattern of the original face-type IS the
         # tet-f=3 pattern on the interior cube -- exactly what we want
@@ -993,19 +1173,23 @@ def apply_minus_x_bc_kernel[NFP: Int](
     elem_face_side[elem * N_F + 3] = Int32(0)
 
 
-def apply_minus_y_bc_kernel[NFP: Int](
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_area:      UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    elem_faces:     UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side: UnsafePointer[Int32,   MutAnyOrigin],
-    ft_elem_node:   UnsafePointer[Int32,   MutAnyOrigin],
-    ft_normal:      UnsafePointer[Float32, MutAnyOrigin],
-    ft_area:        UnsafePointer[Float32, MutAnyOrigin],
+def apply_minus_y_bc_kernel[
+    NFP: Int
+](
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_area: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    elem_face_side: UnsafePointer[Int32, MutAnyOrigin],
+    ft_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    ft_normal: UnsafePointer[Float32, MutAnyOrigin],
+    ft_area: UnsafePointer[Float32, MutAnyOrigin],
     base_fid: Int,
-    Nx: Int, Ny: Int, Nz: Int,
+    Nx: Int,
+    Ny: Int,
+    Nz: Int,
     bnd_off: Int,
     bc_value: Int32,
 ):
@@ -1015,7 +1199,7 @@ def apply_minus_y_bc_kernel[NFP: Int](
     var total = 2 * xw * zw
     if tid >= total:
         return
-    var face_offset = tid % 2     # 0 -> tet 5 / ft 8,   1 -> tet 4 / ft 9
+    var face_offset = tid % 2  # 0 -> tet 5 / ft 8,   1 -> tet 4 / ft 9
     var ik = tid // 2
     var k_rel = ik % zw
     var i_rel = ik // zw
@@ -1043,19 +1227,23 @@ def apply_minus_y_bc_kernel[NFP: Int](
     elem_face_side[elem * N_F + 3] = Int32(0)
 
 
-def apply_minus_z_bc_kernel[NFP: Int](
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_area:      UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    elem_faces:     UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side: UnsafePointer[Int32,   MutAnyOrigin],
-    ft_elem_node:   UnsafePointer[Int32,   MutAnyOrigin],
-    ft_normal:      UnsafePointer[Float32, MutAnyOrigin],
-    ft_area:        UnsafePointer[Float32, MutAnyOrigin],
+def apply_minus_z_bc_kernel[
+    NFP: Int
+](
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_area: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    elem_face_side: UnsafePointer[Int32, MutAnyOrigin],
+    ft_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    ft_normal: UnsafePointer[Float32, MutAnyOrigin],
+    ft_area: UnsafePointer[Float32, MutAnyOrigin],
     base_fid: Int,
-    Nx: Int, Ny: Int, Nz: Int,
+    Nx: Int,
+    Ny: Int,
+    Nz: Int,
     bnd_off: Int,
     bc_value: Int32,
 ):
@@ -1065,7 +1253,7 @@ def apply_minus_z_bc_kernel[NFP: Int](
     var total = 2 * xw * yw
     if tid >= total:
         return
-    var face_offset = tid % 2     # 0 -> tet 1 / ft 10,  1 -> tet 0 / ft 11
+    var face_offset = tid % 2  # 0 -> tet 1 / ft 10,  1 -> tet 0 / ft 11
     var ij = tid // 2
     var j_rel = ij % yw
     var i_rel = ij // yw
@@ -1097,6 +1285,7 @@ def apply_minus_z_bc_kernel[NFP: Int](
 # LocalMesh struct -- owns device buffers; built entirely on the GPU.
 # ======================================================================
 
+
 struct LocalMesh[P: Int = 2](Movable):
     """Order-P Lagrange Kuhn-tet mesh.  The GPU build kernels are
     parameterized on `NP = num_tet_nodes(P)` and `NFP = num_tri_nodes(P)`
@@ -1105,6 +1294,7 @@ struct LocalMesh[P: Int = 2](Movable):
     rest of the stack (VTU emits VTK_QUADRATIC_TETRA, drivers default
     `ReferenceElement()` to P=2); LocalMesh at higher P now builds a
     correct buffer layout for later consumers."""
+
     comptime NP = num_tet_nodes(Self.P)
     comptime NFP = num_tri_nodes(Self.P)
 
@@ -1145,8 +1335,12 @@ struct LocalMesh[P: Int = 2](Movable):
     def __init__(
         out self,
         mut ctx: DeviceContext,
-        Nx: Int, Ny: Int, Nz: Int,
-        Lx: Float64, Ly: Float64, Lz: Float64,
+        Nx: Int,
+        Ny: Int,
+        Nz: Int,
+        Lx: Float64,
+        Ly: Float64,
+        Lz: Float64,
         bcs: BoundaryConditions,
         bnd_off: Int = 0,
     ) raises:
@@ -1186,14 +1380,20 @@ struct LocalMesh[P: Int = 2](Movable):
         var tables = _compute_tables(dx, dy, dz, Self.P)
 
         # 2. Allocate device buffers for outputs.
-        self.d_elem_node_xyz = ctx.enqueue_create_buffer[mesh_f](ne * Self.NP * 3)
+        self.d_elem_node_xyz = ctx.enqueue_create_buffer[mesh_f](
+            ne * Self.NP * 3
+        )
         self.d_elem_invJ = ctx.enqueue_create_buffer[mesh_f](ne * 9)
         self.d_elem_inv_6V = ctx.enqueue_create_buffer[mesh_f](ne)
         self.d_elem_faces = ctx.enqueue_create_buffer[mesh_i](ne * N_F)
         self.d_elem_face_side = ctx.enqueue_create_buffer[mesh_i](ne * N_F)
-        self.d_elem_canon_to_ref = ctx.enqueue_create_buffer[mesh_i](ne * N_F * Self.NFP)
+        self.d_elem_canon_to_ref = ctx.enqueue_create_buffer[mesh_i](
+            ne * N_F * Self.NFP
+        )
         self.d_face_elem = ctx.enqueue_create_buffer[mesh_i](nf * 2)
-        self.d_face_elem_node = ctx.enqueue_create_buffer[mesh_i](nf * 2 * Self.NFP)
+        self.d_face_elem_node = ctx.enqueue_create_buffer[mesh_i](
+            nf * 2 * Self.NFP
+        )
         self.d_face_normal = ctx.enqueue_create_buffer[mesh_f](nf * 3)
         self.d_face_area = ctx.enqueue_create_buffer[mesh_f](nf)
         # Zero-initialise the BC type buffer so every face is "interior"
@@ -1233,7 +1433,13 @@ struct LocalMesh[P: Int = 2](Movable):
             d_tet_face_off.unsafe_ptr(),
             d_tet_face_side.unsafe_ptr(),
             d_tet_canon_to_ref.unsafe_ptr(),
-            Nx, Ny, Nz, dx, dy, dz, ne,
+            Nx,
+            Ny,
+            Nz,
+            dx,
+            dy,
+            dz,
+            ne,
             grid_dim=ceildiv(ne, MESH_BLOCK),
             block_dim=MESH_BLOCK,
         )
@@ -1252,7 +1458,10 @@ struct LocalMesh[P: Int = 2](Movable):
             d_ft_elem_node.unsafe_ptr(),
             d_ft_normal.unsafe_ptr(),
             d_ft_area.unsafe_ptr(),
-            Nx, Ny, Nz, nf_periodic,
+            Nx,
+            Ny,
+            Nz,
+            nf_periodic,
             grid_dim=ceildiv(nf_periodic, MESH_BLOCK),
             block_dim=MESH_BLOCK,
         )
@@ -1270,33 +1479,48 @@ struct LocalMesh[P: Int = 2](Movable):
             if bcs.bc_x_hi != BC_INTERIOR:
                 var n_plus_x = 2 * yw_bc * zw_bc
                 ctx.enqueue_function[
-                    apply_plus_x_bc_kernel, apply_plus_x_bc_kernel,
+                    apply_plus_x_bc_kernel,
+                    apply_plus_x_bc_kernel,
                 ](
                     self.d_face_elem.unsafe_ptr(),
                     self.d_face_bc_type.unsafe_ptr(),
-                    Nx, Ny, Nz, bnd_off, bcs.bc_x_hi,
+                    Nx,
+                    Ny,
+                    Nz,
+                    bnd_off,
+                    bcs.bc_x_hi,
                     grid_dim=ceildiv(n_plus_x, MESH_BLOCK),
                     block_dim=MESH_BLOCK,
                 )
             if bcs.bc_y_hi != BC_INTERIOR:
                 var n_plus_y = 2 * xw_bc * zw_bc
                 ctx.enqueue_function[
-                    apply_plus_y_bc_kernel, apply_plus_y_bc_kernel,
+                    apply_plus_y_bc_kernel,
+                    apply_plus_y_bc_kernel,
                 ](
                     self.d_face_elem.unsafe_ptr(),
                     self.d_face_bc_type.unsafe_ptr(),
-                    Nx, Ny, Nz, bnd_off, bcs.bc_y_hi,
+                    Nx,
+                    Ny,
+                    Nz,
+                    bnd_off,
+                    bcs.bc_y_hi,
                     grid_dim=ceildiv(n_plus_y, MESH_BLOCK),
                     block_dim=MESH_BLOCK,
                 )
             if bcs.bc_z_hi != BC_INTERIOR:
                 var n_plus_z = 2 * xw_bc * yw_bc
                 ctx.enqueue_function[
-                    apply_plus_z_bc_kernel, apply_plus_z_bc_kernel,
+                    apply_plus_z_bc_kernel,
+                    apply_plus_z_bc_kernel,
                 ](
                     self.d_face_elem.unsafe_ptr(),
                     self.d_face_bc_type.unsafe_ptr(),
-                    Nx, Ny, Nz, bnd_off, bcs.bc_z_hi,
+                    Nx,
+                    Ny,
+                    Nz,
+                    bnd_off,
+                    bcs.bc_z_hi,
                     grid_dim=ceildiv(n_plus_z, MESH_BLOCK),
                     block_dim=MESH_BLOCK,
                 )
@@ -1314,7 +1538,12 @@ struct LocalMesh[P: Int = 2](Movable):
                     d_ft_elem_node.unsafe_ptr(),
                     d_ft_normal.unsafe_ptr(),
                     d_ft_area.unsafe_ptr(),
-                    mx_base, Nx, Ny, Nz, bnd_off, bcs.bc_x_lo,
+                    mx_base,
+                    Nx,
+                    Ny,
+                    Nz,
+                    bnd_off,
+                    bcs.bc_x_lo,
                     grid_dim=ceildiv(extra_mx, MESH_BLOCK),
                     block_dim=MESH_BLOCK,
                 )
@@ -1331,7 +1560,12 @@ struct LocalMesh[P: Int = 2](Movable):
                     d_ft_elem_node.unsafe_ptr(),
                     d_ft_normal.unsafe_ptr(),
                     d_ft_area.unsafe_ptr(),
-                    my_base, Nx, Ny, Nz, bnd_off, bcs.bc_y_lo,
+                    my_base,
+                    Nx,
+                    Ny,
+                    Nz,
+                    bnd_off,
+                    bcs.bc_y_lo,
                     grid_dim=ceildiv(extra_my, MESH_BLOCK),
                     block_dim=MESH_BLOCK,
                 )
@@ -1348,7 +1582,12 @@ struct LocalMesh[P: Int = 2](Movable):
                     d_ft_elem_node.unsafe_ptr(),
                     d_ft_normal.unsafe_ptr(),
                     d_ft_area.unsafe_ptr(),
-                    mz_base, Nx, Ny, Nz, bnd_off, bcs.bc_z_lo,
+                    mz_base,
+                    Nx,
+                    Ny,
+                    Nz,
+                    bnd_off,
+                    bcs.bc_z_lo,
                     grid_dim=ceildiv(extra_mz, MESH_BLOCK),
                     block_dim=MESH_BLOCK,
                 )
@@ -1373,17 +1612,20 @@ struct LocalMesh[P: Int = 2](Movable):
 # Allocation & upload helpers
 # ======================================================================
 
+
 def _zeros_f32(n: Int) raises -> List[Float32]:
     var out = List[Float32]()
     for _ in range(n):
         out.append(Float32(0.0))
     return out^
 
+
 def _zeros_i32(n: Int) raises -> List[Int32]:
     var out = List[Int32]()
     for _ in range(n):
         out.append(Int32(0))
     return out^
+
 
 def _upload_f32_small(
     mut ctx: DeviceContext, src: List[Float32]
@@ -1394,6 +1636,7 @@ def _upload_f32_small(
     var dbuf = ctx.enqueue_create_buffer[mesh_f](n)
     ctx.enqueue_copy(dbuf, hbuf)
     return dbuf^
+
 
 def _upload_i32_small(
     mut ctx: DeviceContext, src: List[Int32]

@@ -32,13 +32,22 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu, launch_cell_mean_2d
 from src.local_mesh_2d_gpu_advection import (
-    launch_advection_volume_rhs_2d, launch_advection_face_flux_2d,
+    launch_advection_volume_rhs_2d,
+    launch_advection_face_flux_2d,
     advection_rk_stage_2d,
 )
-from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
+from src.reference_2d import (
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
+)
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import (
-    BoundaryConditions2D, BC_INTERIOR, BC_WALL, BC_OUTFLOW, BC_INFLOW,
+    BoundaryConditions2D,
+    BC_INTERIOR,
+    BC_WALL,
+    BC_OUTFLOW,
+    BC_INFLOW,
 )
 
 
@@ -73,8 +82,7 @@ def check[P: Int]() raises:
         var ae = _abs32(e)
         if ae > max_err_xyz:
             max_err_xyz = ae
-    print("    elem_node_xyz max |f64 -> f32 round-trip err| =",
-          max_err_xyz)
+    print("    elem_node_xyz max |f64 -> f32 round-trip err| =", max_err_xyz)
     if max_err_xyz > Float32(1.0e-6):
         raise Error("elem_node_xyz upload round-trip failed")
 
@@ -107,61 +115,76 @@ def check[P: Int]() raises:
     # +x, BC_WALL on -y, BC_INTERIOR/periodic on +y).  Verify the BC
     # type at each boundary face matches its outward-normal direction.
     var bcs_nonper = BoundaryConditions2D(
-        BC_INFLOW, BC_OUTFLOW, BC_WALL, BC_INTERIOR,
+        BC_INFLOW,
+        BC_OUTFLOW,
+        BC_WALL,
+        BC_INTERIOR,
     )
     var host_np = LocalMesh2D[P](Nx=Nx, Ny=Ny, Lx=1.0, Ly=1.0, bcs=bcs_nonper)
     var gpu_np = LocalMesh2DGpu[P](ctx=ctx, host=host_np^)
     var n_bc_np = gpu_np.num_faces
     var hbuf_bc_np = ctx.enqueue_create_host_buffer[DType.int32](n_bc_np)
-    var hbuf_n_np  = ctx.enqueue_create_host_buffer[DType.float32](n_bc_np * 2)
+    var hbuf_n_np = ctx.enqueue_create_host_buffer[DType.float32](n_bc_np * 2)
     ctx.enqueue_copy(hbuf_bc_np, gpu_np.d_face_bc_type)
-    ctx.enqueue_copy(hbuf_n_np,  gpu_np.d_face_normal)
+    ctx.enqueue_copy(hbuf_n_np, gpu_np.d_face_normal)
     ctx.synchronize()
     var bc_np_p = hbuf_bc_np.unsafe_ptr()
-    var n_np_p  = hbuf_n_np.unsafe_ptr()
-    var n_inflow:   Int = 0
-    var n_outflow:  Int = 0
-    var n_wall:     Int = 0
+    var n_np_p = hbuf_n_np.unsafe_ptr()
+    var n_inflow: Int = 0
+    var n_outflow: Int = 0
+    var n_wall: Int = 0
     var n_interior: Int = 0
     for f in range(n_bc_np):
         var bt = Int(bc_np_p[f])
         var nx = n_np_p[f * 2 + 0]
         var ny = n_np_p[f * 2 + 1]
-        if bt == 0:                    # BC_INTERIOR
+        if bt == 0:  # BC_INTERIOR
             n_interior += 1
-        elif bt == 3:                  # BC_INFLOW: should be on -x boundary
+        elif bt == 3:  # BC_INFLOW: should be on -x boundary
             if nx >= -Float32(0.5):
                 raise Error(
                     "BC_INFLOW face does not point in -x direction (nx="
-                    + String(nx) + ")"
+                    + String(nx)
+                    + ")"
                 )
             n_inflow += 1
-        elif bt == 2:                  # BC_OUTFLOW: should be on +x
+        elif bt == 2:  # BC_OUTFLOW: should be on +x
             if nx <= Float32(0.5):
                 raise Error(
                     "BC_OUTFLOW face does not point in +x direction (nx="
-                    + String(nx) + ")"
+                    + String(nx)
+                    + ")"
                 )
             n_outflow += 1
-        elif bt == 1:                  # BC_WALL: should be on -y
+        elif bt == 1:  # BC_WALL: should be on -y
             if ny >= -Float32(0.5):
                 raise Error(
                     "BC_WALL face does not point in -y direction (ny="
-                    + String(ny) + ")"
+                    + String(ny)
+                    + ")"
                 )
             n_wall += 1
         else:
             raise Error("unexpected face_bc_type " + String(bt))
     if n_inflow == 0 or n_outflow == 0 or n_wall == 0:
         raise Error(
-            "non-periodic mesh missing one or more BC kinds: "
-            "inflow=" + String(n_inflow)
-            + " outflow=" + String(n_outflow)
-            + " wall=" + String(n_wall)
+            "non-periodic mesh missing one or more BC kinds: inflow="
+            + String(n_inflow)
+            + " outflow="
+            + String(n_outflow)
+            + " wall="
+            + String(n_wall)
         )
-    print("    non-periodic face_bc_type: inflow=", n_inflow,
-          " outflow=", n_outflow, " wall=", n_wall,
-          " interior=", n_interior)
+    print(
+        "    non-periodic face_bc_type: inflow=",
+        n_inflow,
+        " outflow=",
+        n_outflow,
+        " wall=",
+        n_wall,
+        " interior=",
+        n_interior,
+    )
 
     # Reference-element upload round-trip.  Done before cell_mean test
     # because that kernel needs node_weights from re_gpu.
@@ -182,13 +205,13 @@ def check[P: Int]() raises:
     for k in range(n_total):
         hptr_q[k] = host_q[k]
     ctx.enqueue_copy(d_q, hbuf_q)
-    var d_mean = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_elements * NC
-    )
+    var d_mean = ctx.enqueue_create_buffer[DType.float32](gpu.num_elements * NC)
     launch_cell_mean_2d[NP_p, NC](
-        ctx, d_q.unsafe_ptr(),
+        ctx,
+        d_q.unsafe_ptr(),
         re_gpu.d_node_weights.unsafe_ptr(),
-        gpu.num_elements, d_mean.unsafe_ptr(),
+        gpu.num_elements,
+        d_mean.unsafe_ptr(),
     )
     var hbuf_mean = ctx.enqueue_create_host_buffer[DType.float32](
         gpu.num_elements * NC
@@ -207,9 +230,7 @@ def check[P: Int]() raises:
             max_mean_err = adiff
     print("    cell_mean GPU vs CPU max err =", max_mean_err)
     if max_mean_err > Float32(1.0e-4):
-        raise Error(
-            "cell_mean_kernel_2d mismatch: " + String(max_mean_err)
-        )
+        raise Error("cell_mean_kernel_2d mismatch: " + String(max_mean_err))
 
     var d_ref_len = 2 * NP_p * NP_p
     var hbuf_dref = ctx.enqueue_create_host_buffer[DType.float32](d_ref_len)
@@ -252,9 +273,7 @@ def check[P: Int]() raises:
         for nn in range(NP_p):
             var x = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var y = host2.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
-            q_host_f32.append(
-                Float32(sin(two_pi * x) + cos(two_pi * y))
-            )
+            q_host_f32.append(Float32(sin(two_pi * x) + cos(two_pi * y)))
 
     for k in range(gpu.num_elements * NP_p):
         hptr_q[k] = q_host_f32[k]
@@ -267,7 +286,9 @@ def check[P: Int]() raises:
         d_q.unsafe_ptr(),
         gpu.d_elem_invJ.unsafe_ptr(),
         re_gpu.d_D_ref.unsafe_ptr(),
-        gpu.num_elements, vx, vy,
+        gpu.num_elements,
+        vx,
+        vy,
         d_vol.unsafe_ptr(),
     )
     var hbuf_vol = ctx.enqueue_create_host_buffer[DType.float32](
@@ -305,8 +326,7 @@ def check[P: Int]() raises:
     print("    volume rhs GPU vs CPU max err =", max_vol_err)
     if max_vol_err > Float32(1.0e-4):
         raise Error(
-            "advection_volume_rhs_kernel_2d: max err "
-            + String(max_vol_err)
+            "advection_volume_rhs_kernel_2d: max err " + String(max_vol_err)
         )
 
     # GPU face-flux kernel vs inline upwind (periodic mesh -> every
@@ -322,7 +342,9 @@ def check[P: Int]() raises:
         gpu.d_face_normal.unsafe_ptr(),
         gpu.d_face_bc_type.unsafe_ptr(),
         gpu.num_faces,
-        vx, vy, Float32(0.0),
+        vx,
+        vy,
+        Float32(0.0),
         d_fstar.unsafe_ptr(),
     )
     var hbuf_fstar = ctx.enqueue_create_host_buffer[DType.float32](
@@ -355,8 +377,7 @@ def check[P: Int]() raises:
     print("    face flux GPU vs CPU max err =", max_fstar_err)
     if max_fstar_err > Float32(1.0e-5):
         raise Error(
-            "advection_face_flux_kernel_2d: max err "
-            + String(max_fstar_err)
+            "advection_face_flux_kernel_2d: max err " + String(max_fstar_err)
         )
 
     # Full advection SSPRK3 step on a constant IC: the divergence
@@ -369,43 +390,59 @@ def check[P: Int]() raises:
     ctx.enqueue_copy(d_q, hbuf_q)
     ctx.synchronize()
 
-    var d_q1 = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_elements * NP_p
-    )
-    var d_q2 = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_elements * NP_p
-    )
+    var d_q1 = ctx.enqueue_create_buffer[DType.float32](gpu.num_elements * NP_p)
+    var d_q2 = ctx.enqueue_create_buffer[DType.float32](gpu.num_elements * NP_p)
     var dt_step = Float32(0.001)
     advection_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        vx, vy,
-        Float32(1.0), Float32(0.0), Float32(1.0), dt_step,
+        vx,
+        vy,
+        Float32(1.0),
+        Float32(0.0),
+        Float32(1.0),
+        dt_step,
     )
     advection_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        vx, vy,
-        Float32(0.75), Float32(0.25), Float32(0.25), dt_step,
+        vx,
+        vy,
+        Float32(0.75),
+        Float32(0.25),
+        Float32(0.25),
+        dt_step,
     )
     advection_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        vx, vy,
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt_step,
+        vx,
+        vy,
+        Float32(1.0 / 3.0),
+        Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0),
+        dt_step,
     )
     ctx.enqueue_copy(hbuf_q, d_q)
     ctx.synchronize()
@@ -417,12 +454,12 @@ def check[P: Int]() raises:
         var err = _abs32(v - q_const)
         if err > max_const_err:
             max_const_err = err
-    print("    constant-state SSPRK3 step max |q - q_IC| =",
-          max_const_err)
+    print("    constant-state SSPRK3 step max |q - q_IC| =", max_const_err)
     if max_const_err > Float32(1.0e-4):
         raise Error(
             "advection SSPRK3: constant state not preserved (max err "
-            + String(max_const_err) + ")"
+            + String(max_const_err)
+            + ")"
         )
 
 

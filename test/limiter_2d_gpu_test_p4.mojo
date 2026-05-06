@@ -60,17 +60,15 @@ def main() raises:
 
     var n_q = gpu.num_elements * NP_p * NC
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_ca = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_elements * NC
-    )
+    var d_ca = ctx.enqueue_create_buffer[DType.float32](gpu.num_elements * NC)
     var hbuf = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr = hbuf.unsafe_ptr()
 
     # ---- (1) smooth passthrough on a uniform state ----------------
     var rho0 = Float32(1.0)
-    var mx0  = Float32(0.2)
-    var my0  = Float32(0.1)
-    var E0   = Float32(2.52)
+    var mx0 = Float32(0.2)
+    var my0 = Float32(0.1)
+    var E0 = Float32(2.52)
     for k in range(gpu.num_elements * NP_p):
         hptr[k * NC + 0] = rho0
         hptr[k * NC + 1] = mx0
@@ -79,8 +77,11 @@ def main() raises:
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
     bj_limit_full_2d[P, NC](
-        ctx, gpu, d_q.unsafe_ptr(),
-        re_gpu.d_node_weights.unsafe_ptr(), d_ca.unsafe_ptr(),
+        ctx,
+        gpu,
+        d_q.unsafe_ptr(),
+        re_gpu.d_node_weights.unsafe_ptr(),
+        d_ca.unsafe_ptr(),
         Float32(0.1),
     )
     ctx.enqueue_copy(hbuf, d_q)
@@ -92,15 +93,20 @@ def main() raises:
         var e2 = _abs32(hptr[k * NC + 2] - my0)
         var e3 = _abs32(hptr[k * NC + 3] - E0)
         var m = e0
-        if e1 > m: m = e1
-        if e2 > m: m = e2
-        if e3 > m: m = e3
-        if m > max_uniform_err: max_uniform_err = m
+        if e1 > m:
+            m = e1
+        if e2 > m:
+            m = e2
+        if e3 > m:
+            m = e3
+        if m > max_uniform_err:
+            max_uniform_err = m
     print("  (1) smooth passthrough max |q - q_IC| =", max_uniform_err)
     if max_uniform_err > Float32(1.0e-6):
         raise Error(
             "limiter perturbed a uniform state (max err "
-            + String(max_uniform_err) + ")"
+            + String(max_uniform_err)
+            + ")"
         )
 
     # ---- (2) within-cell spike monotonicity -----------------------
@@ -121,8 +127,11 @@ def main() raises:
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
     bj_limit_full_2d[P, NC](
-        ctx, gpu, d_q.unsafe_ptr(),
-        re_gpu.d_node_weights.unsafe_ptr(), d_ca.unsafe_ptr(),
+        ctx,
+        gpu,
+        d_q.unsafe_ptr(),
+        re_gpu.d_node_weights.unsafe_ptr(),
+        d_ca.unsafe_ptr(),
         Float32(0.1),
     )
     ctx.enqueue_copy(hbuf, d_q)
@@ -135,17 +144,16 @@ def main() raises:
             raise Error("limiter: non-finite density at index " + String(k))
         if rho > max_rho:
             max_rho = rho
-    print("  (2) spike: max rho after limiting (pre-limit = 5.0) =",
-          max_rho)
+    print("  (2) spike: max rho after limiting (pre-limit = 5.0) =", max_rho)
     if max_rho >= Float32(5.0):
         raise Error(
-            "limiter did nothing -- max rho stayed at "
-            + String(max_rho)
+            "limiter did nothing -- max rho stayed at " + String(max_rho)
         )
     if max_rho > Float32(2.5):
         raise Error(
             "limiter under-scaled the spike (max rho "
-            + String(max_rho) + ", expected < 2.5)"
+            + String(max_rho)
+            + ", expected < 2.5)"
         )
 
     # Check (2b): far-from-spike elements should be unperturbed.
@@ -159,15 +167,20 @@ def main() raises:
             var e2 = _abs32(hptr[base + 2] - my0)
             var e3 = _abs32(hptr[base + 3] - E0)
             var m = e0
-            if e1 > m: m = e1
-            if e2 > m: m = e2
-            if e3 > m: m = e3
-            if m > max_far_err: max_far_err = m
+            if e1 > m:
+                m = e1
+            if e2 > m:
+                m = e2
+            if e3 > m:
+                m = e3
+            if m > max_far_err:
+                max_far_err = m
     print("  (2) far-from-spike max |q - q_IC| =", max_far_err)
     if max_far_err > Float32(1.0e-6):
         raise Error(
             "limiter perturbed far-from-spike elements (max err "
-            + String(max_far_err) + ")"
+            + String(max_far_err)
+            + ")"
         )
 
     print("=== limiter_2d_gpu_test_p4 PASSED ===")

@@ -51,15 +51,17 @@ comptime GAUSS_SIGMA: Float32 = 0.12
 comptime IC_BLOCK = 256
 
 comptime NUM_TEST_STEPS = 50
-comptime _OPEN_MODE  = c_int(0o644)
+comptime _OPEN_MODE = c_int(0o644)
 
 
 def gaussian_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
-    cx: Float32, cy: Float32, cz: Float32,
+    cx: Float32,
+    cy: Float32,
+    cz: Float32,
     inv_two_sigma2: Float32,
 ):
     var idx = Int(global_idx.x)
@@ -75,9 +77,7 @@ def gaussian_ic_kernel(
     var dx = px - cx
     var dy = py - cy
     var dz = pz - cz
-    q[e * N_P + nn] = exp(
-        -(dx * dx + dy * dy + dz * dz) * inv_two_sigma2
-    )
+    q[e * N_P + nn] = exp(-(dx * dx + dy * dy + dz * dz) * inv_two_sigma2)
 
 
 def choose_dt() raises -> Float32:
@@ -87,14 +87,16 @@ def choose_dt() raises -> Float32:
 
 
 def _write_bytes(
-    fd: Int, buf: UnsafePointer[UInt8, MutAnyOrigin], n: Int,
+    fd: Int,
+    buf: UnsafePointer[UInt8, MutAnyOrigin],
+    n: Int,
 ) raises:
     var remaining = n
     var p = buf
     while remaining > 0:
-        var wrote = Int(external_call["write", c_ssize_t](
-            fd, p, c_size_t(remaining)
-        ))
+        var wrote = Int(
+            external_call["write", c_ssize_t](fd, p, c_size_t(remaining))
+        )
         if wrote <= 0:
             raise Error("write() failed while dumping final q")
         remaining -= wrote
@@ -104,7 +106,9 @@ def _write_bytes(
 def dump_final_q(
     mut solver: Solver[Advection],
     rank: Int,
-    nx_global: Int, ny_global: Int, nz_global: Int,
+    nx_global: Int,
+    ny_global: Int,
+    nz_global: Int,
     mut nvtx: NvtxContext,
 ) raises:
     var num_owned = solver.num_owned_elements
@@ -115,8 +119,12 @@ def dump_final_q(
     for _ in range(num_owned):
         id_buf.append(Int32(0))
     solver.download_owned_component_with_ids(
-        0, q_buf, id_buf,
-        nx_global, ny_global, nz_global,
+        0,
+        q_buf,
+        id_buf,
+        nx_global,
+        ny_global,
+        nz_global,
         nvtx,
     )
 
@@ -130,9 +138,12 @@ def dump_final_q(
         path_c[i] = UInt8(path_s.unsafe_ptr()[i])
     path_c[pn] = 0
 
-    var fd = Int(external_call["creat", c_int](
-        path_c, _OPEN_MODE,
-    ))
+    var fd = Int(
+        external_call["creat", c_int](
+            path_c,
+            _OPEN_MODE,
+        )
+    )
     if fd < 0:
         path_c.free()
         raise Error("creat() failed for " + path_s)
@@ -143,9 +154,9 @@ def dump_final_q(
     header[2] = UInt32(num_owned)
     header[3] = UInt32(1)
     header[4] = UInt32(N_P)
-    var header_ptr = rebind[
-        UnsafePointer[UInt8, MutAnyOrigin]
-    ](header.unsafe_ptr())
+    var header_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
+        header.unsafe_ptr()
+    )
     _write_bytes(fd, header_ptr, 5 * 4)
 
     var ids_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
@@ -169,14 +180,18 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print("mpi_bc_test:",
-              NUM_TEST_STEPS, "step dump with BC_OUTFLOW on all 6 sides, ",
-              size, "ranks")
+        print(
+            "mpi_bc_test:",
+            NUM_TEST_STEPS,
+            "step dump with BC_OUTFLOW on all 6 sides, ",
+            size,
+            "ranks",
+        )
 
     var nvtx = NvtxContext()
     var ctx = DeviceContext()
     var re = ReferenceElement()
-    var D_ref    = to_float32(re.D_ref)
+    var D_ref = to_float32(re.D_ref)
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
@@ -186,21 +201,38 @@ def main() raises:
     # the HaloExchange skip_mpi flag suppresses pack/Isend/Irecv on
     # those same rings.
     var bcs = BoundaryConditions(
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_OUTFLOW, BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
     )
 
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        Advection.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = Advection(VX, VY, VZ)
     var solver = Solver[Advection](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     var inv_two_sigma2 = Float32(1.0) / (
@@ -211,11 +243,11 @@ def main() raises:
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
-        Float32(GAUSS_CX), Float32(GAUSS_CY), Float32(GAUSS_CZ),
+        Float32(GAUSS_CX),
+        Float32(GAUSS_CY),
+        Float32(GAUSS_CZ),
         inv_two_sigma2,
-        grid_dim=ceildiv(
-            solver.num_owned_elements * N_P, IC_BLOCK
-        ),
+        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
     solver.ctx.synchronize()

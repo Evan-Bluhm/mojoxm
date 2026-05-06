@@ -126,7 +126,9 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
         index is derived from the number of frames written so far."""
         nvtx.push_range("write_frame")
         solver.download_owned_component(
-            self._component, self._snapshot, nvtx,
+            self._component,
+            self._snapshot,
+            nvtx,
         )
         var frame_id = len(self._paths)
         var fname = String("frame_")
@@ -261,7 +263,8 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
 # np>1 each rank would dump only its owned slab to the same path
 # and stomp on the other ranks' output.
 def write_snapshot_3d_multi[
-    PhysT: Physics, P: Int = 2,
+    PhysT: Physics,
+    P: Int = 2,
 ](
     mut solver: Solver[PhysT, P],
     field_names: List[String],

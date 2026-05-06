@@ -28,7 +28,9 @@ from std.math import sqrt, ceildiv, cos, isnan, isinf
 from src import mpi
 from src.partition import build_partition
 from src.reference import (
-    ReferenceElement, to_float32, num_tet_nodes,
+    ReferenceElement,
+    to_float32,
+    num_tet_nodes,
 )
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions
@@ -39,8 +41,8 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 5
-comptime NP = num_tet_nodes(P)        # 56 at P=5
-comptime NC = 6                       # Maxwell.NUM_COMPONENTS
+comptime NP = num_tet_nodes(P)  # 56 at P=5
+comptime NC = 6  # Maxwell.NUM_COMPONENTS
 
 comptime NX = 8
 comptime NY = 4
@@ -50,7 +52,7 @@ comptime LY = Float64(NY) / Float64(NX) * LX
 comptime LZ = Float64(NZ) / Float64(NX) * LX
 
 comptime C_LIGHT: Float32 = 1.0
-comptime T_FINAL: Float32 = 1.0       # one period at c = 1
+comptime T_FINAL: Float32 = 1.0  # one period at c = 1
 comptime CFL = Float32(0.08)
 comptime IC_BLOCK = 256
 comptime TWO_PI_F: Float32 = 6.28318530717958647692
@@ -66,7 +68,7 @@ comptime ZERO_COMPONENT_MAX: Float64 = 5.0e-4
 def plane_wave_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
     inv_c: Float32,
 ):
@@ -81,12 +83,12 @@ def plane_wave_ic_kernel(
     var Ez = cos(TWO_PI_F * px)
     var By = -inv_c * cos(TWO_PI_F * px)
     var base = (e * NP + nn) * 6
-    q[base + 0] = Float32(0.0)   # Ex
-    q[base + 1] = Float32(0.0)   # Ey
-    q[base + 2] = Ez             # Ez
-    q[base + 3] = Float32(0.0)   # Bx
-    q[base + 4] = By             # By
-    q[base + 5] = Float32(0.0)   # Bz
+    q[base + 0] = Float32(0.0)  # Ex
+    q[base + 1] = Float32(0.0)  # Ey
+    q[base + 2] = Ez  # Ez
+    q[base + 3] = Float32(0.0)  # Bx
+    q[base + 4] = By  # By
+    q[base + 5] = Float32(0.0)  # Bz
 
 
 def main() raises:
@@ -99,8 +101,9 @@ def main() raises:
         return
 
     print("bench_maxwell_plane_wave_3d_p5 (3D TM plane wave, P=5, periodic)")
-    print("  P=", P, "  NP=", NP,
-          "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL)
+    print(
+        "  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -113,20 +116,37 @@ def main() raises:
 
     var bcs = BoundaryConditions.periodic()
     var mesh = Mesh[P](
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Maxwell.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        Maxwell.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = Maxwell(
         C_LIGHT,
-        Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(0.0), Float32(0.0), Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
     )
     var solver = Solver[Maxwell, P](
-        ctx^, mesh^, halo^, physics^,
-        D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     var inv_c = Float32(1.0) / C_LIGHT
@@ -190,28 +210,37 @@ def main() raises:
         var c_idx = k % NC
         if c_idx == 0 or c_idx == 1 or c_idx == 3 or c_idx == 5:
             var av = Float64(v_now)
-            if av < 0.0: av = -av
+            if av < 0.0:
+                av = -av
             if av > max_zero_leak:
                 max_zero_leak = av
 
     var l2 = sqrt(sum_sq / Float64(n_owned_dof))
     var l2_ic = sqrt(sum_ic / Float64(n_owned_dof))
     var rel_l2 = l2 / l2_ic
-    print("  rel L2(state) =", rel_l2,
-          "  (threshold", L2_MAX_REL, ")")
-    print("  max |Ex|/|Ey|/|Bx|/|Bz| =", max_zero_leak,
-          "  (threshold", ZERO_COMPONENT_MAX, ")")
+    print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
+    print(
+        "  max |Ex|/|Ey|/|Bx|/|Bz| =",
+        max_zero_leak,
+        "  (threshold",
+        ZERO_COMPONENT_MAX,
+        ")",
+    )
 
     if rel_l2 > L2_MAX_REL:
         raise Error(
             "bench_maxwell_plane_wave_3d_p5 FAILED: rel L2 "
-            + String(rel_l2) + " > " + String(L2_MAX_REL)
+            + String(rel_l2)
+            + " > "
+            + String(L2_MAX_REL)
         )
     if max_zero_leak > ZERO_COMPONENT_MAX:
         raise Error(
             String("bench_maxwell_plane_wave_3d_p5 FAILED: zero-component ")
-            + "leakage " + String(max_zero_leak)
-            + " > " + String(ZERO_COMPONENT_MAX)
+            + "leakage "
+            + String(max_zero_leak)
+            + " > "
+            + String(ZERO_COMPONENT_MAX)
         )
 
     print("=== bench_maxwell_plane_wave_3d_p5 PASSED ===")

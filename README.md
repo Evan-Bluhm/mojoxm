@@ -620,7 +620,7 @@ dashboard with 81 frames peaks at under 1 GB of resident memory.
 
 ```bash
 ./euler_rising_bubble
-.venv/bin/python scripts/animate_dashboard.py
+pixi run python scripts/animate_dashboard.py
 # ... writes output/dashboard.gif
 ```
 
@@ -758,7 +758,8 @@ benchmark.
 
 - NVIDIA GPU with compute capability 7.5+ (tested on RTX 3090).
 - CUDA 12.x installed (for `libnvtx3interop`, `ncu`, `nsys`).
-- `uv` (or `pip`) to install Mojo.
+- [`pixi`](https://pixi.sh/) to install Mojo + the Python helpers
+  (`meshio`, `scipy`).
 - A C toolchain (linker). On Linux, `libm` and `libpthread` via the
   system `glibc`.
 - For the MPI examples (`mpi_hello`, `mpi_partition`, future
@@ -767,13 +768,19 @@ benchmark.
 
 ### Install Mojo
 
+The project is managed by [pixi](https://pixi.sh/); the Mojo nightly
+channel + the Python helpers are wired into `pyproject.toml`.
+
 ```bash
 cd /path/to/mojoxm
-uv venv
-uv pip install mojo        # installs Mojo 0.26.2.0 (or newer)
+pixi install                    # materializes .pixi/envs/default
+pixi run mojo --version         # sanity check
 ```
 
-The compiler binary ends up at `.venv/bin/mojo`.
+The compiler binary ends up at `.pixi/envs/default/bin/mojo`, but
+that bare path won't find its stdlib without `MODULAR_HOME` —
+go through `pixi run mojo` (what the Makefile defaults to) or
+drop into a subshell with `pixi shell`.
 
 ### Compile a driver
 

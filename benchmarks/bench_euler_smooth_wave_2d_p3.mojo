@@ -33,7 +33,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_hllc_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -43,9 +45,9 @@ comptime LX = 1.0
 comptime LY = 1.0
 comptime GAMMA = 1.4
 comptime RHO0 = 1.0
-comptime U0   = 1.0
-comptime V0   = 1.0
-comptime P0   = 1.0
+comptime U0 = 1.0
+comptime V0 = 1.0
+comptime P0 = 1.0
 comptime AMPLITUDE = 0.1
 comptime T_FINAL = 1.0
 comptime CFL = 0.10
@@ -78,12 +80,16 @@ def _run(N: Int) raises -> Float64:
             var y = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
             var rho = RHO0 + AMPLITUDE * sin(two_pi * x) * sin(two_pi * y)
             var E = P0 / (GAMMA - 1.0) + 0.5 * rho * (U0 * U0 + V0 * V0)
-            host_q.append(Float32(rho));      host_ic.append(Float32(rho))
-            host_q.append(Float32(rho * U0)); host_ic.append(Float32(rho * U0))
-            host_q.append(Float32(rho * V0)); host_ic.append(Float32(rho * V0))
-            host_q.append(Float32(E));         host_ic.append(Float32(E))
+            host_q.append(Float32(rho))
+            host_ic.append(Float32(rho))
+            host_q.append(Float32(rho * U0))
+            host_ic.append(Float32(rho * U0))
+            host_q.append(Float32(rho * V0))
+            host_ic.append(Float32(rho * V0))
+            host_q.append(Float32(E))
+            host_ic.append(Float32(E))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -108,18 +114,29 @@ def _run(N: Int) raises -> Float64:
     var min_p = Float32(1.0e-6)
 
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for _ in range(num_steps):
         for stage in stage_plans:
             euler_rk_stage_hllc_2d[P](
-                ctx, gpu_mesh,
+                ctx,
+                gpu_mesh,
                 gpu_re.d_Lift_ref.unsafe_ptr(),
                 gpu_re.d_D_ref.unsafe_ptr(),
-                stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                stage.q_in,
+                stage.q_a,
+                stage.q_b,
+                stage.q_out,
                 d_fstar.unsafe_ptr(),
-                gamma, min_rho, min_p,
-                stage.a, stage.b, stage.c, dt,
+                gamma,
+                min_rho,
+                min_p,
+                stage.a,
+                stage.b,
+                stage.c,
+                dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -150,10 +167,15 @@ def main() raises:
         return
 
     print("bench_euler_smooth_wave_2d_p3 (P=3 entropy wave, HLLC)")
-    print("  P=", P, "  NP=", num_tri_nodes_2d(P),
-          "  refinement sweep N=8, 12, 16")
+    print(
+        "  P=",
+        P,
+        "  NP=",
+        num_tri_nodes_2d(P),
+        "  refinement sweep N=8, 12, 16",
+    )
 
-    var err8  = _run(8)
+    var err8 = _run(8)
     print("  N=8   rel L2 =", err8)
     var err12 = _run(12)
     print("  N=12  rel L2 =", err12)
@@ -163,17 +185,23 @@ def main() raises:
     if err8 > L2_MAX_REL_AT_16:
         raise Error(
             "bench_euler_smooth_wave_2d_p3 FAILED: rel L2 at N=8 "
-            + String(err8) + " exceeds " + String(L2_MAX_REL_AT_16)
+            + String(err8)
+            + " exceeds "
+            + String(L2_MAX_REL_AT_16)
         )
     if err12 > L2_MAX_REL_AT_16:
         raise Error(
             "bench_euler_smooth_wave_2d_p3 FAILED: rel L2 at N=12 "
-            + String(err12) + " exceeds " + String(L2_MAX_REL_AT_16)
+            + String(err12)
+            + " exceeds "
+            + String(L2_MAX_REL_AT_16)
         )
     if err16 > L2_MAX_REL_AT_16:
         raise Error(
             "bench_euler_smooth_wave_2d_p3 FAILED: rel L2 at N=16 "
-            + String(err16) + " exceeds " + String(L2_MAX_REL_AT_16)
+            + String(err16)
+            + " exceeds "
+            + String(L2_MAX_REL_AT_16)
         )
 
     print("=== bench_euler_smooth_wave_2d_p3 PASSED ===")

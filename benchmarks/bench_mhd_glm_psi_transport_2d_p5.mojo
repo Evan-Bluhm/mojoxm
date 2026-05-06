@@ -29,7 +29,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd_glm import mhd_glm_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -38,15 +40,15 @@ comptime P = 5
 comptime NY = 4
 comptime LX = 1.0
 
-comptime GAMMA: Float64    = 5.0 / 3.0
-comptime RHO0:  Float64    = 1.0
-comptime P0:    Float64    = 1.0
+comptime GAMMA: Float64 = 5.0 / 3.0
+comptime RHO0: Float64 = 1.0
+comptime P0: Float64 = 1.0
 comptime AMPLITUDE: Float64 = 0.01
-comptime C_H:   Float64    = 1.0
-comptime ALPHA_D: Float64  = 0.0   # transport-only; no damping
+comptime C_H: Float64 = 1.0
+comptime ALPHA_D: Float64 = 0.0  # transport-only; no damping
 
 comptime CFL: Float64 = 0.10
-comptime T_FINAL: Float64 = LX / C_H   # one wave period
+comptime T_FINAL: Float64 = LX / C_H  # one wave period
 
 comptime L2_MAX_REL: Float64 = 5.0e-4
 
@@ -74,15 +76,22 @@ def _run(NX: Int) raises -> Float64:
         for nn in range(NP_p):
             var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var psi = AMPLITUDE * sin(k_wave * x)
-            host_q.append(Float32(RHO0));   host_ic.append(Float32(RHO0))
-            host_q.append(Float32(0.0));    host_ic.append(Float32(0.0))
-            host_q.append(Float32(0.0));    host_ic.append(Float32(0.0))
-            host_q.append(Float32(0.0));    host_ic.append(Float32(0.0))
-            host_q.append(Float32(0.0));    host_ic.append(Float32(0.0))
-            host_q.append(Float32(E0));     host_ic.append(Float32(E0))
-            host_q.append(Float32(psi));    host_ic.append(Float32(psi))
+            host_q.append(Float32(RHO0))
+            host_ic.append(Float32(RHO0))
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))
+            host_q.append(Float32(E0))
+            host_ic.append(Float32(E0))
+            host_q.append(Float32(psi))
+            host_ic.append(Float32(psi))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -103,8 +112,8 @@ def _run(NX: Int) raises -> Float64:
 
     var gamma_f = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
-    var min_p   = Float32(1.0e-6)
-    var c_h_f   = Float32(C_H)
+    var min_p = Float32(1.0e-6)
+    var c_h_f = Float32(C_H)
 
     var stage_plans = ssprk3_stage_plans(
         d_q=d_q.unsafe_ptr(),
@@ -127,7 +136,10 @@ def _run(NX: Int) raises -> Float64:
                 min_density=min_rho,
                 min_pressure=min_p,
                 c_h=c_h_f,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
 
@@ -149,13 +161,15 @@ def _run(NX: Int) raises -> Float64:
     for i in range(n_elem_nodes):
         var p = hptr_q[i * NC + 6]
         var a = p if p >= Float32(0.0) else -p
-        if a > psi_max: psi_max = a
+        if a > psi_max:
+            psi_max = a
 
     var amp_bound = Float32(AMPLITUDE) * Float32(1.1)
     if psi_max > amp_bound:
         raise Error(
             String("bench_mhd_glm_psi_transport_2d_p5 FAILED: psi_max ")
-            + String(psi_max) + " exceeds 1.1 * AMPLITUDE "
+            + String(psi_max)
+            + " exceeds 1.1 * AMPLITUDE "
             + String(amp_bound)
         )
 
@@ -168,8 +182,18 @@ def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
     mpi.init()
     print("bench_mhd_glm_psi_transport_2d_p5 (GLM linear psi/Bx wave, P=5)")
-    print("  P=", P, "  NP=", num_tri_nodes_2d(P),
-          "  c_h=", C_H, "  T=", T_FINAL, "  amplitude=", AMPLITUDE)
+    print(
+        "  P=",
+        P,
+        "  NP=",
+        num_tri_nodes_2d(P),
+        "  c_h=",
+        C_H,
+        "  T=",
+        T_FINAL,
+        "  amplitude=",
+        AMPLITUDE,
+    )
 
     var err8 = _run(8)
     print("  N=8   rel L2 =", err8)
@@ -181,17 +205,23 @@ def main() raises:
     if err8 > L2_MAX_REL:
         raise Error(
             "bench_mhd_glm_psi_transport_2d_p5 FAILED: NX=8 rel L2 "
-            + String(err8) + " exceeds " + String(L2_MAX_REL)
+            + String(err8)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
     if err12 > L2_MAX_REL:
         raise Error(
             "bench_mhd_glm_psi_transport_2d_p5 FAILED: NX=12 rel L2 "
-            + String(err12) + " exceeds " + String(L2_MAX_REL)
+            + String(err12)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
     if err16 > L2_MAX_REL:
         raise Error(
             "bench_mhd_glm_psi_transport_2d_p5 FAILED: NX=16 rel L2 "
-            + String(err16) + " exceeds " + String(L2_MAX_REL)
+            + String(err16)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
 
     print("=== bench_mhd_glm_psi_transport_2d_p5 PASSED ===")

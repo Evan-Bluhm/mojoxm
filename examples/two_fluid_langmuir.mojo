@@ -56,33 +56,33 @@ comptime NX = 16
 comptime NY = 2
 comptime NZ = 2
 comptime LX = 1.0
-comptime LY = Float64(2.0 / 16.0)    # dx = dy = dz
+comptime LY = Float64(2.0 / 16.0)  # dx = dy = dz
 comptime LZ = Float64(2.0 / 16.0)
 
 # Natural units: eps0 = 1, m_e = 1, q_e = -1.  omega_p = sqrt(n0).
 comptime GAMMA_E: Float32 = Float32(5.0 / 3.0)
 comptime GAMMA_I: Float32 = Float32(5.0 / 3.0)
-comptime Q_E:     Float32 = -1.0
-comptime M_E:     Float32 =  1.0
-comptime Q_I:     Float32 =  1.0
-comptime M_I:     Float32 = 25.0       # reduced mass ratio
-comptime EPS0:    Float32 =  1.0
-comptime C_LIGHT: Float32 = 10.0       # c / v_thermal comfortably > 1
+comptime Q_E: Float32 = -1.0
+comptime M_E: Float32 = 1.0
+comptime Q_I: Float32 = 1.0
+comptime M_I: Float32 = 25.0  # reduced mass ratio
+comptime EPS0: Float32 = 1.0
+comptime C_LIGHT: Float32 = 10.0  # c / v_thermal comfortably > 1
 
 # Background plasma.
-comptime N0:      Float32 = 1.0        # number density of each species
-comptime P_E0:    Float32 = 0.01
-comptime P_I0:    Float32 = 0.01
+comptime N0: Float32 = 1.0  # number density of each species
+comptime P_E0: Float32 = 0.01
+comptime P_I0: Float32 = 0.01
 
 # Initial electron-fluid x-velocity (small so the linear Langmuir
 # wave is a decent approximation).
 comptime U_PERTURB: Float32 = 0.01
 
 # GLM cleaner: c_h >= c; alpha_d turns on damping of any div(B) noise.
-comptime C_H:     Float32 = 12.0
+comptime C_H: Float32 = 12.0
 comptime ALPHA_D: Float32 = 0.5
 
-comptime MIN_DENSITY:  Float32 = 1.0e-6
+comptime MIN_DENSITY: Float32 = 1.0e-6
 comptime MIN_PRESSURE: Float32 = 1.0e-8
 
 # CFL: Rusanov dt scales like h / max_wave.  Max wave is c_light (10
@@ -102,12 +102,15 @@ comptime NUM_FRAMES = 10
 def langmuir_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
-    rho_e0: Float32, rho_i0: Float32,
+    rho_e0: Float32,
+    rho_i0: Float32,
     u_pert: Float32,
-    p_e0: Float32, p_i0: Float32,
-    gamma_e: Float32, gamma_i: Float32,
+    p_e0: Float32,
+    p_i0: Float32,
+    gamma_e: Float32,
+    gamma_i: Float32,
 ):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
@@ -120,7 +123,7 @@ def langmuir_ic_kernel(
 
     # Electron fluid: uniform density, perturbed x-velocity.
     q[base + 0] = rho_e0
-    q[base + 1] = rho_e0 * u_pert   # rho_e * u_e
+    q[base + 1] = rho_e0 * u_pert  # rho_e * u_e
     q[base + 2] = Float32(0.0)
     q[base + 3] = Float32(0.0)
     q[base + 4] = (
@@ -155,14 +158,28 @@ def main() raises:
     if rank == 0:
         print(
             "two_fluid_langmuir: GPU DG 5-moment two-fluid + Maxwell, P2 tet,",
-            size, "rank(s)",
+            size,
+            "rank(s)",
         )
-        print("  global mesh: ", NX, "x", NY, "x", NZ,
-              " cells -> ", NX * NY * NZ * 6, "tets")
+        print(
+            "  global mesh: ",
+            NX,
+            "x",
+            NY,
+            "x",
+            NZ,
+            " cells -> ",
+            NX * NY * NZ * 6,
+            "tets",
+        )
         var omega_p = sqrt(N0 * Q_E * Q_E / (EPS0 * M_E))
-        print("  omega_p =", omega_p,
-              "  T_period =", Float32(6.283185307179586) / omega_p,
-              "  T_FINAL = ~0.5 period")
+        print(
+            "  omega_p =",
+            omega_p,
+            "  T_period =",
+            Float32(6.283185307179586) / omega_p,
+            "  T_FINAL = ~0.5 period",
+        )
 
     var nvtx = NvtxContext()
     var refs = build_reference_operators(nvtx)
@@ -170,21 +187,42 @@ def main() raises:
 
     var bcs = BoundaryConditions.periodic()
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, FiveMomentTwoFluid.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        FiveMomentTwoFluid.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = FiveMomentTwoFluid(
-        GAMMA_E, GAMMA_I,
-        Q_E, M_E, Q_I, M_I,
-        EPS0, C_LIGHT,
-        C_H, ALPHA_D,
-        MIN_DENSITY, MIN_PRESSURE,
+        GAMMA_E,
+        GAMMA_I,
+        Q_E,
+        M_E,
+        Q_I,
+        M_I,
+        EPS0,
+        C_LIGHT,
+        C_H,
+        ALPHA_D,
+        MIN_DENSITY,
+        MIN_PRESSURE,
     )
     var solver = Solver[FiveMomentTwoFluid](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[langmuir_ic_kernel, langmuir_ic_kernel](
@@ -192,13 +230,14 @@ def main() raises:
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
-        M_E * N0, M_I * N0,
+        M_E * N0,
+        M_I * N0,
         U_PERTURB,
-        P_E0, P_I0,
-        GAMMA_E, GAMMA_I,
-        grid_dim=ceildiv(
-            solver.num_owned_elements * N_P, IC_BLOCK
-        ),
+        P_E0,
+        P_I0,
+        GAMMA_E,
+        GAMMA_I,
+        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
     solver.ctx.synchronize()
@@ -208,7 +247,9 @@ def main() raises:
         solver.memory_report().print()
 
     var writer = FrameWriter[FiveMomentTwoFluid](
-        solver, nvtx, component=10,    # Ex as the output scalar
+        solver,
+        nvtx,
+        component=10,  # Ex as the output scalar
     )
 
     # Diagnostics: per-species mass + x-momentum (the relevant one for
@@ -217,12 +258,12 @@ def main() raises:
     # `rho_e u_e + rho_i u_i` is the clearest signature that the
     # Lorentz coupling is symmetric between the two fluids.
     var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass_e",    0))
-    diag_linear.append(NamedComponent("mom_e_x",   1))
-    diag_linear.append(NamedComponent("energy_e",  4))
-    diag_linear.append(NamedComponent("mass_i",    5))
-    diag_linear.append(NamedComponent("mom_i_x",   6))
-    diag_linear.append(NamedComponent("energy_i",  9))
+    diag_linear.append(NamedComponent("mass_e", 0))
+    diag_linear.append(NamedComponent("mom_e_x", 1))
+    diag_linear.append(NamedComponent("energy_e", 4))
+    diag_linear.append(NamedComponent("mass_i", 5))
+    diag_linear.append(NamedComponent("mom_i_x", 6))
+    diag_linear.append(NamedComponent("energy_i", 9))
     var diag_squared = List[NamedComponent]()
     diag_squared.append(NamedComponent("Ex_sq", 10))
     diag_squared.append(NamedComponent("Ey_sq", 11))
@@ -230,9 +271,14 @@ def main() raises:
     var diag_maxabs = List[NamedComponent]()
     diag_maxabs.append(NamedComponent("max_abs_psi", 16))
     var diag = DiagnosticsWriter[FiveMomentTwoFluid](
-        solver, "output/diagnostics.csv",
-        diag_linear, diag_squared, diag_maxabs,
-        LX, LY, LZ,
+        solver,
+        "output/diagnostics.csv",
+        diag_linear,
+        diag_squared,
+        diag_maxabs,
+        LX,
+        LY,
+        LZ,
     )
 
     var dt = choose_dt()
@@ -240,7 +286,13 @@ def main() raises:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
     var result = run_ssprk3_loop_with_diagnostics[FiveMomentTwoFluid](
-        solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx,
+        solver,
+        writer,
+        diag,
+        dt,
+        T_FINAL,
+        NUM_FRAMES,
+        nvtx,
     )
 
     writer.finalize("output/solution.pvd", nvtx)
@@ -257,18 +309,18 @@ def main() raises:
         var n_owned_dof = solver.num_owned_elements * N_P
         var snap_rho_e = List[Float32]()
         var snap_rho_i = List[Float32]()
-        var snap_ex    = List[Float32]()
+        var snap_ex = List[Float32]()
         for _ in range(n_owned_dof):
             snap_rho_e.append(Float32(0.0))
             snap_rho_i.append(Float32(0.0))
             snap_ex.append(Float32(0.0))
-        solver.download_owned_component(0,  snap_rho_e, nvtx)  # electron rho
-        solver.download_owned_component(5,  snap_rho_i, nvtx)  # ion rho
-        solver.download_owned_component(10, snap_ex,    nvtx)  # Ex
-        var f_n_e   = List[Float64]()
-        var f_n_i   = List[Float64]()
-        var f_ex    = List[Float64]()
-        var f_chg   = List[Float64]()
+        solver.download_owned_component(0, snap_rho_e, nvtx)  # electron rho
+        solver.download_owned_component(5, snap_rho_i, nvtx)  # ion rho
+        solver.download_owned_component(10, snap_ex, nvtx)  # Ex
+        var f_n_e = List[Float64]()
+        var f_n_i = List[Float64]()
+        var f_ex = List[Float64]()
+        var f_chg = List[Float64]()
         for k in range(n_owned_dof):
             var n_e = snap_rho_e[k] / M_E
             var n_i = snap_rho_i[k] / M_I
@@ -287,11 +339,21 @@ def main() raises:
         names.append(String("Ex"))
         names.append(String("charge_density"))
         write_snapshot_3d_multi(
-            solver=solver, field_names=names, field_data=fields,
-            path=String("output/snapshot_t_final.vtu"), nvtx=nvtx,
+            solver=solver,
+            field_names=names,
+            field_data=fields,
+            path=String("output/snapshot_t_final.vtu"),
+            nvtx=nvtx,
         )
         if rank == 0:
-            print("  wrote output/snapshot_t_final.vtu (n_e + n_i + Ex + charge, t=", T_FINAL, ")")
+            print(
+                (
+                    "  wrote output/snapshot_t_final.vtu (n_e + n_i + Ex +"
+                    " charge, t="
+                ),
+                T_FINAL,
+                ")",
+            )
 
     # At np=1 sample a few diagnostics: the spatial mean of Ex and of
     # rho_e * u_e (electron x-momentum) should both be traces of the
@@ -301,13 +363,13 @@ def main() raises:
         var buf = List[Float32]()
         for _ in range(total_dof):
             buf.append(Float32(0.0))
-        solver.download_owned_component(10, buf, nvtx)   # Ex
+        solver.download_owned_component(10, buf, nvtx)  # Ex
         var sum_Ex: Float64 = 0.0
         for i in range(total_dof):
             sum_Ex += Float64(buf[i])
         var mean_Ex = Float32(sum_Ex / Float64(total_dof))
 
-        solver.download_owned_component(1, buf, nvtx)    # rho_e u_e
+        solver.download_owned_component(1, buf, nvtx)  # rho_e u_e
         var sum_mom: Float64 = 0.0
         for i in range(total_dof):
             sum_mom += Float64(buf[i])
@@ -321,8 +383,13 @@ def main() raises:
         # -- see the driver header for the derivation.
 
     if rank == 0:
-        print("  total steps:", result.total_steps,
-              " wall time:", result.wall_sec, "s")
+        print(
+            "  total steps:",
+            result.total_steps,
+            " wall time:",
+            result.wall_sec,
+            "s",
+        )
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
     var tput = solver.bench_step_loop(dt, nvtx)

@@ -36,19 +36,36 @@ def main() raises:
 
     var ctx = DeviceContext()
     var patch = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
 
     for r in range(size):
         if r == rank:
             print(
-                "[rank", rank, "/", size, "]",
-                " owned cubes (", patch.part.nx, "x",
-                patch.part.ny, "x", patch.part.nz, ")",
-                " num_owned=", patch.num_owned_elements,
-                " (halo=", patch.num_halo_elements,
-                ", interior=", patch.num_interior_elements, ")",
+                "[rank",
+                rank,
+                "/",
+                size,
+                "]",
+                " owned cubes (",
+                patch.part.nx,
+                "x",
+                patch.part.ny,
+                "x",
+                patch.part.nz,
+                ")",
+                " num_owned=",
+                patch.num_owned_elements,
+                " (halo=",
+                patch.num_halo_elements,
+                ", interior=",
+                patch.num_interior_elements,
+                ")",
             )
             print(
                 "  halo primary-ring counts [-x,+x,-y,+y,-z,+z] =",

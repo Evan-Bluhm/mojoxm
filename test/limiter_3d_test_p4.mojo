@@ -30,7 +30,7 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 4
-comptime NP = num_tet_nodes(P)         # 35 at P=4
+comptime NP = num_tet_nodes(P)  # 35 at P=4
 comptime NC = 5
 
 comptime NX = 4
@@ -42,7 +42,7 @@ comptime LZ = 1.0
 comptime IC_BLOCK = 256
 
 comptime CONST_TOL: Float32 = Float32(1.0e-6)
-comptime MEAN_TOL:  Float32 = Float32(1.0e-5)
+comptime MEAN_TOL: Float32 = Float32(1.0e-5)
 
 
 def fill_constant_kernel(
@@ -110,7 +110,9 @@ def main() raises:
     var mesh = Mesh[P](
         ctx=ctx,
         part=build_partition(rank=0, nprocs=1, nx=NX, ny=NY, nz=NZ),
-        Lx=LX, Ly=LY, Lz=LZ,
+        Lx=LX,
+        Ly=LY,
+        Lz=LZ,
         bcs=BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
@@ -127,10 +129,17 @@ def main() raises:
         entropy_fix=False,
     )
     var solver = Solver[Euler, P](
-        ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^,
-        D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^,
+        ctx=ctx^,
+        mesh=mesh^,
+        halo=halo^,
+        physics=physics^,
+        D_ref=D_ref^,
+        Lift_ref=Lift_ref^,
+        node_weights=node_weights^,
     )
-    solver.enable_cell_limiter(enabled=True, venkat_eps=Float32(0.0))   # raw BJ, eps=0
+    solver.enable_cell_limiter(
+        enabled=True, venkat_eps=Float32(0.0)
+    )  # raw BJ, eps=0
 
     var num_owned = solver.num_owned_elements
     var n_dof = num_owned * NP
@@ -156,13 +165,19 @@ def main() raises:
     for k in range(n_dof):
         var d = rho_buf[k] - Float32(1.0)
         var ad = d if d >= Float32(0.0) else -d
-        if ad > max_err_const: max_err_const = ad
-    print("  constant-state max |rho - 1| =", max_err_const,
-          "  (tol", CONST_TOL, ")")
+        if ad > max_err_const:
+            max_err_const = ad
+    print(
+        "  constant-state max |rho - 1| =",
+        max_err_const,
+        "  (tol",
+        CONST_TOL,
+        ")",
+    )
     if max_err_const > CONST_TOL:
         raise Error(
-            "limiter_3d_test_p4 FAILED: constant state altered by limiter "
-            "by " + String(max_err_const)
+            "limiter_3d_test_p4 FAILED: constant state altered by limiter by "
+            + String(max_err_const)
         )
 
     # --- Test 2: perturbed state -> verify cell-mean preservation.
@@ -194,9 +209,15 @@ def main() raises:
             s += node_weights_host[nn] * rho_buf[e * NP + nn]
         var d = s - means_before[e]
         var ad = d if d >= Float32(0.0) else -d
-        if ad > max_mean_drift: max_mean_drift = ad
-    print("  perturbed cell-mean max drift =", max_mean_drift,
-          "  (tol", MEAN_TOL, ")")
+        if ad > max_mean_drift:
+            max_mean_drift = ad
+    print(
+        "  perturbed cell-mean max drift =",
+        max_mean_drift,
+        "  (tol",
+        MEAN_TOL,
+        ")",
+    )
     if max_mean_drift > MEAN_TOL:
         raise Error(
             "limiter_3d_test_p4 FAILED: cell mean drifted by "
@@ -211,13 +232,18 @@ def main() raises:
             var orig = Float32(1.0) + jitter
             var d = rho_buf[e * NP + nn] - orig
             var ad = d if d >= Float32(0.0) else -d
-            if ad > max_change: max_change = ad
-    print("  perturbed q max change vs IC =", max_change,
-          "  (proves limiter fired)")
+            if ad > max_change:
+                max_change = ad
+    print(
+        "  perturbed q max change vs IC =",
+        max_change,
+        "  (proves limiter fired)",
+    )
     if max_change < Float32(0.01):
         raise Error(
             "limiter_3d_test_p4 FAILED: limiter appears not to have "
-            "modified q (max_change=" + String(max_change)
+            "modified q (max_change="
+            + String(max_change)
             + "); test setup may be invalid"
         )
 

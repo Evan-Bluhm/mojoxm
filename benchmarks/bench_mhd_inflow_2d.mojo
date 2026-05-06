@@ -28,11 +28,16 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd import mhd_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import (
-    BoundaryConditions2D, BC_INFLOW, BC_OUTFLOW, BC_INTERIOR,
+    BoundaryConditions2D,
+    BC_INFLOW,
+    BC_OUTFLOW,
+    BC_INTERIOR,
 )
 
 
@@ -42,13 +47,13 @@ comptime NY = 4
 comptime LX = 1.0
 comptime LY = Float64(NY) / Float64(NX) * LX
 
-comptime GAMMA:    Float32 = Float32(5.0 / 3.0)
-comptime RHO0:     Float32 = 1.0
-comptime U0:       Float32 = 0.5
-comptime B0:       Float32 = 1.0
-comptime P0:       Float32 = 0.1
-comptime MIN_RHO:  Float32 = 1.0e-6
-comptime MIN_P:    Float32 = 1.0e-6
+comptime GAMMA: Float32 = Float32(5.0 / 3.0)
+comptime RHO0: Float32 = 1.0
+comptime U0: Float32 = 0.5
+comptime B0: Float32 = 1.0
+comptime P0: Float32 = 0.1
+comptime MIN_RHO: Float32 = 1.0e-6
+comptime MIN_P: Float32 = 1.0e-6
 comptime CFL: Float64 = 0.15
 comptime T_FINAL: Float64 = 1.0
 
@@ -65,8 +70,20 @@ def main() raises:
         return
 
     print("bench_mhd_inflow_2d (BC_INFLOW preservation, plain MHD NC=6)")
-    print("  P=", P, "  mesh=", NX, "x", NY,
-          "   U0=", U0, "   B0=", B0, "   T=", T_FINAL)
+    print(
+        "  P=",
+        P,
+        "  mesh=",
+        NX,
+        "x",
+        NY,
+        "   U0=",
+        U0,
+        "   B0=",
+        B0,
+        "   T=",
+        T_FINAL,
+    )
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -74,8 +91,10 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions2D(
-        BC_INFLOW, BC_OUTFLOW,         # -x, +x
-        BC_INTERIOR, BC_INTERIOR,      # -y, +y (periodic)
+        BC_INFLOW,
+        BC_OUTFLOW,  # -x, +x
+        BC_INTERIOR,
+        BC_INTERIOR,  # -y, +y (periodic)
     )
     var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var host_re = ReferenceElement2D[P]()
@@ -98,7 +117,7 @@ def main() raises:
         host_q.append(Float32(0.0))
         host_q.append(E0)
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -139,10 +158,15 @@ def main() raises:
                 gamma=GAMMA,
                 min_density=MIN_RHO,
                 min_pressure=MIN_P,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
-                inflow_rho=RHO0, inflow_rhou=RHO0 * U0,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
+                inflow_rho=RHO0,
+                inflow_rhou=RHO0 * U0,
                 inflow_rhov=Float32(0.0),
-                inflow_Bx=B0, inflow_By=Float32(0.0),
+                inflow_Bx=B0,
+                inflow_By=Float32(0.0),
                 inflow_E=E0,
             )
     ctx.synchronize()
@@ -159,17 +183,20 @@ def main() raises:
                 raise Error("bench_mhd_inflow_2d: non-finite output")
             var qref = host_q[i * NC + c]
             var d = Float64(qv) - Float64(qref)
-            if d < 0.0: d = -d
+            if d < 0.0:
+                d = -d
             var rel = d / ref_scale
-            if rel > max_drift: max_drift = rel
+            if rel > max_drift:
+                max_drift = rel
 
-    print("  max relative drift   =", max_drift,
-          "  (threshold", REL_TOL, ")")
+    print("  max relative drift   =", max_drift, "  (threshold", REL_TOL, ")")
 
     if max_drift > REL_TOL:
         raise Error(
             "bench_mhd_inflow_2d FAILED: max relative drift "
-            + String(max_drift) + " > " + String(REL_TOL)
+            + String(max_drift)
+            + " > "
+            + String(REL_TOL)
         )
 
     print("=== bench_mhd_inflow_2d PASSED ===")

@@ -32,12 +32,19 @@ def main() raises:
     var mesh = LocalMesh2D[P](NX, NY, 1.0, 1.0)
     var NP_p = num_tri_nodes_2d(P)
     var n_total = mesh.num_elements * NP_p
-    print("  mesh:", mesh.num_elements, "elements x", NP_p, "nodes/elem =",
-          n_total, "total nodes")
+    print(
+        "  mesh:",
+        mesh.num_elements,
+        "elements x",
+        NP_p,
+        "nodes/elem =",
+        n_total,
+        "total nodes",
+    )
 
     # Three constant scalar fields.
     var rho = List[Float64]()
-    var p   = List[Float64]()
+    var p = List[Float64]()
     var vmag = List[Float64]()
     for _ in range(n_total):
         rho.append(1.5)
@@ -67,7 +74,7 @@ def main() raises:
     var s = String(StringSlice[origin_of(blob)](unsafe_from_utf8=blob))
     # ParaView's default-displayed scalar must be field 0.
     if not (String('Scalars="rho"') in s):
-        raise Error("vtu_2d_multi_test: missing Scalars=\"rho\" attribute")
+        raise Error('vtu_2d_multi_test: missing Scalars="rho" attribute')
     if not (String('Name="rho"') in s):
         raise Error("vtu_2d_multi_test: missing rho DataArray header")
     if not (String('Name="p"') in s):

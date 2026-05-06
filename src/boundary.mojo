@@ -21,10 +21,10 @@
 
 # BC kinds.  Int32 so they round-trip through DeviceBuffer[int32]
 # without widening.
-comptime BC_INTERIOR:  Int32 = 0
-comptime BC_WALL:      Int32 = 1   # reflecting / slip wall
-comptime BC_OUTFLOW:   Int32 = 2   # zero-gradient transmissive outflow
-comptime BC_INFLOW:    Int32 = 3   # Dirichlet inflow to a user-set state
+comptime BC_INTERIOR: Int32 = 0
+comptime BC_WALL: Int32 = 1  # reflecting / slip wall
+comptime BC_OUTFLOW: Int32 = 2  # zero-gradient transmissive outflow
+comptime BC_INFLOW: Int32 = 3  # Dirichlet inflow to a user-set state
 
 
 # ----------------------------------------------------------------------
@@ -35,6 +35,7 @@ comptime BC_INFLOW:    Int32 = 3   # Dirichlet inflow to a user-set state
 # `BC_INTERIOR` on a given face means "periodic" -- that's how the
 # mesh was built before this module existed, and it stays the default.
 # ----------------------------------------------------------------------
+
 
 @fieldwise_init
 struct BoundaryConditions(ImplicitlyCopyable, Movable):
@@ -48,22 +49,29 @@ struct BoundaryConditions(ImplicitlyCopyable, Movable):
     @staticmethod
     def periodic() -> Self:
         return Self(
-            BC_INTERIOR, BC_INTERIOR,
-            BC_INTERIOR, BC_INTERIOR,
-            BC_INTERIOR, BC_INTERIOR,
+            BC_INTERIOR,
+            BC_INTERIOR,
+            BC_INTERIOR,
+            BC_INTERIOR,
+            BC_INTERIOR,
+            BC_INTERIOR,
         )
 
     def all_periodic(self) -> Bool:
         return (
-            self.bc_x_lo == BC_INTERIOR and self.bc_x_hi == BC_INTERIOR
-            and self.bc_y_lo == BC_INTERIOR and self.bc_y_hi == BC_INTERIOR
-            and self.bc_z_lo == BC_INTERIOR and self.bc_z_hi == BC_INTERIOR
+            self.bc_x_lo == BC_INTERIOR
+            and self.bc_x_hi == BC_INTERIOR
+            and self.bc_y_lo == BC_INTERIOR
+            and self.bc_y_hi == BC_INTERIOR
+            and self.bc_z_lo == BC_INTERIOR
+            and self.bc_z_hi == BC_INTERIOR
         )
 
 
 # ----------------------------------------------------------------------
 # 2D version.  Just drops the z-axis pair.  Same BC kind catalogue.
 # ----------------------------------------------------------------------
+
 
 @fieldwise_init
 struct BoundaryConditions2D(ImplicitlyCopyable, Movable):
@@ -78,6 +86,8 @@ struct BoundaryConditions2D(ImplicitlyCopyable, Movable):
 
     def all_periodic(self) -> Bool:
         return (
-            self.bc_x_lo == BC_INTERIOR and self.bc_x_hi == BC_INTERIOR
-            and self.bc_y_lo == BC_INTERIOR and self.bc_y_hi == BC_INTERIOR
+            self.bc_x_lo == BC_INTERIOR
+            and self.bc_x_hi == BC_INTERIOR
+            and self.bc_y_lo == BC_INTERIOR
+            and self.bc_y_hi == BC_INTERIOR
         )

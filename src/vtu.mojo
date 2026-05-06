@@ -42,6 +42,7 @@ comptime VTK_LAGRANGE_TETRAHEDRON = 71
 # Bulk writer: owns a malloc'd byte buffer + write cursor.
 # ----------------------------------------------------------------------
 
+
 struct ByteBuf(Movable):
     var ptr: UnsafePointer[UInt8, MutExternalOrigin]
     var cap: Int
@@ -75,9 +76,11 @@ struct ByteBuf(Movable):
 
     def write_str(mut self, s: String):
         var n = s.byte_length()
-        memcpy(dest=self.ptr + self.len,
-               src=s.unsafe_ptr().bitcast[UInt8](),
-               count=n)
+        memcpy(
+            dest=self.ptr + self.len,
+            src=s.unsafe_ptr().bitcast[UInt8](),
+            count=n,
+        )
         self.len += n
 
 
@@ -94,6 +97,7 @@ struct ByteBuf(Movable):
 #
 # We build the static (post-density) suffix once, including its own
 # leading u32 headers.
+
 
 struct VtuWriter(Movable):
     var num_elements: Int
@@ -126,7 +130,8 @@ struct VtuWriter(Movable):
 
     def __init__[
         mut: Bool, //, origin: Origin[mut=mut]
-    ](out self,
+    ](
+        out self,
         num_elements: Int,
         elem_node_xyz_ptr: UnsafePointer[Float32, origin],
         nodes_per_elem: Int = 10,
@@ -140,8 +145,8 @@ struct VtuWriter(Movable):
         self.total_points = num_elements * nodes_per_elem
         var total_points = self.total_points
         var cell_type = (
-            VTK_QUADRATIC_TETRA if nodes_per_elem == 10
-            else VTK_LAGRANGE_TETRAHEDRON
+            VTK_QUADRATIC_TETRA if nodes_per_elem
+            == 10 else VTK_LAGRANGE_TETRAHEDRON
         )
 
         var pts_bytes = total_points * 3 * 4
@@ -167,18 +172,18 @@ struct VtuWriter(Movable):
 
         # Connectivity (Int32): [0, 1, 2, ..., total_points-1]
         self.static_post.write_u32_le(UInt32(conn_bytes))
-        var conn_ptr = (
-            self.static_post.ptr + self.static_post.len
-        ).bitcast[Int32]()
+        var conn_ptr = (self.static_post.ptr + self.static_post.len).bitcast[
+            Int32
+        ]()
         for i in range(total_points):
             conn_ptr[i] = Int32(i)
         self.static_post.len += conn_bytes
 
         # Offsets (Int32): (k+1) * nodes_per_elem
         self.static_post.write_u32_le(UInt32(off_bytes))
-        var off_ptr = (
-            self.static_post.ptr + self.static_post.len
-        ).bitcast[Int32]()
+        var off_ptr = (self.static_post.ptr + self.static_post.len).bitcast[
+            Int32
+        ]()
         for e in range(num_elements):
             off_ptr[e] = Int32((e + 1) * nodes_per_elem)
         self.static_post.len += off_bytes
@@ -202,25 +207,57 @@ struct VtuWriter(Movable):
         # XML header (up to and including '_').
         var hdr = String()
         hdr += '<?xml version="1.0"?>\n'
-        hdr += '<VTKFile type="UnstructuredGrid" version="0.1" byte_order="LittleEndian" header_type="UInt32">\n'
-        hdr += '<UnstructuredGrid>\n'
-        hdr += '<Piece NumberOfPoints="' + String(total_points) + '" NumberOfCells="' + String(num_elements) + '">\n'
+        hdr += (
+            '<VTKFile type="UnstructuredGrid" version="0.1"'
+            ' byte_order="LittleEndian" header_type="UInt32">\n'
+        )
+        hdr += "<UnstructuredGrid>\n"
+        hdr += (
+            '<Piece NumberOfPoints="'
+            + String(total_points)
+            + '" NumberOfCells="'
+            + String(num_elements)
+            + '">\n'
+        )
         hdr += '<PointData Scalars="density">\n'
-        hdr += '<DataArray type="Float32" Name="density" format="appended" offset="' + String(self.off_density) + '"/>\n'
-        hdr += '</PointData>\n'
-        hdr += '<Points>\n'
-        hdr += '<DataArray type="Float32" NumberOfComponents="3" format="appended" offset="' + String(self.off_points) + '"/>\n'
-        hdr += '</Points>\n'
-        hdr += '<Cells>\n'
-        hdr += '<DataArray type="Int32" Name="connectivity" format="appended" offset="' + String(self.off_conn) + '"/>\n'
-        hdr += '<DataArray type="Int32" Name="offsets" format="appended" offset="' + String(self.off_offsets) + '"/>\n'
-        hdr += '<DataArray type="UInt8" Name="types" format="appended" offset="' + String(self.off_types) + '"/>\n'
-        hdr += '</Cells>\n'
-        hdr += '</Piece>\n'
-        hdr += '</UnstructuredGrid>\n'
+        hdr += (
+            '<DataArray type="Float32" Name="density" format="appended"'
+            ' offset="'
+            + String(self.off_density)
+            + '"/>\n'
+        )
+        hdr += "</PointData>\n"
+        hdr += "<Points>\n"
+        hdr += (
+            '<DataArray type="Float32" NumberOfComponents="3" format="appended"'
+            ' offset="'
+            + String(self.off_points)
+            + '"/>\n'
+        )
+        hdr += "</Points>\n"
+        hdr += "<Cells>\n"
+        hdr += (
+            '<DataArray type="Int32" Name="connectivity" format="appended"'
+            ' offset="'
+            + String(self.off_conn)
+            + '"/>\n'
+        )
+        hdr += (
+            '<DataArray type="Int32" Name="offsets" format="appended" offset="'
+            + String(self.off_offsets)
+            + '"/>\n'
+        )
+        hdr += (
+            '<DataArray type="UInt8" Name="types" format="appended" offset="'
+            + String(self.off_types)
+            + '"/>\n'
+        )
+        hdr += "</Cells>\n"
+        hdr += "</Piece>\n"
+        hdr += "</UnstructuredGrid>\n"
         hdr += '<AppendedData encoding="raw">\n_'
         self.xml_header = hdr^
-        self.xml_tail = String('\n</AppendedData>\n</VTKFile>\n')
+        self.xml_tail = String("\n</AppendedData>\n</VTKFile>\n")
 
     # Build a scatter-gather list of six segments:
     #   1. xml_header         (owned by VtuWriter, not freed)
@@ -232,9 +269,7 @@ struct VtuWriter(Movable):
     # Only the density segment is copied per frame (~26 MB at 48^3).
     # The 80 MB mesh coords are referenced once from Mesh's host buffer
     # and fed to writev() in place -- no copy anywhere in the pipeline.
-    def build_segments(
-        mut self, q: List[Float32]
-    ) raises -> List[WriteSegment]:
+    def build_segments(mut self, q: List[Float32]) raises -> List[WriteSegment]:
         var total_points = self.total_points
         var density_bytes = total_points * 4
 
@@ -295,7 +330,10 @@ struct VtuWriter(Movable):
 # ParaView collection (.pvd) file
 # ----------------------------------------------------------------------
 
-def write_pvd(path: String, vtu_paths: List[String], times: List[Float64]) raises:
+
+def write_pvd(
+    path: String, vtu_paths: List[String], times: List[Float64]
+) raises:
     """Emit a ParaView `.pvd` collection that ties a sequence of VTU
     frames to their physical timestamps.  Used by both the 3D
     `FrameWriter.finalize` and the 2D example drivers (via
@@ -304,20 +342,25 @@ def write_pvd(path: String, vtu_paths: List[String], times: List[Float64]) raise
     if len(vtu_paths) != len(times):
         raise Error(
             "write_pvd: vtu_paths/times length mismatch ("
-            + String(len(vtu_paths)) + " vs " + String(len(times)) + ")"
+            + String(len(vtu_paths))
+            + " vs "
+            + String(len(times))
+            + ")"
         )
     var out = String()
     out += '<?xml version="1.0"?>\n'
-    out += '<VTKFile type="Collection" version="0.1" byte_order="LittleEndian">\n'
-    out += '<Collection>\n'
+    out += (
+        '<VTKFile type="Collection" version="0.1" byte_order="LittleEndian">\n'
+    )
+    out += "<Collection>\n"
     for i in range(len(vtu_paths)):
         out += '<DataSet timestep="'
         out += String(times[i])
         out += '" group="" part="0" file="'
         out += vtu_paths[i]
         out += '"/>\n'
-    out += '</Collection>\n'
-    out += '</VTKFile>\n'
+    out += "</Collection>\n"
+    out += "</VTKFile>\n"
     var p = Path(path)
     p.write_text(out)
 
@@ -346,8 +389,11 @@ def write_pvd(path: String, vtu_paths: List[String], times: List[Float64]) raise
 #                 this).
 # ----------------------------------------------------------------------
 
+
 def _u32_le(
-    buf: UnsafePointer[UInt8, MutAnyOrigin], offset: Int, v: UInt32,
+    buf: UnsafePointer[UInt8, MutAnyOrigin],
+    offset: Int,
+    v: UInt32,
 ):
     buf[offset + 0] = UInt8(v & 0xFF)
     buf[offset + 1] = UInt8((v >> 8) & 0xFF)
@@ -371,9 +417,11 @@ def dump_vtu_3d_frame_multi(
     exposed as the PointData `Scalars` default."""
     if len(field_names) != len(field_data):
         raise Error(
-            "dump_vtu_3d_frame_multi: field_names/field_data length "
-            "mismatch (" + String(len(field_names)) + " vs "
-            + String(len(field_data)) + ")"
+            "dump_vtu_3d_frame_multi: field_names/field_data length mismatch ("
+            + String(len(field_names))
+            + " vs "
+            + String(len(field_data))
+            + ")"
         )
     if len(field_names) == 0:
         raise Error("dump_vtu_3d_frame_multi: at least one field required")
@@ -383,15 +431,17 @@ def dump_vtu_3d_frame_multi(
         if len(field_data[i]) != total_points:
             raise Error(
                 String("dump_vtu_3d_frame_multi: field_data[")
-                + String(i) + "] size "
-                + String(len(field_data[i])) + " != "
+                + String(i)
+                + "] size "
+                + String(len(field_data[i]))
+                + " != "
                 + String(total_points)
             )
     var n_fields = len(field_names)
 
     var cell_type = (
-        VTK_QUADRATIC_TETRA if nodes_per_elem == 10
-        else VTK_LAGRANGE_TETRAHEDRON
+        VTK_QUADRATIC_TETRA if nodes_per_elem
+        == 10 else VTK_LAGRANGE_TETRAHEDRON
     )
 
     var field_bytes = total_points * 4
@@ -403,48 +453,76 @@ def dump_vtu_3d_frame_multi(
     var off_fields = List[Int]()
     for i in range(n_fields):
         off_fields.append(i * (4 + field_bytes))
-    var off_points  = n_fields * (4 + field_bytes)
-    var off_conn    = off_points + 4 + points_bytes
+    var off_points = n_fields * (4 + field_bytes)
+    var off_conn = off_points + 4 + points_bytes
     var off_offsets = off_conn + 4 + conn_bytes
-    var off_types   = off_offsets + 4 + off_bytes
+    var off_types = off_offsets + 4 + off_bytes
 
     var hdr = String()
     hdr += '<?xml version="1.0"?>\n'
-    hdr += ('<VTKFile type="UnstructuredGrid" version="0.1"'
-            ' byte_order="LittleEndian" header_type="UInt32">\n')
-    hdr += '<UnstructuredGrid>\n'
-    hdr += ('<Piece NumberOfPoints="' + String(total_points)
-            + '" NumberOfCells="' + String(num_elements) + '">\n')
+    hdr += (
+        '<VTKFile type="UnstructuredGrid" version="0.1"'
+        ' byte_order="LittleEndian" header_type="UInt32">\n'
+    )
+    hdr += "<UnstructuredGrid>\n"
+    hdr += (
+        '<Piece NumberOfPoints="'
+        + String(total_points)
+        + '" NumberOfCells="'
+        + String(num_elements)
+        + '">\n'
+    )
     hdr += '<PointData Scalars="' + field_names[0] + '">\n'
     for i in range(n_fields):
-        hdr += ('<DataArray type="Float32" Name="' + field_names[i]
-                + '" format="appended" offset="'
-                + String(off_fields[i]) + '"/>\n')
-    hdr += '</PointData>\n'
-    hdr += '<Points>\n'
-    hdr += ('<DataArray type="Float32" NumberOfComponents="3"'
-            ' format="appended" offset="' + String(off_points) + '"/>\n')
-    hdr += '</Points>\n'
-    hdr += '<Cells>\n'
-    hdr += ('<DataArray type="Int32" Name="connectivity"'
-            ' format="appended" offset="' + String(off_conn) + '"/>\n')
-    hdr += ('<DataArray type="Int32" Name="offsets"'
-            ' format="appended" offset="' + String(off_offsets) + '"/>\n')
-    hdr += ('<DataArray type="UInt8" Name="types"'
-            ' format="appended" offset="' + String(off_types) + '"/>\n')
-    hdr += '</Cells>\n'
-    hdr += '</Piece>\n'
-    hdr += '</UnstructuredGrid>\n'
+        hdr += (
+            '<DataArray type="Float32" Name="'
+            + field_names[i]
+            + '" format="appended" offset="'
+            + String(off_fields[i])
+            + '"/>\n'
+        )
+    hdr += "</PointData>\n"
+    hdr += "<Points>\n"
+    hdr += (
+        '<DataArray type="Float32" NumberOfComponents="3"'
+        ' format="appended" offset="'
+        + String(off_points)
+        + '"/>\n'
+    )
+    hdr += "</Points>\n"
+    hdr += "<Cells>\n"
+    hdr += (
+        '<DataArray type="Int32" Name="connectivity" format="appended" offset="'
+        + String(off_conn)
+        + '"/>\n'
+    )
+    hdr += (
+        '<DataArray type="Int32" Name="offsets" format="appended" offset="'
+        + String(off_offsets)
+        + '"/>\n'
+    )
+    hdr += (
+        '<DataArray type="UInt8" Name="types" format="appended" offset="'
+        + String(off_types)
+        + '"/>\n'
+    )
+    hdr += "</Cells>\n"
+    hdr += "</Piece>\n"
+    hdr += "</UnstructuredGrid>\n"
     hdr += '<AppendedData encoding="raw">\n_'
 
-    var tail = String('\n</AppendedData>\n</VTKFile>\n')
+    var tail = String("\n</AppendedData>\n</VTKFile>\n")
 
     var blob_size = (
         n_fields * (4 + field_bytes)
-        + 4 + points_bytes
-        + 4 + conn_bytes
-        + 4 + off_bytes
-        + 4 + typ_bytes
+        + 4
+        + points_bytes
+        + 4
+        + conn_bytes
+        + 4
+        + off_bytes
+        + 4
+        + typ_bytes
     )
     var total_size = hdr.byte_length() + blob_size + tail.byte_length()
     var out = alloc[UInt8](total_size)
@@ -459,7 +537,8 @@ def dump_vtu_3d_frame_multi(
 
     for i in range(n_fields):
         _u32_le(
-            rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur,
+            rebind[UnsafePointer[UInt8, MutAnyOrigin]](out),
+            cur,
             UInt32(field_bytes),
         )
         cur += 4
@@ -470,7 +549,9 @@ def dump_vtu_3d_frame_multi(
 
     # Points: copy bulk x/y/z directly (already 3-component Float32).
     _u32_le(
-        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(points_bytes)
+        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out),
+        cur,
+        UInt32(points_bytes),
     )
     cur += 4
     memcpy(

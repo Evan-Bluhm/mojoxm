@@ -15,7 +15,11 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_sw import sw_rk_stage_2d, sw_rk_stage_hll_2d
-from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
+from src.reference_2d import (
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
+)
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -38,16 +42,20 @@ def _check_constant(
             raise Error(label + ": non-finite value at index " + String(k))
         var expect: Float32 = expect_h
         var c = k % 3
-        if c == 1: expect = expect_hu
-        elif c == 2: expect = expect_hv
+        if c == 1:
+            expect = expect_hu
+        elif c == 2:
+            expect = expect_hv
         var err = _abs32(v - expect)
         if err > max_err:
             max_err = err
     print("  ", label, " max |q - q_IC| =", max_err)
     if max_err > Float32(1.0e-4):
         raise Error(
-            label + ": constant state not preserved (max err "
-            + String(max_err) + ")"
+            label
+            + ": constant state not preserved (max err "
+            + String(max_err)
+            + ")"
         )
 
 
@@ -83,7 +91,7 @@ def main() raises:
     var min_h = Float32(1.0e-6)
 
     var n_q = gpu.num_elements * NP_p * NC
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -102,35 +110,55 @@ def main() raises:
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
     sw_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gsw, min_h,
-        Float32(1.0), Float32(0.0), Float32(1.0), dt,
+        gsw,
+        min_h,
+        Float32(1.0),
+        Float32(0.0),
+        Float32(1.0),
+        dt,
     )
     sw_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gsw, min_h,
-        Float32(0.75), Float32(0.25), Float32(0.25), dt,
+        gsw,
+        min_h,
+        Float32(0.75),
+        Float32(0.25),
+        Float32(0.25),
+        dt,
     )
     sw_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gsw, min_h,
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt,
+        gsw,
+        min_h,
+        Float32(1.0 / 3.0),
+        Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0),
+        dt,
     )
     ctx.enqueue_copy(hbuf, d_q)
     ctx.synchronize()
@@ -144,35 +172,55 @@ def main() raises:
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
     sw_rk_stage_hll_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gsw, min_h,
-        Float32(1.0), Float32(0.0), Float32(1.0), dt,
+        gsw,
+        min_h,
+        Float32(1.0),
+        Float32(0.0),
+        Float32(1.0),
+        dt,
     )
     sw_rk_stage_hll_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gsw, min_h,
-        Float32(0.75), Float32(0.25), Float32(0.25), dt,
+        gsw,
+        min_h,
+        Float32(0.75),
+        Float32(0.25),
+        Float32(0.25),
+        dt,
     )
     sw_rk_stage_hll_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gsw, min_h,
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt,
+        gsw,
+        min_h,
+        Float32(1.0 / 3.0),
+        Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0),
+        dt,
     )
     ctx.enqueue_copy(hbuf, d_q)
     ctx.synchronize()

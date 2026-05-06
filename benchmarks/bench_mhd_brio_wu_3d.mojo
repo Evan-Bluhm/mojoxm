@@ -54,7 +54,10 @@ from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
 from src.boundary import (
-    BoundaryConditions, BC_INTERIOR, BC_WALL, BC_OUTFLOW,
+    BoundaryConditions,
+    BC_INTERIOR,
+    BC_WALL,
+    BC_OUTFLOW,
 )
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
@@ -71,27 +74,27 @@ comptime LZ = Float64(4.0 / 200.0)
 
 comptime GAMMA: Float32 = 2.0
 comptime RHO_L: Float32 = 1.0
-comptime P_L:   Float32 = 1.0
-comptime BX:    Float32 = 0.75
-comptime BY_L:  Float32 = 1.0
+comptime P_L: Float32 = 1.0
+comptime BX: Float32 = 0.75
+comptime BY_L: Float32 = 1.0
 comptime RHO_R: Float32 = 0.125
-comptime P_R:   Float32 = 0.1
-comptime BY_R:  Float32 = -1.0
+comptime P_R: Float32 = 0.1
+comptime BY_R: Float32 = -1.0
 
 comptime T_FINAL: Float32 = 0.08
 comptime CFL = Float32(0.15)
 comptime IC_BLOCK = 256
 comptime SMOOTH_WIDTH: Float32 = Float32(8.0 * (LX / NX))
-comptime MIN_DENSITY:  Float32 = 1.0e-6
+comptime MIN_DENSITY: Float32 = 1.0e-6
 comptime MIN_PRESSURE: Float32 = 1.0e-6
 # GLM parameters: c_h set to a loose upper bound on the fast
 # magnetosonic speed so any numerical divB gets swept out, alpha_d
 # = 0.1 is the standard Dedner damping.
-comptime C_H:     Float32 = 3.0
+comptime C_H: Float32 = 3.0
 comptime ALPHA_D: Float32 = 0.1
 
-comptime BX_TOL: Float32   = Float32(0.5)
-comptime PSI_TOL: Float32  = Float32(2.0)
+comptime BX_TOL: Float32 = Float32(0.5)
+comptime PSI_TOL: Float32 = Float32(2.0)
 comptime RHO_MIN_OK: Float32 = Float32(0.03)
 comptime RHO_MAX_OK: Float32 = Float32(1.5)
 comptime MASS_TOL_REL: Float64 = 2.0e-2
@@ -100,7 +103,7 @@ comptime MASS_TOL_REL: Float64 = 2.0e-2
 def brio_wu_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -111,16 +114,16 @@ def brio_wu_ic_kernel(
     var nn = idx % N_P
     var e = Int(owned_elem_ids[i])
     var px = elem_node_xyz[(e * N_P + nn) * 3 + 0]
-    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) \
-            * Float32(0.5)
+    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(
+        0.5
+    )
     var rho = RHO_L + s * (RHO_R - RHO_L)
-    var p   = P_L   + s * (P_R - P_L)
-    var by  = BY_L  + s * (BY_R - BY_L)
-    var bx  = BX
-    var bz  = Float32(0.0)
-    var E = (
-        p / (GAMMA - Float32(1.0))
-        + Float32(0.5) * (bx * bx + by * by + bz * bz)
+    var p = P_L + s * (P_R - P_L)
+    var by = BY_L + s * (BY_R - BY_L)
+    var bx = BX
+    var bz = Float32(0.0)
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (
+        bx * bx + by * by + bz * bz
     )
     var base = (e * N_P + nn) * 9
     q[base + 0] = rho
@@ -152,23 +155,43 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions(
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_WALL,    BC_WALL,
-        BC_WALL,    BC_WALL,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
     )
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        IdealMHD.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = IdealMHD(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D,
+        GAMMA,
+        MIN_DENSITY,
+        MIN_PRESSURE,
+        C_H,
+        ALPHA_D,
     )
     var solver = Solver[IdealMHD](
-        ctx^, mesh^, halo^, physics^,
-        refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
     # Venkat eps = 0.1 matches euler_sod_3d.  Quantities of interest
     # (rho ~ O(1), |B| ~ O(1)) are similarly scaled.
@@ -220,8 +243,10 @@ def main() raises:
         if isnan(v) or isinf(v):
             raise Error("bench_mhd_brio_wu_3d: Bx non-finite")
         var d = v - BX
-        if d < 0.0: d = -d
-        if d > bx_max_err: bx_max_err = d
+        if d < 0.0:
+            d = -d
+        if d > bx_max_err:
+            bx_max_err = d
 
     # Check (2): psi ~ 0, component 8.
     solver.download_owned_component(8, scratch, nvtx)
@@ -231,56 +256,70 @@ def main() raises:
         if isnan(v) or isinf(v):
             raise Error("bench_mhd_brio_wu_3d: psi non-finite")
         var a = v if v >= Float32(0.0) else -v
-        if a > psi_max: psi_max = a
+        if a > psi_max:
+            psi_max = a
 
     # Check (3, 4, 6): rho positivity + bounds + mass conservation.
     solver.download_owned_component(0, scratch, nvtx)
     var rho_max: Float32 = Float32(-1.0e30)
-    var rho_min: Float32 = Float32( 1.0e30)
+    var rho_min: Float32 = Float32(1.0e30)
     var mass_fin: Float64 = 0.0
     for i in range(n_dof):
         var v = scratch[i]
         if isnan(v) or isinf(v):
             raise Error("bench_mhd_brio_wu_3d: rho non-finite")
-        if v > rho_max: rho_max = v
-        if v < rho_min: rho_min = v
+        if v > rho_max:
+            rho_max = v
+        if v < rho_min:
+            rho_min = v
         mass_fin += Float64(v)
     mass_fin /= Float64(n_dof)
 
     print("  Bx max |dev|  =", bx_max_err, "  (tol=", BX_TOL, ")")
-    print("  psi max |val| =", psi_max,    "  (tol=", PSI_TOL, ")")
+    print("  psi max |val| =", psi_max, "  (tol=", PSI_TOL, ")")
     print("  rho in [", rho_min, ",", rho_max, "]")
     print("  mass(IC)=", mass_ic, "  mass(t=T)=", mass_fin)
 
     if bx_max_err > BX_TOL:
         raise Error(
             String("bench_mhd_brio_wu_3d FAILED: Bx drifted ")
-            + String(bx_max_err) + " > tol " + String(BX_TOL)
+            + String(bx_max_err)
+            + " > tol "
+            + String(BX_TOL)
         )
     if psi_max > PSI_TOL:
         raise Error(
             String("bench_mhd_brio_wu_3d FAILED: psi ")
-            + String(psi_max) + " > tol " + String(PSI_TOL)
+            + String(psi_max)
+            + " > tol "
+            + String(PSI_TOL)
         )
     if rho_min < RHO_MIN_OK:
         raise Error(
             String("bench_mhd_brio_wu_3d FAILED: rho_min ")
-            + String(rho_min) + " < " + String(RHO_MIN_OK)
+            + String(rho_min)
+            + " < "
+            + String(RHO_MIN_OK)
         )
     if rho_max > RHO_MAX_OK:
         raise Error(
             String("bench_mhd_brio_wu_3d FAILED: rho_max ")
-            + String(rho_max) + " > " + String(RHO_MAX_OK)
+            + String(rho_max)
+            + " > "
+            + String(RHO_MAX_OK)
         )
 
     var dmass = mass_fin - mass_ic
-    if dmass < 0.0: dmass = -dmass
+    if dmass < 0.0:
+        dmass = -dmass
     var rel = dmass / mass_ic
     if rel > MASS_TOL_REL:
         raise Error(
             String("bench_mhd_brio_wu_3d FAILED: mass drift ")
-            + String(rel * 100.0) + "%% > tol "
-            + String(MASS_TOL_REL * 100.0) + "%%"
+            + String(rel * 100.0)
+            + "%% > tol "
+            + String(MASS_TOL_REL * 100.0)
+            + "%%"
         )
 
     print("=== bench_mhd_brio_wu_3d PASSED ===")

@@ -37,7 +37,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -65,8 +67,10 @@ comptime L2_MAX_REL: Float64 = 0.08
 
 def _periodic_delta(a: Float64, b: Float64, L: Float64) -> Float64:
     var d = a - b
-    if d >  L * 0.5: d -= L
-    if d < -L * 0.5: d += L
+    if d > L * 0.5:
+        d -= L
+    if d < -L * 0.5:
+        d += L
     return d
 
 
@@ -102,12 +106,16 @@ def _run(N: Int) raises -> Float64:
             var rho = T ** (1.0 / (GAMMA - 1.0))
             var p = rho * T
             var E = p / (GAMMA - 1.0) + 0.5 * rho * (u * u + v * v)
-            host_q.append(Float32(rho));     host_ic.append(Float32(rho))
-            host_q.append(Float32(rho * u)); host_ic.append(Float32(rho * u))
-            host_q.append(Float32(rho * v)); host_ic.append(Float32(rho * v))
-            host_q.append(Float32(E));        host_ic.append(Float32(E))
+            host_q.append(Float32(rho))
+            host_ic.append(Float32(rho))
+            host_q.append(Float32(rho * u))
+            host_ic.append(Float32(rho * u))
+            host_q.append(Float32(rho * v))
+            host_ic.append(Float32(rho * v))
+            host_q.append(Float32(E))
+            host_ic.append(Float32(E))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -148,8 +156,13 @@ def _run(N: Int) raises -> Float64:
                 q_b=stage.q_b,
                 q_out=stage.q_out,
                 fstar_scratch=d_fstar.unsafe_ptr(),
-                gamma=gamma, min_density=min_rho, min_pressure=min_p,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                gamma=gamma,
+                min_density=min_rho,
+                min_pressure=min_p,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -160,8 +173,9 @@ def _run(N: Int) raises -> Float64:
     for k in range(n_q):
         var v = hptr_q[k]
         if isnan(v) or isinf(v):
-            raise Error("bench_euler_vortex_2d: non-finite output at index "
-                        + String(k))
+            raise Error(
+                "bench_euler_vortex_2d: non-finite output at index " + String(k)
+            )
         var e = Float64(v - host_ic[k])
         sum_sq += e * e
         var ic = Float64(host_ic[k])
@@ -184,8 +198,7 @@ def main() raises:
     print("  P=", P, "  N=32  (Rusanov)")
 
     var rel_l2 = _run(32)
-    print("  rel L2(state) =", rel_l2,
-          "  (threshold", L2_MAX_REL, ")")
+    print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
 
     if rel_l2 > L2_MAX_REL:
         raise Error(

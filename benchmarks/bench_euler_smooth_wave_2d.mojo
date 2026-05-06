@@ -52,7 +52,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_hllc_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -62,12 +64,12 @@ comptime LX = 1.0
 comptime LY = 1.0
 comptime GAMMA = 1.4
 comptime RHO0 = 1.0
-comptime U0   = 1.0
-comptime V0   = 1.0
-comptime P0   = 1.0
-comptime AMPLITUDE = 0.1       # rho varies from 0.9 to 1.1; still
-                               # smooth, well above Float32 noise
-comptime T_FINAL = 1.0        # one advection period LX / U0
+comptime U0 = 1.0
+comptime V0 = 1.0
+comptime P0 = 1.0
+comptime AMPLITUDE = 0.1  # rho varies from 0.9 to 1.1; still
+# smooth, well above Float32 noise
+comptime T_FINAL = 1.0  # one advection period LX / U0
 comptime CFL = 0.15
 
 # Measured: N=16 ~7e-5, N=32 ~6e-5, N=64 ~1.1e-4 (non-monotone --
@@ -101,12 +103,16 @@ def _run(N: Int) raises -> Float64:
             # Uniform pressure p = p0 -- this is an entropy wave.  No
             # pressure gradient means rho advects exactly at (u0, v0).
             var E = P0 / (GAMMA - 1.0) + 0.5 * rho * (U0 * U0 + V0 * V0)
-            host_q.append(Float32(rho));      host_ic.append(Float32(rho))
-            host_q.append(Float32(rho * U0)); host_ic.append(Float32(rho * U0))
-            host_q.append(Float32(rho * V0)); host_ic.append(Float32(rho * V0))
-            host_q.append(Float32(E));         host_ic.append(Float32(E))
+            host_q.append(Float32(rho))
+            host_ic.append(Float32(rho))
+            host_q.append(Float32(rho * U0))
+            host_ic.append(Float32(rho * U0))
+            host_q.append(Float32(rho * V0))
+            host_ic.append(Float32(rho * V0))
+            host_q.append(Float32(E))
+            host_ic.append(Float32(E))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -120,7 +126,7 @@ def _run(N: Int) raises -> Float64:
     ctx.synchronize()
 
     var h = LX / Float64(N)
-    var c0 = sqrt(GAMMA * P0 / RHO0)       # sound speed
+    var c0 = sqrt(GAMMA * P0 / RHO0)  # sound speed
     var wave_max = sqrt(U0 * U0 + V0 * V0) + c0
     var dt_est = CFL * h / (wave_max * Float64(2 * P + 1))
     var num_steps = Int(T_FINAL / dt_est) + 1
@@ -131,18 +137,29 @@ def _run(N: Int) raises -> Float64:
     var min_p = Float32(1.0e-6)
 
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for _ in range(num_steps):
         for stage in stage_plans:
             euler_rk_stage_hllc_2d[P](
-                ctx, gpu_mesh,
+                ctx,
+                gpu_mesh,
                 gpu_re.d_Lift_ref.unsafe_ptr(),
                 gpu_re.d_D_ref.unsafe_ptr(),
-                stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                stage.q_in,
+                stage.q_a,
+                stage.q_b,
+                stage.q_out,
                 d_fstar.unsafe_ptr(),
-                gamma, min_rho, min_p,
-                stage.a, stage.b, stage.c, dt,
+                gamma,
+                min_rho,
+                min_p,
+                stage.a,
+                stage.b,
+                stage.c,
+                dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -153,8 +170,9 @@ def _run(N: Int) raises -> Float64:
     for k in range(n_q):
         var v = hptr_q[k]
         if isnan(v) or isinf(v):
-            raise Error("bench_euler_smooth_wave_2d: non-finite output at "
-                        + String(k))
+            raise Error(
+                "bench_euler_smooth_wave_2d: non-finite output at " + String(k)
+            )
         var e = Float64(v - host_ic[k])
         sum_sq += e * e
         var ic = Float64(host_ic[k])
@@ -174,8 +192,7 @@ def main() raises:
         return
 
     print("bench_euler_smooth_wave_2d (entropy wave, HLLC)")
-    print("  P=", P, "  sweep N=16, 32, 64   (threshold",
-          L2_MAX_REL, ")")
+    print("  P=", P, "  sweep N=16, 32, 64   (threshold", L2_MAX_REL, ")")
 
     var err16 = _run(16)
     print("  N=16  rel L2 =", err16)
@@ -187,17 +204,23 @@ def main() raises:
     if err16 > L2_MAX_REL:
         raise Error(
             "bench_euler_smooth_wave_2d FAILED: rel L2 at N=16 "
-            + String(err16) + " exceeds " + String(L2_MAX_REL)
+            + String(err16)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
     if err32 > L2_MAX_REL:
         raise Error(
             "bench_euler_smooth_wave_2d FAILED: rel L2 at N=32 "
-            + String(err32) + " exceeds " + String(L2_MAX_REL)
+            + String(err32)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
     if err64 > L2_MAX_REL:
         raise Error(
             "bench_euler_smooth_wave_2d FAILED: rel L2 at N=64 "
-            + String(err64) + " exceeds " + String(L2_MAX_REL)
+            + String(err64)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
 
     print("=== bench_euler_smooth_wave_2d PASSED ===")

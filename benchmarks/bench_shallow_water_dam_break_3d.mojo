@@ -35,7 +35,9 @@ from std.math import sqrt, ceildiv, isnan, isinf
 from src import mpi
 from src.partition import build_partition
 from src.reference import (
-    ReferenceElement, to_float32, num_tet_nodes,
+    ReferenceElement,
+    to_float32,
+    num_tet_nodes,
 )
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions, BC_WALL
@@ -46,8 +48,8 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 2
-comptime NP = num_tet_nodes(P)   # 10 at P=2
-comptime NC = 3                  # ShallowWater.NUM_COMPONENTS
+comptime NP = num_tet_nodes(P)  # 10 at P=2
+comptime NC = 3  # ShallowWater.NUM_COMPONENTS
 
 comptime NX = 40
 comptime NY = 4
@@ -55,7 +57,7 @@ comptime NZ = 4
 comptime LX = 2.0
 comptime LY = Float64(4.0 / 40.0) * 2.0
 comptime LZ = Float64(4.0 / 40.0) * 2.0
-comptime G:   Float32 = 9.81
+comptime G: Float32 = 9.81
 comptime H_L: Float32 = 2.0
 comptime H_R: Float32 = 1.0
 comptime H_MIN: Float32 = 1.0e-6
@@ -71,7 +73,7 @@ comptime H_MAX_OK: Float32 = Float32(H_L) * Float32(1.10)
 def dam_break_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -85,8 +87,8 @@ def dam_break_ic_kernel(
     var h = H_L if px < Float32(LX) * Float32(0.5) else H_R
     var base = (e * NP + nn) * NC
     q[base + 0] = h
-    q[base + 1] = Float32(0.0)    # h*u
-    q[base + 2] = Float32(0.0)    # h*v
+    q[base + 1] = Float32(0.0)  # h*u
+    q[base + 2] = Float32(0.0)  # h*v
 
 
 def main() raises:
@@ -99,8 +101,24 @@ def main() raises:
         return
 
     print("bench_shallow_water_dam_break_3d (3D dam break, closed pool)")
-    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ,
-          "  H_L=", H_L, "  H_R=", H_R, "  T=", T_FINAL)
+    print(
+        "  P=",
+        P,
+        "  NP=",
+        NP,
+        "  mesh=",
+        NX,
+        "x",
+        NY,
+        "x",
+        NZ,
+        "  H_L=",
+        H_L,
+        "  H_R=",
+        H_R,
+        "  T=",
+        T_FINAL,
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -113,21 +131,37 @@ def main() raises:
 
     # Closed pool: BC_WALL on all 6 faces.
     var bcs = BoundaryConditions(
-        BC_WALL, BC_WALL,
-        BC_WALL, BC_WALL,
-        BC_WALL, BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
     )
     var mesh = Mesh[P](
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, ShallowWater.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        ShallowWater.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = ShallowWater(G, H_MIN)
     var solver = Solver[ShallowWater, P](
-        ctx^, mesh^, halo^, physics^,
-        D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
     solver.enable_cell_limiter(True, Float32(0.1))
 
@@ -153,7 +187,9 @@ def main() raises:
     var mass_ic: Float64 = 0.0
     for elem in range(n_owned):
         for nn in range(NP):
-            mass_ic += Float64(h_buf[elem * NP + nn]) * Float64(re.node_weights[nn])
+            mass_ic += Float64(h_buf[elem * NP + nn]) * Float64(
+                re.node_weights[nn]
+            )
 
     var c_peak = sqrt(G * H_L)
     var h_cell = Float32(LX) / Float32(NX)
@@ -169,17 +205,21 @@ def main() raises:
     # h bounds + |v|_max + mass drift.
     solver.download_owned_component(0, h_buf, nvtx)
     var h_max: Float32 = Float32(-1.0e30)
-    var h_min: Float32 = Float32( 1.0e30)
+    var h_min: Float32 = Float32(1.0e30)
     for i in range(n_dof):
         var h = h_buf[i]
         if isnan(h) or isinf(h):
             raise Error("bench_shallow_water_dam_break_3d: non-finite h")
-        if h > h_max: h_max = h
-        if h < h_min: h_min = h
+        if h > h_max:
+            h_max = h
+        if h < h_min:
+            h_min = h
     var mass_fin: Float64 = 0.0
     for elem in range(n_owned):
         for nn in range(NP):
-            mass_fin += Float64(h_buf[elem * NP + nn]) * Float64(re.node_weights[nn])
+            mass_fin += Float64(h_buf[elem * NP + nn]) * Float64(
+                re.node_weights[nn]
+            )
 
     var hu_buf = List[Float32]()
     for _ in range(n_dof):
@@ -195,37 +235,57 @@ def main() raises:
         var u = hu_buf[i] / h_safe
         var v = hv_buf[i] / h_safe
         var vm = sqrt(u * u + v * v)
-        if vm > v_max: v_max = vm
+        if vm > v_max:
+            v_max = vm
 
     var dmass = mass_fin - mass_ic
-    if dmass < 0.0: dmass = -dmass
+    if dmass < 0.0:
+        dmass = -dmass
     var rel = dmass / mass_ic
 
-    print("  h in [", h_min, ",", h_max, "]",
-          "  |v|_max=", v_max,
-          "  mass(IC)=", mass_ic, "  mass(t=T)=", mass_fin,
-          "  rel=", rel)
+    print(
+        "  h in [",
+        h_min,
+        ",",
+        h_max,
+        "]",
+        "  |v|_max=",
+        v_max,
+        "  mass(IC)=",
+        mass_ic,
+        "  mass(t=T)=",
+        mass_fin,
+        "  rel=",
+        rel,
+    )
 
     if rel > MASS_TOL_REL:
         raise Error(
             String("bench_shallow_water_dam_break_3d FAILED: mass drift ")
-            + String(rel) + " > " + String(MASS_TOL_REL)
+            + String(rel)
+            + " > "
+            + String(MASS_TOL_REL)
         )
     if h_min < Float32(0.0):
         raise Error(
             String("bench_shallow_water_dam_break_3d FAILED: h_min ")
-            + String(h_min) + " negative (positivity lost)"
+            + String(h_min)
+            + " negative (positivity lost)"
         )
     if h_max > H_MAX_OK:
         raise Error(
             String("bench_shallow_water_dam_break_3d FAILED: h_max ")
-            + String(h_max) + " > " + String(H_MAX_OK)
+            + String(h_max)
+            + " > "
+            + String(H_MAX_OK)
         )
     var v_bound = Float32(2.0) * Float32(sqrt(G * H_L))
     if v_max > v_bound:
         raise Error(
             String("bench_shallow_water_dam_break_3d FAILED: |v|_max ")
-            + String(v_max) + " > " + String(v_bound)
+            + String(v_max)
+            + " > "
+            + String(v_bound)
         )
 
     print("=== bench_shallow_water_dam_break_3d PASSED ===")

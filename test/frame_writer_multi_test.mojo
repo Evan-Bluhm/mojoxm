@@ -56,26 +56,39 @@ def main() raises:
     var mesh = Mesh[P](
         ctx=ctx,
         part=build_partition(rank=rank, nprocs=size, nx=2, ny=2, nz=2),
-        Lx=1.0, Ly=1.0, Lz=1.0,
+        Lx=1.0,
+        Ly=1.0,
+        Lz=1.0,
         bcs=BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx=ctx, part=mesh.part, nc=Advection.NUM_COMPONENTS,
+        ctx=ctx,
+        part=mesh.part,
+        nc=Advection.NUM_COMPONENTS,
         d_perm=mesh.d_perm.unsafe_ptr(),
     )
     var physics = Advection(
-        vx=Float32(1.0), vy=Float32(0.0), vz=Float32(0.0),
+        vx=Float32(1.0),
+        vy=Float32(0.0),
+        vz=Float32(0.0),
     )
     var solver = Solver[Advection, P](
-        ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^,
-        D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^,
+        ctx=ctx^,
+        mesh=mesh^,
+        halo=halo^,
+        physics=physics^,
+        D_ref=D_ref^,
+        Lift_ref=Lift_ref^,
+        node_weights=node_weights^,
     )
 
     var output_dir = String("/tmp/frame_writer_multi_test_out")
     var writer = FrameWriter[Advection, P](
-        solver=solver, nvtx=nvtx,
+        solver=solver,
+        nvtx=nvtx,
         output_dir=output_dir,
-        component=0, max_concurrent=2,
+        component=0,
+        max_concurrent=2,
     )
 
     # Two synthetic constant fields per frame -- enough to verify the
@@ -97,8 +110,10 @@ def main() raises:
     fields_f1.append(f0.copy())
     fields_f1.append(f1.copy())
     writer.write_frame_multi(
-        solver=solver, t=Float64(0.0),
-        field_names=names, field_data=fields_f1,
+        solver=solver,
+        t=Float64(0.0),
+        field_names=names,
+        field_data=fields_f1,
         nvtx=nvtx,
     )
 
@@ -106,8 +121,10 @@ def main() raises:
     fields_f2.append(f0.copy())
     fields_f2.append(f1.copy())
     writer.write_frame_multi(
-        solver=solver, t=Float64(0.5),
-        field_names=names, field_data=fields_f2,
+        solver=solver,
+        t=Float64(0.5),
+        field_names=names,
+        field_data=fields_f2,
         nvtx=nvtx,
     )
 
@@ -128,17 +145,13 @@ def main() raises:
     for vp in [vtu0_path, vtu1_path, pvd_path]:
         var blob = Path(vp).read_bytes()
         if len(blob) == 0:
-            raise Error(
-                "frame_writer_multi_test: file empty: " + String(vp)
-            )
+            raise Error("frame_writer_multi_test: file empty: " + String(vp))
 
     # --- Check VTU multi-field XML structure on the first frame ---
     var vtu_blob = Path(vtu0_path).read_bytes()
-    var s = String(
-        StringSlice[origin_of(vtu_blob)](unsafe_from_utf8=vtu_blob)
-    )
+    var s = String(StringSlice[origin_of(vtu_blob)](unsafe_from_utf8=vtu_blob))
     if not (String('Scalars="rho"') in s):
-        raise Error("frame_writer_multi_test: VTU missing Scalars=\"rho\"")
+        raise Error('frame_writer_multi_test: VTU missing Scalars="rho"')
     if not (String('Name="rho"') in s):
         raise Error("frame_writer_multi_test: VTU missing rho DataArray")
     if not (String('Name="phi"') in s):
@@ -146,15 +159,13 @@ def main() raises:
 
     # --- Check PVD references both frames in order ---
     var pvd_blob = Path(pvd_path).read_bytes()
-    var ps = String(
-        StringSlice[origin_of(pvd_blob)](unsafe_from_utf8=pvd_blob)
-    )
+    var ps = String(StringSlice[origin_of(pvd_blob)](unsafe_from_utf8=pvd_blob))
     if not (String("frame_00000.vtu") in ps):
         raise Error("frame_writer_multi_test: PVD missing frame 0 reference")
     if not (String("frame_00001.vtu") in ps):
         raise Error("frame_writer_multi_test: PVD missing frame 1 reference")
     print("  wrote frame_00000.vtu, frame_00001.vtu, solution.pvd")
-    print("  XML multi-field layout OK (Scalars=\"rho\", rho + phi DataArrays)")
+    print('  XML multi-field layout OK (Scalars="rho", rho + phi DataArrays)')
     print("  PVD references both frames")
 
     print("=== frame_writer_multi_test PASSED ===")

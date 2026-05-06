@@ -37,11 +37,16 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import (
-    BoundaryConditions2D, BC_WALL, BC_OUTFLOW, BC_INFLOW,
+    BoundaryConditions2D,
+    BC_WALL,
+    BC_OUTFLOW,
+    BC_INFLOW,
 )
 
 
@@ -50,12 +55,12 @@ comptime NX = 64
 comptime NY = 16
 comptime LX = 1.0
 comptime LY = 0.25
-comptime GAMMA     = 1.4
-comptime RHO_0     = 1.0
-comptime P_0       = 1.0
-comptime MACH      = 2.0
-comptime T_FINAL   = 0.20
-comptime CFL       = 0.15
+comptime GAMMA = 1.4
+comptime RHO_0 = 1.0
+comptime P_0 = 1.0
+comptime MACH = 2.0
+comptime T_FINAL = 0.20
+comptime CFL = 0.15
 
 comptime DRIFT_TOL: Float64 = 1.0e-5
 
@@ -70,8 +75,9 @@ def main() raises:
         return
 
     print("bench_euler_channel_steady_2d (Mach-2 channel steady state)")
-    print("  P=", P, "  mesh=", NX, "x", NY,
-          "  BC: -x INFLOW, +x OUTFLOW, y WALL")
+    print(
+        "  P=", P, "  mesh=", NX, "x", NY, "  BC: -x INFLOW, +x OUTFLOW, y WALL"
+    )
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -84,7 +90,10 @@ def main() raises:
     var E_inf = P_0 / (GAMMA - 1.0) + 0.5 * RHO_0 * u_inf * u_inf
 
     var bcs = BoundaryConditions2D(
-        BC_INFLOW, BC_OUTFLOW, BC_WALL, BC_WALL,
+        BC_INFLOW,
+        BC_OUTFLOW,
+        BC_WALL,
+        BC_WALL,
     )
     var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var host_re = ReferenceElement2D[P]()
@@ -99,7 +108,7 @@ def main() raises:
         host_q.append(Float32(0.0))
         host_q.append(Float32(E_inf))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -120,11 +129,11 @@ def main() raises:
 
     var gamma = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
-    var min_p   = Float32(1.0e-6)
-    var inflow_rho  = Float32(RHO_0)
+    var min_p = Float32(1.0e-6)
+    var inflow_rho = Float32(RHO_0)
     var inflow_rhou = Float32(rhou_inf)
     var inflow_rhov = Float32(0.0)
-    var inflow_E    = Float32(E_inf)
+    var inflow_E = Float32(E_inf)
 
     var stage_plans = ssprk3_stage_plans(
         d_q=d_q.unsafe_ptr(),
@@ -146,9 +155,14 @@ def main() raises:
                 gamma=gamma,
                 min_density=min_rho,
                 min_pressure=min_p,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
-                inflow_rho=inflow_rho, inflow_rhou=inflow_rhou,
-                inflow_rhov=inflow_rhov, inflow_E=inflow_E,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
+                inflow_rho=inflow_rho,
+                inflow_rhou=inflow_rhou,
+                inflow_rhov=inflow_rhov,
+                inflow_E=inflow_E,
             )
     ctx.synchronize()
 
@@ -161,33 +175,39 @@ def main() raises:
         for nn in range(NP_p):
             var base = (elem * NP_p + nn) * NC
             var rho = hptr_q[base + 0]
-            var mx  = hptr_q[base + 1]
+            var mx = hptr_q[base + 1]
             if isnan(rho) or isinf(rho) or isnan(mx) or isinf(mx):
                 raise Error("bench_euler_channel_steady_2d: non-finite output")
             var d_rho = Float64(rho) - RHO_0
-            if d_rho < 0.0: d_rho = -d_rho
-            if d_rho > rho_drift_max: rho_drift_max = d_rho
+            if d_rho < 0.0:
+                d_rho = -d_rho
+            if d_rho > rho_drift_max:
+                rho_drift_max = d_rho
             var d_mx = Float64(mx) - rhou_inf
-            if d_mx < 0.0: d_mx = -d_mx
-            if d_mx > rhou_drift_max: rhou_drift_max = d_mx
+            if d_mx < 0.0:
+                d_mx = -d_mx
+            if d_mx > rhou_drift_max:
+                rhou_drift_max = d_mx
 
     print("  steps=", num_steps, "  dt=", dt)
-    print("  max |rho - rho_inflow|  =", rho_drift_max,
-          " (tol", DRIFT_TOL, ")")
-    print("  max |mx - rhou_inflow|  =", rhou_drift_max,
-          " (tol", DRIFT_TOL, ")")
+    print("  max |rho - rho_inflow|  =", rho_drift_max, " (tol", DRIFT_TOL, ")")
+    print(
+        "  max |mx - rhou_inflow|  =", rhou_drift_max, " (tol", DRIFT_TOL, ")"
+    )
 
     if rho_drift_max > DRIFT_TOL:
         raise Error(
             String("bench_euler_channel_steady_2d FAILED: rho_drift ")
             + String(rho_drift_max)
-            + " exceeds " + String(DRIFT_TOL)
+            + " exceeds "
+            + String(DRIFT_TOL)
         )
     if rhou_drift_max > DRIFT_TOL:
         raise Error(
             String("bench_euler_channel_steady_2d FAILED: rhou_drift ")
             + String(rhou_drift_max)
-            + " exceeds " + String(DRIFT_TOL)
+            + " exceeds "
+            + String(DRIFT_TOL)
         )
 
     print("=== bench_euler_channel_steady_2d PASSED ===")

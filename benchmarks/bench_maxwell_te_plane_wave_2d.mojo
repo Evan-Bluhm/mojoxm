@@ -35,7 +35,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D
@@ -93,14 +95,20 @@ def main() raises:
             var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var Bz = cos(two_pi * x)
             var Ey = -c_d * cos(two_pi * x)
-            host_q.append(Float32(0.0));   host_ic.append(Float32(0.0))    # Ex
-            host_q.append(Float32(Ey));    host_ic.append(Float32(Ey))     # Ey
-            host_q.append(Float32(0.0));   host_ic.append(Float32(0.0))    # Ez
-            host_q.append(Float32(0.0));   host_ic.append(Float32(0.0))    # Bx
-            host_q.append(Float32(0.0));   host_ic.append(Float32(0.0))    # By
-            host_q.append(Float32(Bz));    host_ic.append(Float32(Bz))     # Bz
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Ex
+            host_q.append(Float32(Ey))
+            host_ic.append(Float32(Ey))  # Ey
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Ez
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Bx
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # By
+            host_q.append(Float32(Bz))
+            host_ic.append(Float32(Bz))  # Bz
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -137,7 +145,10 @@ def main() raises:
                 q_out=stage.q_out,
                 fstar_scratch=d_fstar.unsafe_ptr(),
                 c=C_LIGHT,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -152,7 +163,9 @@ def main() raises:
                 var k_idx = (elem * NP_p + nn) * NC + c
                 var v = hptr_q[k_idx]
                 if isnan(v) or isinf(v):
-                    raise Error("bench_maxwell_te_plane_wave_2d: non-finite output")
+                    raise Error(
+                        "bench_maxwell_te_plane_wave_2d: non-finite output"
+                    )
                 var err = Float64(v - host_ic[k_idx])
                 sum_sq += err * err
                 var ic = Float64(host_ic[k_idx])
@@ -161,7 +174,8 @@ def main() raises:
                 # identically zero in the analytic solution.
                 if c == 0 or c == 2 or c == 3 or c == 4:
                     var av = Float64(v)
-                    if av < 0.0: av = -av
+                    if av < 0.0:
+                        av = -av
                     if av > max_zero_leak:
                         max_zero_leak = av
 
@@ -169,19 +183,28 @@ def main() raises:
     var l2_ic = sqrt(sum_ic / Float64(n_q))
     var rel = l2 / l2_ic
     print("  rel L2(state) =", rel, "  (threshold", L2_MAX_REL, ")")
-    print("  max |Ex|/|Ez|/|Bx|/|By| =", max_zero_leak,
-          "  (threshold", ZERO_COMPONENT_MAX, ")")
+    print(
+        "  max |Ex|/|Ez|/|Bx|/|By| =",
+        max_zero_leak,
+        "  (threshold",
+        ZERO_COMPONENT_MAX,
+        ")",
+    )
 
     if rel > L2_MAX_REL:
         raise Error(
             String("bench_maxwell_te_plane_wave_2d FAILED: rel L2 ")
-            + String(rel) + " > " + String(L2_MAX_REL)
+            + String(rel)
+            + " > "
+            + String(L2_MAX_REL)
         )
     if max_zero_leak > ZERO_COMPONENT_MAX:
         raise Error(
             String("bench_maxwell_te_plane_wave_2d FAILED: zero-component ")
-            + "leakage " + String(max_zero_leak)
-            + " > " + String(ZERO_COMPONENT_MAX)
+            + "leakage "
+            + String(max_zero_leak)
+            + " > "
+            + String(ZERO_COMPONENT_MAX)
         )
 
     print("=== bench_maxwell_te_plane_wave_2d PASSED ===")

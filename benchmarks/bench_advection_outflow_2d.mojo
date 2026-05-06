@@ -28,7 +28,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_advection import advection_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_OUTFLOW
@@ -71,12 +73,19 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions2D(
-        BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
     )
     var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var host_re = ReferenceElement2D[P]()
     var mesh_coords = LocalMesh2D[P](
-        Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs,
+        Nx=NX,
+        Ny=NY,
+        Lx=LX,
+        Ly=LY,
+        bcs=bcs,
     )
     var gpu_mesh = LocalMesh2DGpu[P](ctx=ctx, host=host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx=ctx, host=host_re)
@@ -93,7 +102,7 @@ def main() raises:
             var v = exp(-(dx * dx + dy * dy) * inv_two_sigma2)
             host_q.append(v)
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -136,8 +145,12 @@ def main() raises:
                 q_b=stage.q_b,
                 q_out=stage.q_out,
                 fstar_scratch=d_fstar.unsafe_ptr(),
-                vx=VX, vy=VY,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                vx=VX,
+                vy=VY,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
 
@@ -153,19 +166,29 @@ def main() raises:
                 raise Error("bench_advection_outflow_2d: non-finite output")
             mass_fin += Float64(v) * node_w[nn]
             var av = v if v >= Float32(0.0) else -v
-            if av > max_abs: max_abs = av
+            if av > max_abs:
+                max_abs = av
 
     var rel = mass_fin / mass_ic
-    if rel < 0.0: rel = -rel
-    print("  mass(IC)=", mass_ic,
-          "  mass(t=T)=", mass_fin,
-          "  rel=", rel,
-          "  max |q|=", max_abs)
+    if rel < 0.0:
+        rel = -rel
+    print(
+        "  mass(IC)=",
+        mass_ic,
+        "  mass(t=T)=",
+        mass_fin,
+        "  rel=",
+        rel,
+        "  max |q|=",
+        max_abs,
+    )
 
     if rel > DRAIN_TOL_REL:
         raise Error(
             String("bench_advection_outflow_2d FAILED: residual mass ")
-            + String(rel) + " > " + String(DRAIN_TOL_REL)
+            + String(rel)
+            + " > "
+            + String(DRAIN_TOL_REL)
         )
 
     print("=== bench_advection_outflow_2d PASSED ===")

@@ -1,10 +1,31 @@
 [project]
 name = "mojoxm"
 version = "0.1.0"
-description = "Add your description here"
+description = "GPU DG hyperbolic solver in Mojo"
 readme = "README.md"
-requires-python = ">=3.14"
-dependencies = [
-    "meshio>=5.3.5",
-    "scipy>=1.17.1",
-]
+requires-python = ">=3.11"
+
+# ----------------------------------------------------------------------
+# Pixi project management.
+#
+# Mojo + the Python helpers (meshio for VTU readback, scipy for the
+# dashboard scripts) are installed from conda.  The Modular nightly
+# channel ships the `mojo` package; everything else comes from
+# conda-forge.
+#
+# Setup:
+#     pixi install                    # materialize .pixi/envs/default
+#     pixi run mojo --version         # sanity check
+#
+# The Makefile defaults `MOJO` to the pixi-resolved binary, so `make`
+# works directly after `pixi install`.
+# ----------------------------------------------------------------------
+
+[tool.pixi.workspace]
+channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+platforms = ["linux-64", "osx-arm64"]
+
+[tool.pixi.dependencies]
+mojo = "*"
+meshio = ">=5.3.5"
+scipy = ">=1.17.1"

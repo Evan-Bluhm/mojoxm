@@ -40,6 +40,7 @@ from std.pathlib import Path
 struct NamedComponent(Copyable, Movable):
     """A (label, conserved-component index) pair to record per frame.
     `label` becomes the CSV column header."""
+
     var name: String
     var component: Int
 
@@ -54,9 +55,9 @@ struct DiagnosticsWriter[PhysT: Physics, P: Int = 2](Movable):
     # to yield an integral.
     var domain_volume: Float64
     # The three reduction kinds, each a list of (label, q-component).
-    var linear:    List[NamedComponent]   # int(q[c]) dV
-    var squared:   List[NamedComponent]   # int(q[c]^2) dV
-    var max_abs:   List[NamedComponent]   # max_x |q[c]|
+    var linear: List[NamedComponent]  # int(q[c]) dV
+    var squared: List[NamedComponent]  # int(q[c]^2) dV
+    var max_abs: List[NamedComponent]  # max_x |q[c]|
     # Rank 0 owns the CSV file.  Other ranks hold an empty string;
     # everyone still participates in the allreduces.
     var csv_path: String
@@ -72,7 +73,7 @@ struct DiagnosticsWriter[PhysT: Physics, P: Int = 2](Movable):
         out self,
         mut solver: Solver[Self.PhysT, Self.P],
         csv_path: String,
-        linear:  List[NamedComponent],
+        linear: List[NamedComponent],
         squared: List[NamedComponent],
         max_abs: List[NamedComponent],
         domain_lx: Float64,
@@ -89,9 +90,7 @@ struct DiagnosticsWriter[PhysT: Physics, P: Int = 2](Movable):
         self.linear = linear.copy()
         self.squared = squared.copy()
         self.max_abs = max_abs.copy()
-        self.is_rank_zero = (
-            part.rx == 0 and part.ry == 0 and part.rz == 0
-        )
+        self.is_rank_zero = part.rx == 0 and part.ry == 0 and part.rz == 0
         self.csv_path = csv_path
         self.scratch = List[Float32]()
         for _ in range(solver.num_owned_elements * Self.NP):
@@ -115,7 +114,8 @@ struct DiagnosticsWriter[PhysT: Physics, P: Int = 2](Movable):
             Path(csv_path).write_text(header)
 
     def record(
-        mut self, t: Float64,
+        mut self,
+        t: Float64,
         mut solver: Solver[Self.PhysT, Self.P],
         mut nvtx: NvtxContext,
     ) raises:
@@ -162,8 +162,12 @@ struct DiagnosticsWriter[PhysT: Physics, P: Int = 2](Movable):
             var lbuf = InlineArray[Float32, 1](fill=0.0)
             var rbuf = InlineArray[Float32, 1](fill=0.0)
             lbuf[0] = mloc
-            var lp = rebind[UnsafePointer[Float32, MutAnyOrigin]](lbuf.unsafe_ptr())
-            var rp = rebind[UnsafePointer[Float32, MutAnyOrigin]](rbuf.unsafe_ptr())
+            var lp = rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                lbuf.unsafe_ptr()
+            )
+            var rp = rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                rbuf.unsafe_ptr()
+            )
             mpi.allreduce_float_max(lp, rp, 1)
             self.last_row.append(Float64(rbuf[0]))
 
@@ -186,6 +190,7 @@ struct DiagnosticsWriter[PhysT: Physics, P: Int = 2](Movable):
 # One-shot Float64 allreduce-sum (no shim for scalar-only; just use the
 # 1-element buffer form).
 # ----------------------------------------------------------------------
+
 
 def _allreduce_one_double(local: Float64, mut out: Float64) raises:
     var lbuf = InlineArray[Float64, 1](fill=0.0)

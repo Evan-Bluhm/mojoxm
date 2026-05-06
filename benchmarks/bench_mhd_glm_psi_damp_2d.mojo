@@ -33,11 +33,14 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd_glm import (
-    mhd_glm_rk_stage_2d, launch_mhd_glm_psi_damp_2d,
+    mhd_glm_rk_stage_2d,
+    launch_mhd_glm_psi_damp_2d,
 )
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -47,12 +50,12 @@ comptime LX = 1.0
 comptime LY = 1.0
 
 comptime GAMMA: Float64 = 5.0 / 3.0
-comptime RHO0:  Float64 = 1.0
-comptime P0:    Float64 = 1.0
-comptime A0:    Float64 = 0.1            # psi amplitude
-comptime C_H:   Float64 = 0.0            # no transport
-comptime ALPHA_D: Float64 = 1.0          # damping rate
-comptime T_FINAL: Float64 = 1.0          # so psi(T) = A0/e
+comptime RHO0: Float64 = 1.0
+comptime P0: Float64 = 1.0
+comptime A0: Float64 = 0.1  # psi amplitude
+comptime C_H: Float64 = 0.0  # no transport
+comptime ALPHA_D: Float64 = 1.0  # damping rate
+comptime T_FINAL: Float64 = 1.0  # so psi(T) = A0/e
 
 comptime CFL: Float64 = 0.15
 
@@ -79,18 +82,18 @@ def _run(NX: Int) raises -> Bool:
     var host_q = List[Float32]()
     # IC: rest state, uniform psi = A0.
     var rho0_f = Float32(RHO0)
-    var E0 = Float32(P0 / (GAMMA - 1.0))   # u=v=0, B=0 -> no kinetic / mag
+    var E0 = Float32(P0 / (GAMMA - 1.0))  # u=v=0, B=0 -> no kinetic / mag
     var A0_f = Float32(A0)
     for _ in range(gpu_mesh.num_elements * NP_p):
-        host_q.append(rho0_f)        # rho
+        host_q.append(rho0_f)  # rho
         host_q.append(Float32(0.0))  # rho*u
         host_q.append(Float32(0.0))  # rho*v
         host_q.append(Float32(0.0))  # Bx
         host_q.append(Float32(0.0))  # By
-        host_q.append(E0)            # E
-        host_q.append(A0_f)          # psi
+        host_q.append(E0)  # E
+        host_q.append(A0_f)  # psi
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -108,7 +111,7 @@ def _run(NX: Int) raises -> Bool:
     # stage equals the SSPRK3 combination of psi values from previous
     # stages.  After the third stage psi is unchanged from IC (no
     # flux source); then the damping kernel multiplies by exp(-alpha_d*dt).
-    var c = 1.0   # advection speed irrelevant; psi has no flux
+    var c = 1.0  # advection speed irrelevant; psi has no flux
     var h_cell = LX / Float64(NX)
     var dt_est = CFL * h_cell / (c * Float64(2 * P + 1))
     var num_steps = Int(T_FINAL / dt_est) + 1
@@ -116,8 +119,8 @@ def _run(NX: Int) raises -> Bool:
 
     var gamma_f = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
-    var min_p   = Float32(1.0e-6)
-    var c_h_f   = Float32(C_H)
+    var min_p = Float32(1.0e-6)
+    var c_h_f = Float32(C_H)
     var alpha_d_f = Float32(ALPHA_D)
 
     var stage_plans = ssprk3_stage_plans(
@@ -144,13 +147,19 @@ def _run(NX: Int) raises -> Bool:
                 min_density=min_rho,
                 min_pressure=min_p,
                 c_h=c_h_f,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
         # Operator-splitting psi damping: ONCE per timestep.
         comptime NP_t = num_tri_nodes_2d(P)
         launch_mhd_glm_psi_damp_2d[NP_t](
-            ctx, d_q.unsafe_ptr(), gpu_mesh.num_elements,
-            alpha_d_f, dt,
+            ctx,
+            d_q.unsafe_ptr(),
+            gpu_mesh.num_elements,
+            alpha_d_f,
+            dt,
         )
     ctx.synchronize()
 
@@ -167,37 +176,58 @@ def _run(NX: Int) raises -> Bool:
         if isnan(psi) or isinf(psi):
             raise Error("bench_mhd_glm_psi_damp_2d: non-finite psi")
         var d = Float64(psi) - psi_expect
-        if d < 0.0: d = -d
-        if d > max_psi_err: max_psi_err = d
+        if d < 0.0:
+            d = -d
+        if d > max_psi_err:
+            max_psi_err = d
         # Check that non-psi state unchanged.
         var d_rho = hptr_q[base + 0] - rho0_f
-        if d_rho < 0.0: d_rho = -d_rho
-        if d_rho > max_state_err: max_state_err = d_rho
+        if d_rho < 0.0:
+            d_rho = -d_rho
+        if d_rho > max_state_err:
+            max_state_err = d_rho
         # Momenta and B should still be 0.
         for c_idx in range(1, 5):
             var v = hptr_q[base + c_idx]
             var av = v if v >= Float32(0.0) else -v
-            if av > max_state_err: max_state_err = av
+            if av > max_state_err:
+                max_state_err = av
         var d_E = hptr_q[base + 5] - E0
-        if d_E < 0.0: d_E = -d_E
-        if d_E > max_state_err: max_state_err = d_E
+        if d_E < 0.0:
+            d_E = -d_E
+        if d_E > max_state_err:
+            max_state_err = d_E
 
     var rel_err = max_psi_err / Float64(A0)
-    print("  N=", NX, "  steps=", num_steps,
-          "  psi_expect=", psi_expect,
-          "  max |psi-expect|=", max_psi_err,
-          "  rel=", rel_err,
-          "  max state drift=", max_state_err)
+    print(
+        "  N=",
+        NX,
+        "  steps=",
+        num_steps,
+        "  psi_expect=",
+        psi_expect,
+        "  max |psi-expect|=",
+        max_psi_err,
+        "  rel=",
+        rel_err,
+        "  max state drift=",
+        max_state_err,
+    )
     if rel_err > PSI_TOL_REL:
         raise Error(
-            String("bench_mhd_glm_psi_damp_2d FAILED at NX=") + String(NX)
-            + ": psi rel err " + String(rel_err)
-            + " > tol " + String(PSI_TOL_REL)
+            String("bench_mhd_glm_psi_damp_2d FAILED at NX=")
+            + String(NX)
+            + ": psi rel err "
+            + String(rel_err)
+            + " > tol "
+            + String(PSI_TOL_REL)
         )
     if max_state_err > STATE_TOL:
         raise Error(
-            String("bench_mhd_glm_psi_damp_2d FAILED at NX=") + String(NX)
-            + ": non-psi state drifted by " + String(max_state_err)
+            String("bench_mhd_glm_psi_damp_2d FAILED at NX=")
+            + String(NX)
+            + ": non-psi state drifted by "
+            + String(max_state_err)
         )
     return True
 
@@ -206,9 +236,16 @@ def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
     mpi.init()
     print("bench_mhd_glm_psi_damp_2d (GLM operator-splitting decay)")
-    print("  P=", P, "  alpha_d=", ALPHA_D, "  T=", T_FINAL,
-          "  expected psi/A0 = exp(-alpha_d*T) = ",
-          exp(-Float64(ALPHA_D) * Float64(T_FINAL)))
+    print(
+        "  P=",
+        P,
+        "  alpha_d=",
+        ALPHA_D,
+        "  T=",
+        T_FINAL,
+        "  expected psi/A0 = exp(-alpha_d*T) = ",
+        exp(-Float64(ALPHA_D) * Float64(T_FINAL)),
+    )
 
     _ = _run(8)
     _ = _run(12)

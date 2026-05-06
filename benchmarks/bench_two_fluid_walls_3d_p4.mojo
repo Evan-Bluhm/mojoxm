@@ -30,7 +30,7 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 4
-comptime NP = num_tet_nodes(P)        # 35 at P=4
+comptime NP = num_tet_nodes(P)  # 35 at P=4
 comptime NC = 17
 
 comptime NX = 2
@@ -43,20 +43,20 @@ comptime IC_BLOCK = 256
 
 comptime GAMMA_E: Float32 = Float32(5.0 / 3.0)
 comptime GAMMA_I: Float32 = Float32(5.0 / 3.0)
-comptime Q_E:     Float32 = -1.0
-comptime M_E:     Float32 =  1.0
-comptime Q_I:     Float32 =  1.0
-comptime M_I:     Float32 = 25.0
-comptime EPS0:    Float32 =  1.0
+comptime Q_E: Float32 = -1.0
+comptime M_E: Float32 = 1.0
+comptime Q_I: Float32 = 1.0
+comptime M_I: Float32 = 25.0
+comptime EPS0: Float32 = 1.0
 comptime C_LIGHT: Float32 = 10.0
-comptime C_H:     Float32 = Float32(0.0)
+comptime C_H: Float32 = Float32(0.0)
 comptime ALPHA_D: Float32 = Float32(0.0)
-comptime MIN_DENSITY:  Float32 = Float32(1.0e-6)
+comptime MIN_DENSITY: Float32 = Float32(1.0e-6)
 comptime MIN_PRESSURE: Float32 = Float32(1.0e-6)
 
-comptime N0:    Float32 = 1.0
-comptime P_E0:  Float32 = 0.01
-comptime P_I0:  Float32 = 0.01
+comptime N0: Float32 = 1.0
+comptime P_E0: Float32 = 0.01
+comptime P_I0: Float32 = 0.01
 
 comptime CFL: Float32 = Float32(0.1)
 comptime T_FINAL: Float32 = 0.5
@@ -108,9 +108,23 @@ def main() raises:
         print("bench_two_fluid_walls_3d_p4: runs at np=1 only")
         return
 
-    print("bench_two_fluid_walls_3d_p4 (3D Two-Fluid BC_WALL preservation, P=4)")
-    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ,
-          "   T=", T_FINAL)
+    print(
+        "bench_two_fluid_walls_3d_p4 (3D Two-Fluid BC_WALL preservation, P=4)"
+    )
+    print(
+        "  P=",
+        P,
+        "  NP=",
+        NP,
+        "  mesh=",
+        NX,
+        "x",
+        NY,
+        "x",
+        NZ,
+        "   T=",
+        T_FINAL,
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -122,29 +136,50 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var bcs = BoundaryConditions(
-        BC_WALL, BC_WALL,
-        BC_WALL, BC_WALL,
-        BC_WALL, BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
     )
     var mesh = Mesh[P](
         ctx=ctx,
         part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ),
-        Lx=LX, Ly=LY, Lz=LZ, bcs=bcs,
+        Lx=LX,
+        Ly=LY,
+        Lz=LZ,
+        bcs=bcs,
     )
     var halo = HaloExchange(
-        ctx=ctx, part=mesh.part, nc=FiveMomentTwoFluid.NUM_COMPONENTS,
-        d_perm=mesh.d_perm.unsafe_ptr(), bcs=bcs,
+        ctx=ctx,
+        part=mesh.part,
+        nc=FiveMomentTwoFluid.NUM_COMPONENTS,
+        d_perm=mesh.d_perm.unsafe_ptr(),
+        bcs=bcs,
     )
     var physics = FiveMomentTwoFluid(
-        gamma_e=GAMMA_E, gamma_i=GAMMA_I,
-        q_e=Q_E, m_e=M_E, q_i=Q_I, m_i=M_I,
-        eps0=EPS0, c_light=C_LIGHT,
-        c_h=C_H, alpha_d=ALPHA_D,
-        min_density=MIN_DENSITY, min_pressure=MIN_PRESSURE,
+        gamma_e=GAMMA_E,
+        gamma_i=GAMMA_I,
+        q_e=Q_E,
+        m_e=M_E,
+        q_i=Q_I,
+        m_i=M_I,
+        eps0=EPS0,
+        c_light=C_LIGHT,
+        c_h=C_H,
+        alpha_d=ALPHA_D,
+        min_density=MIN_DENSITY,
+        min_pressure=MIN_PRESSURE,
     )
     var solver = Solver[FiveMomentTwoFluid, P](
-        ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^,
-        D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^,
+        ctx=ctx^,
+        mesh=mesh^,
+        halo=halo^,
+        physics=physics^,
+        D_ref=D_ref^,
+        Lift_ref=Lift_ref^,
+        node_weights=node_weights^,
     )
 
     solver.ctx.enqueue_function[fill_constant_kernel, fill_constant_kernel](
@@ -179,7 +214,9 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
     )
@@ -192,16 +229,19 @@ def main() raises:
         if isnan(v) or isinf(v):
             raise Error("bench_two_fluid_walls_3d_p4: non-finite output")
         var d = Float64(v) - Float64(host_ic[k])
-        if d < 0.0: d = -d
-        if d > max_drift: max_drift = d
+        if d < 0.0:
+            d = -d
+        if d > max_drift:
+            max_drift = d
 
-    print("  max |q - q_IC| =", max_drift,
-          "  (threshold", DRIFT_TOL, ")")
+    print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
 
     if max_drift > DRIFT_TOL:
         raise Error(
             "bench_two_fluid_walls_3d_p4 FAILED: max drift "
-            + String(max_drift) + " > " + String(DRIFT_TOL)
+            + String(max_drift)
+            + " > "
+            + String(DRIFT_TOL)
         )
 
     print("=== bench_two_fluid_walls_3d_p4 PASSED ===")

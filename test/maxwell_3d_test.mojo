@@ -90,20 +90,36 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh[P](
-        ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(0, 1, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Maxwell.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        Maxwell.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = Maxwell(
         C_LIGHT,
-        Float32(0.0), Float32(0.0), Float32(0.0),   # J = 0
-        Float32(0.0), Float32(0.0), Float32(0.0),   # M = 0
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),  # J = 0
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),  # M = 0
     )
     var solver = Solver[Maxwell, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     var num_owned = solver.num_owned_elements
@@ -143,18 +159,30 @@ def main() raises:
         for k in range(n_dof):
             var v = scratch[k]
             if isnan(v) or isinf(v):
-                raise Error("maxwell_3d_test: non-finite at component "
-                            + String(c))
+                raise Error(
+                    "maxwell_3d_test: non-finite at component " + String(c)
+                )
             var d = v - ic_vals[c]
             var ad = d if d >= Float32(0.0) else -d
-            if ad > max_err: max_err = ad
+            if ad > max_err:
+                max_err = ad
 
-    print("  max |q - IC| over", NUM_STEPS, "steps =", max_err,
-          "  (tol", CONST_TOL, ")")
+    print(
+        "  max |q - IC| over",
+        NUM_STEPS,
+        "steps =",
+        max_err,
+        "  (tol",
+        CONST_TOL,
+        ")",
+    )
     if max_err > CONST_TOL:
         raise Error(
             "maxwell_3d_test FAILED: constant state shifted by "
-            + String(max_err) + " over " + String(NUM_STEPS) + " steps"
+            + String(max_err)
+            + " over "
+            + String(NUM_STEPS)
+            + " steps"
         )
 
     print("=== maxwell_3d_test PASSED ===")

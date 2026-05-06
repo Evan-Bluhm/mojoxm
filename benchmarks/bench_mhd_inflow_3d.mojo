@@ -43,7 +43,10 @@ from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
 from src.boundary import (
-    BoundaryConditions, BC_INFLOW, BC_OUTFLOW, BC_INTERIOR,
+    BoundaryConditions,
+    BC_INFLOW,
+    BC_OUTFLOW,
+    BC_INTERIOR,
 )
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
@@ -59,18 +62,18 @@ comptime LX = 1.0
 comptime LY = Float64(4.0 / 32.0)
 comptime LZ = Float64(4.0 / 32.0)
 
-comptime GAMMA     = Float32(5.0 / 3.0)
-comptime RHO0      = Float32(1.0)
-comptime U0        = Float32(0.5)
-comptime B0        = Float32(1.0)
-comptime P0        = Float32(0.1)
-comptime C_H       = Float32(0.0)   # GLM disabled: psi stays 0 trivially
-comptime ALPHA_D   = Float32(0.0)
-comptime MIN_DENSITY  = Float32(1.0e-6)
+comptime GAMMA = Float32(5.0 / 3.0)
+comptime RHO0 = Float32(1.0)
+comptime U0 = Float32(0.5)
+comptime B0 = Float32(1.0)
+comptime P0 = Float32(0.1)
+comptime C_H = Float32(0.0)  # GLM disabled: psi stays 0 trivially
+comptime ALPHA_D = Float32(0.0)
+comptime MIN_DENSITY = Float32(1.0e-6)
 comptime MIN_PRESSURE = Float32(1.0e-6)
 
 comptime T_FINAL = Float32(1.0)
-comptime CFL     = Float32(0.2)
+comptime CFL = Float32(0.2)
 comptime IC_BLOCK = 256
 
 # Empirical: matched-state preservation hits the Float32 floor at
@@ -82,7 +85,7 @@ comptime REL_TOL: Float64 = 5.0e-3
 def uniform_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -120,8 +123,22 @@ def main() raises:
         return
 
     print("bench_mhd_inflow_3d (3D MHD BC_INFLOW + BC_OUTFLOW preservation)")
-    print("  P=", P, "  mesh=", NX, "x", NY, "x", NZ,
-          "   U0=", U0, "   B0=", B0, "   T=", T_FINAL)
+    print(
+        "  P=",
+        P,
+        "  mesh=",
+        NX,
+        "x",
+        NY,
+        "x",
+        NZ,
+        "   U0=",
+        U0,
+        "   B0=",
+        B0,
+        "   T=",
+        T_FINAL,
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -130,18 +147,27 @@ def main() raises:
 
     # Inflow on -x, outflow on +x, periodic in y/z.
     var bcs = BoundaryConditions(
-        BC_INFLOW, BC_OUTFLOW,         # -x, +x
-        BC_INTERIOR, BC_INTERIOR,      # -y, +y
-        BC_INTERIOR, BC_INTERIOR,      # -z, +z
+        BC_INFLOW,
+        BC_OUTFLOW,  # -x, +x
+        BC_INTERIOR,
+        BC_INTERIOR,  # -y, +y
+        BC_INTERIOR,
+        BC_INTERIOR,  # -z, +z
     )
     var mesh = Mesh(
         ctx=ctx,
         part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ),
-        Lx=LX, Ly=LY, Lz=LZ, bcs=bcs,
+        Lx=LX,
+        Ly=LY,
+        Lz=LZ,
+        bcs=bcs,
     )
     var halo = HaloExchange(
-        ctx=ctx, part=mesh.part, nc=IdealMHD.NUM_COMPONENTS,
-        d_perm=mesh.d_perm.unsafe_ptr(), bcs=bcs,
+        ctx=ctx,
+        part=mesh.part,
+        nc=IdealMHD.NUM_COMPONENTS,
+        d_perm=mesh.d_perm.unsafe_ptr(),
+        bcs=bcs,
     )
 
     # Inflow ghost state: same as IC so the analytic solution is the
@@ -151,17 +177,28 @@ def main() raises:
     var E0 = P0 / (GAMMA - Float32(1.0)) + ke + pe
 
     var physics = IdealMHD(
-        gamma=GAMMA, min_density=MIN_DENSITY, min_pressure=MIN_PRESSURE,
-        c_h=C_H, alpha_d=ALPHA_D,
-        inflow_rho=RHO0, inflow_rhou=RHO0 * U0,
-        inflow_rhov=Float32(0.0), inflow_rhow=Float32(0.0),
+        gamma=GAMMA,
+        min_density=MIN_DENSITY,
+        min_pressure=MIN_PRESSURE,
+        c_h=C_H,
+        alpha_d=ALPHA_D,
+        inflow_rho=RHO0,
+        inflow_rhou=RHO0 * U0,
+        inflow_rhov=Float32(0.0),
+        inflow_rhow=Float32(0.0),
         inflow_E=E0,
-        inflow_Bx=B0, inflow_By=Float32(0.0), inflow_Bz=Float32(0.0),
+        inflow_Bx=B0,
+        inflow_By=Float32(0.0),
+        inflow_Bz=Float32(0.0),
         inflow_psi=Float32(0.0),
     )
     var solver = Solver[IdealMHD](
-        ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^,
-        D_ref=refs.D_ref^, Lift_ref=refs.Lift_ref^,
+        ctx=ctx^,
+        mesh=mesh^,
+        halo=halo^,
+        physics=physics^,
+        D_ref=refs.D_ref^,
+        Lift_ref=refs.Lift_ref^,
         node_weights=refs.node_weights^,
     )
 
@@ -176,7 +213,9 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * IdealMHD.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
     )
@@ -200,7 +239,9 @@ def main() raises:
         solver.step_ssprk3(dt_used, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
     )
@@ -213,7 +254,7 @@ def main() raises:
     # tolerance using the largest non-zero IC component as scale.
     var max_drift: Float64 = 0.0
     var n_owned_nodes = solver.num_owned_elements * N_P
-    var ref_scale = Float64(E0)        # largest |q| component in the IC
+    var ref_scale = Float64(E0)  # largest |q| component in the IC
     for i in range(n_owned_nodes):
         for c in range(9):
             var qv = q_ptr[i * 9 + c]
@@ -221,17 +262,20 @@ def main() raises:
                 raise Error("bench_mhd_inflow_3d: non-finite output")
             var qref = host_ic[i * 9 + c]
             var d = Float64(qv) - Float64(qref)
-            if d < 0.0: d = -d
+            if d < 0.0:
+                d = -d
             var rel = d / ref_scale
-            if rel > max_drift: max_drift = rel
+            if rel > max_drift:
+                max_drift = rel
 
-    print("  max relative drift   =", max_drift,
-          "  (threshold", REL_TOL, ")")
+    print("  max relative drift   =", max_drift, "  (threshold", REL_TOL, ")")
 
     if max_drift > REL_TOL:
         raise Error(
             "bench_mhd_inflow_3d FAILED: max relative drift "
-            + String(max_drift) + " > " + String(REL_TOL)
+            + String(max_drift)
+            + " > "
+            + String(REL_TOL)
         )
 
     print("=== bench_mhd_inflow_3d PASSED ===")

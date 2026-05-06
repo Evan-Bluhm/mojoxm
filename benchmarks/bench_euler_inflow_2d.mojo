@@ -38,11 +38,16 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_hllc_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import (
-    BoundaryConditions2D, BC_INFLOW, BC_OUTFLOW, BC_INTERIOR,
+    BoundaryConditions2D,
+    BC_INFLOW,
+    BC_OUTFLOW,
+    BC_INTERIOR,
 )
 
 
@@ -52,22 +57,22 @@ comptime NY = 4
 comptime LX = 1.0
 comptime LY = Float64(NY) / Float64(NX) * LX
 
-comptime GAMMA:   Float32 = 1.4
-comptime RHO0:    Float32 = 1.0
-comptime U0:      Float32 = 0.5
-comptime P0:      Float32 = 1.0
+comptime GAMMA: Float32 = 1.4
+comptime RHO0: Float32 = 1.0
+comptime U0: Float32 = 0.5
+comptime P0: Float32 = 1.0
 comptime MIN_RHO: Float32 = 1.0e-6
-comptime MIN_P:   Float32 = 1.0e-6
+comptime MIN_P: Float32 = 1.0e-6
 comptime CFL: Float64 = 0.15
 comptime T_FINAL: Float64 = 1.0
 
 # Empirical: state drift sits at the Float32 floor on this uniform
 # IC (~few * 1e-5).  2e-3 leaves ample margin for any meaningful
 # BC-coupling regression while staying well above the noise floor.
-comptime RHO_REL_TOL:  Float64 = 2.0e-3
+comptime RHO_REL_TOL: Float64 = 2.0e-3
 comptime RHOU_REL_TOL: Float64 = 2.0e-3
-comptime RHOV_TOL:     Float64 = 1.0e-3
-comptime E_REL_TOL:    Float64 = 2.0e-3
+comptime RHOV_TOL: Float64 = 1.0e-3
+comptime E_REL_TOL: Float64 = 2.0e-3
 
 
 def main() raises:
@@ -80,9 +85,18 @@ def main() raises:
         return
 
     print("bench_euler_inflow_2d (BC_INFLOW preservation gate, HLLC)")
-    print("  P=", P, "  mesh=", NX, "x", NY,
-          "   M=", U0 / sqrt(GAMMA * P0 / RHO0),
-          "   T=", T_FINAL)
+    print(
+        "  P=",
+        P,
+        "  mesh=",
+        NX,
+        "x",
+        NY,
+        "   M=",
+        U0 / sqrt(GAMMA * P0 / RHO0),
+        "   T=",
+        T_FINAL,
+    )
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -91,8 +105,10 @@ def main() raises:
 
     # Periodic in y (BC_INTERIOR), inflow on -x, outflow on +x.
     var bcs = BoundaryConditions2D(
-        BC_INFLOW, BC_OUTFLOW,         # -x, +x
-        BC_INTERIOR, BC_INTERIOR,      # -y, +y (periodic)
+        BC_INFLOW,
+        BC_OUTFLOW,  # -x, +x
+        BC_INTERIOR,
+        BC_INTERIOR,  # -y, +y (periodic)
     )
     var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var host_re = ReferenceElement2D[P]()
@@ -111,7 +127,7 @@ def main() raises:
         host_q.append(Float32(0.0))
         host_q.append(E0)
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -134,10 +150,10 @@ def main() raises:
     print("  steps=", num_steps, "  dt=", dt)
 
     # Inflow ghost state passed to every RK stage.
-    var inflow_rho  = RHO0
+    var inflow_rho = RHO0
     var inflow_rhou = RHO0 * U0
     var inflow_rhov = Float32(0.0)
-    var inflow_E    = E0
+    var inflow_E = E0
 
     var stage_plans = ssprk3_stage_plans(
         d_q=d_q.unsafe_ptr(),
@@ -156,10 +172,17 @@ def main() raises:
                 q_b=stage.q_b,
                 q_out=stage.q_out,
                 fstar_scratch=d_fstar.unsafe_ptr(),
-                gamma=GAMMA, min_density=MIN_RHO, min_pressure=MIN_P,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
-                inflow_rho=inflow_rho, inflow_rhou=inflow_rhou,
-                inflow_rhov=inflow_rhov, inflow_E=inflow_E,
+                gamma=GAMMA,
+                min_density=MIN_RHO,
+                min_pressure=MIN_P,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
+                inflow_rho=inflow_rho,
+                inflow_rhou=inflow_rhou,
+                inflow_rhov=inflow_rhov,
+                inflow_E=inflow_E,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -171,53 +194,101 @@ def main() raises:
     var max_E_dev: Float64 = 0.0
     var n_owned_nodes = gpu_mesh.num_elements * NP_p
     for i in range(n_owned_nodes):
-        var rho  = hptr_q[i * 4 + 0]
+        var rho = hptr_q[i * 4 + 0]
         var rhou = hptr_q[i * 4 + 1]
         var rhov = hptr_q[i * 4 + 2]
-        var E    = hptr_q[i * 4 + 3]
-        if (isnan(rho) or isinf(rho) or isnan(rhou) or isinf(rhou)
-            or isnan(rhov) or isinf(rhov) or isnan(E) or isinf(E)):
+        var E = hptr_q[i * 4 + 3]
+        if (
+            isnan(rho)
+            or isinf(rho)
+            or isnan(rhou)
+            or isinf(rhou)
+            or isnan(rhov)
+            or isinf(rhov)
+            or isnan(E)
+            or isinf(E)
+        ):
             raise Error("bench_euler_inflow_2d: non-finite output")
         var drho = Float64(rho - RHO0)
-        if drho < 0.0: drho = -drho
-        if drho > max_rho_dev: max_rho_dev = drho
+        if drho < 0.0:
+            drho = -drho
+        if drho > max_rho_dev:
+            max_rho_dev = drho
         var drhou = Float64(rhou - RHO0 * U0)
-        if drhou < 0.0: drhou = -drhou
-        if drhou > max_rhou_dev: max_rhou_dev = drhou
+        if drhou < 0.0:
+            drhou = -drhou
+        if drhou > max_rhou_dev:
+            max_rhou_dev = drhou
         var arhov = Float64(rhov)
-        if arhov < 0.0: arhov = -arhov
-        if arhov > max_rhov: max_rhov = arhov
+        if arhov < 0.0:
+            arhov = -arhov
+        if arhov > max_rhov:
+            max_rhov = arhov
         var dE = Float64(E - E0)
-        if dE < 0.0: dE = -dE
-        if dE > max_E_dev: max_E_dev = dE
+        if dE < 0.0:
+            dE = -dE
+        if dE > max_E_dev:
+            max_E_dev = dE
 
-    var rho_rel  = max_rho_dev  / Float64(RHO0)
+    var rho_rel = max_rho_dev / Float64(RHO0)
     var rhou_rel = max_rhou_dev / Float64(RHO0 * U0)
-    var E_rel    = max_E_dev    / Float64(E0)
-    print("  max |rho - rho0| / rho0       =", rho_rel,  "  (threshold", RHO_REL_TOL,  ")")
-    print("  max |rhou - rho0*u0|/rho0*u0  =", rhou_rel, "  (threshold", RHOU_REL_TOL, ")")
-    print("  max |rhov|                    =", max_rhov, "  (threshold", RHOV_TOL,     ")")
-    print("  max |E - E0| / E0             =", E_rel,    "  (threshold", E_REL_TOL,    ")")
+    var E_rel = max_E_dev / Float64(E0)
+    print(
+        "  max |rho - rho0| / rho0       =",
+        rho_rel,
+        "  (threshold",
+        RHO_REL_TOL,
+        ")",
+    )
+    print(
+        "  max |rhou - rho0*u0|/rho0*u0  =",
+        rhou_rel,
+        "  (threshold",
+        RHOU_REL_TOL,
+        ")",
+    )
+    print(
+        "  max |rhov|                    =",
+        max_rhov,
+        "  (threshold",
+        RHOV_TOL,
+        ")",
+    )
+    print(
+        "  max |E - E0| / E0             =",
+        E_rel,
+        "  (threshold",
+        E_REL_TOL,
+        ")",
+    )
 
     if rho_rel > RHO_REL_TOL:
         raise Error(
             "bench_euler_inflow_2d FAILED: rho rel err "
-            + String(rho_rel) + " > " + String(RHO_REL_TOL)
+            + String(rho_rel)
+            + " > "
+            + String(RHO_REL_TOL)
         )
     if rhou_rel > RHOU_REL_TOL:
         raise Error(
             "bench_euler_inflow_2d FAILED: rhou rel err "
-            + String(rhou_rel) + " > " + String(RHOU_REL_TOL)
+            + String(rhou_rel)
+            + " > "
+            + String(RHOU_REL_TOL)
         )
     if max_rhov > RHOV_TOL:
         raise Error(
             "bench_euler_inflow_2d FAILED: max |rhov| "
-            + String(max_rhov) + " > " + String(RHOV_TOL)
+            + String(max_rhov)
+            + " > "
+            + String(RHOV_TOL)
         )
     if E_rel > E_REL_TOL:
         raise Error(
             "bench_euler_inflow_2d FAILED: E rel err "
-            + String(E_rel) + " > " + String(E_REL_TOL)
+            + String(E_rel)
+            + " > "
+            + String(E_REL_TOL)
         )
 
     print("=== bench_euler_inflow_2d PASSED ===")

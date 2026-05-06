@@ -31,7 +31,9 @@ from std.math import sqrt, ceildiv, sin, log, isnan, isinf
 from src import mpi
 from src.partition import build_partition
 from src.reference import (
-    ReferenceElement, to_float32, num_tet_nodes,
+    ReferenceElement,
+    to_float32,
+    num_tet_nodes,
 )
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions
@@ -49,11 +51,11 @@ comptime LX = 1.0
 comptime LY = 1.0
 comptime LZ = 1.0
 comptime GAMMA: Float32 = 1.4
-comptime RHO0:  Float32 = 1.0
-comptime U0:    Float32 = 1.0
-comptime V0:    Float32 = 1.0
-comptime W0:    Float32 = 1.0
-comptime P0:    Float32 = 1.0
+comptime RHO0: Float32 = 1.0
+comptime U0: Float32 = 1.0
+comptime V0: Float32 = 1.0
+comptime W0: Float32 = 1.0
+comptime P0: Float32 = 1.0
 comptime AMPLITUDE: Float32 = 0.1
 comptime T_FINAL: Float32 = 1.0
 comptime CFL = Float32(0.1)
@@ -70,7 +72,7 @@ comptime RATE_MIN: Float64 = 2.5
 def entropy_wave_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -86,11 +88,12 @@ def entropy_wave_ic_kernel(
 
     var k = Float32(2.0) * PI_F / Float32(LX)
     var rho = RHO0 + AMPLITUDE * sin(k * px) * sin(k * py) * sin(k * pz)
-    var u = U0; var v = V0; var w = W0
+    var u = U0
+    var v = V0
+    var w = W0
     var p = P0
-    var E = (
-        p / (GAMMA - Float32(1.0))
-        + Float32(0.5) * rho * (u * u + v * v + w * w)
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (
+        u * u + v * v + w * w
     )
 
     var base = (e * NP + nn) * NC
@@ -113,23 +116,37 @@ def _run(N: Int) raises -> Float64:
     var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh[P](
-        ctx, build_partition(rank, size, N, N, N), LX, LY, LZ,
+        ctx,
+        build_partition(rank, size, N, N, N),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Euler.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        Euler.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = Euler(
-        GAMMA, Float32(1.0e-6), Float32(1.0e-6), FLUX_HLLEC, False,
+        GAMMA,
+        Float32(1.0e-6),
+        Float32(1.0e-6),
+        FLUX_HLLEC,
+        False,
     )
     var solver = Solver[Euler, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
-    solver.ctx.enqueue_function[
-        entropy_wave_ic_kernel, entropy_wave_ic_kernel
-    ](
+    solver.ctx.enqueue_function[entropy_wave_ic_kernel, entropy_wave_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -199,8 +216,15 @@ def main() raises:
         return
 
     print("bench_euler_smooth_wave_3d_p3 (P=3 entropy wave, HLLEC)")
-    print("  P=", P, "  NP=", NP, "  sweep N=6, 8, 12   (threshold",
-          L2_MAX_REL_AT_12, ")")
+    print(
+        "  P=",
+        P,
+        "  NP=",
+        NP,
+        "  sweep N=6, 8, 12   (threshold",
+        L2_MAX_REL_AT_12,
+        ")",
+    )
 
     var err6 = _run(6)
     print("  N=6   rel L2 =", err6)
@@ -212,25 +236,43 @@ def main() raises:
     if err12 > L2_MAX_REL_AT_12:
         raise Error(
             "bench_euler_smooth_wave_3d_p3 FAILED: rel L2 at N=12 "
-            + String(err12) + " exceeds " + String(L2_MAX_REL_AT_12)
+            + String(err12)
+            + " exceeds "
+            + String(L2_MAX_REL_AT_12)
         )
     if not (err6 > err8 and err8 > err12):
         raise Error(
             "bench_euler_smooth_wave_3d_p3 FAILED: rel L2 not monotone"
-            + " (6: " + String(err6) + ", 8: " + String(err8)
-            + ", 12: " + String(err12) + ")"
+            + " (6: "
+            + String(err6)
+            + ", 8: "
+            + String(err8)
+            + ", 12: "
+            + String(err12)
+            + ")"
         )
 
-    var rate_68  = log(err6 / err8)  / log(8.0 / 6.0)
+    var rate_68 = log(err6 / err8) / log(8.0 / 6.0)
     var rate_812 = log(err8 / err12) / log(12.0 / 8.0)
-    print("  observed rates: log_(4/3)(e6/e8) =", rate_68,
-          "  log_(3/2)(e8/e12) =", rate_812,
-          "  (P+1 =", P + 1, ", floor", RATE_MIN, ")")
+    print(
+        "  observed rates: log_(4/3)(e6/e8) =",
+        rate_68,
+        "  log_(3/2)(e8/e12) =",
+        rate_812,
+        "  (P+1 =",
+        P + 1,
+        ", floor",
+        RATE_MIN,
+        ")",
+    )
     if rate_68 < RATE_MIN and rate_812 < RATE_MIN:
         raise Error(
             String("bench_euler_smooth_wave_3d_p3 FAILED: rates ")
-            + String(rate_68) + " and " + String(rate_812)
-            + " both below " + String(RATE_MIN)
+            + String(rate_68)
+            + " and "
+            + String(rate_812)
+            + " both below "
+            + String(RATE_MIN)
         )
 
     print("=== bench_euler_smooth_wave_3d_p3 PASSED ===")

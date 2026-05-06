@@ -42,18 +42,29 @@ def main() raises:
     var ctx = DeviceContext()
     var mesh = LocalMesh[P](
         ctx=ctx,
-        Nx=Nx, Ny=Ny, Nz=Nz,
-        Lx=1.0, Ly=1.0, Lz=1.0,
+        Nx=Nx,
+        Ny=Ny,
+        Nz=Nz,
+        Lx=1.0,
+        Ly=1.0,
+        Lz=1.0,
         bcs=BoundaryConditions.periodic(),
     )
     var NP = num_tet_nodes(P)
     var n_total = mesh.num_elements * NP
-    print("  mesh:", mesh.num_elements, "elements x", NP, "nodes/elem =",
-          n_total, "total nodes")
+    print(
+        "  mesh:",
+        mesh.num_elements,
+        "elements x",
+        NP,
+        "nodes/elem =",
+        n_total,
+        "total nodes",
+    )
 
     # Three constant scalar fields -- one Float64 per node.
     var rho = List[Float64]()
-    var p   = List[Float64]()
+    var p = List[Float64]()
     var vmag = List[Float64]()
     for _ in range(n_total):
         rho.append(1.5)
@@ -72,11 +83,14 @@ def main() raises:
 
     var path = String("/tmp/vtu_3d_multi_test.vtu")
     dump_vtu_3d_frame_multi(
-        mesh.num_elements, NP,
+        mesh.num_elements,
+        NP,
         rebind[UnsafePointer[Float32, MutAnyOrigin]](
             mesh.elem_node_xyz_f32_ptr
         ),
-        names, fields, path,
+        names,
+        fields,
+        path,
     )
 
     var blob = Path(path).read_bytes()
@@ -86,7 +100,7 @@ def main() raises:
 
     var s = String(StringSlice[origin_of(blob)](unsafe_from_utf8=blob))
     if not (String('Scalars="rho"') in s):
-        raise Error("vtu_3d_multi_test: missing Scalars=\"rho\" attribute")
+        raise Error('vtu_3d_multi_test: missing Scalars="rho" attribute')
     if not (String('Name="rho"') in s):
         raise Error("vtu_3d_multi_test: missing rho DataArray header")
     if not (String('Name="p"') in s):

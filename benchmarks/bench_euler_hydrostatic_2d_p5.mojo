@@ -26,7 +26,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_hllc_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL, BC_INTERIOR
@@ -39,8 +41,8 @@ comptime LX = 1.0
 comptime LY = 2.0
 
 comptime GAMMA = 1.4
-comptime RHO0  = 1.0
-comptime P0    = 1.0
+comptime RHO0 = 1.0
+comptime P0 = 1.0
 comptime GY_NEG: Float64 = -0.1
 comptime T_FINAL: Float64 = 1.0
 comptime CFL = 0.2
@@ -59,7 +61,9 @@ def main() raises:
         print("bench_euler_hydrostatic_2d_p5: runs at np=1 only")
         return
 
-    print("bench_euler_hydrostatic_2d_p5 (2D hydrostatic balance, gravity gate)")
+    print(
+        "bench_euler_hydrostatic_2d_p5 (2D hydrostatic balance, gravity gate)"
+    )
     print("  P=", P, "  mesh=", NX, "x", NY, "  gy=", GY_NEG, "  T=", T_FINAL)
 
     comptime NP_p = num_tri_nodes_2d(P)
@@ -83,10 +87,12 @@ def main() raises:
     var host_y = List[Float64]()
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            var y = Float64(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1])
+            var y = Float64(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
+            )
             var p_y = P0 + RHO0 * GY_NEG * y
             var rho = RHO0
-            var E = p_y / (GAMMA - 1.0)   # u = v = 0 so KE = 0
+            var E = p_y / (GAMMA - 1.0)  # u = v = 0 so KE = 0
             host_q.append(Float32(rho))
             host_q.append(Float32(0.0))
             host_q.append(Float32(0.0))
@@ -94,7 +100,7 @@ def main() raises:
             host_p.append(p_y)
             host_y.append(y)
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -117,7 +123,7 @@ def main() raises:
 
     var gamma_f = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
-    var min_p   = Float32(1.0e-6)
+    var min_p = Float32(1.0e-6)
     var gx_f = Float32(0.0)
     var gy_f = Float32(GY_NEG)
 
@@ -141,8 +147,12 @@ def main() raises:
                 gamma=gamma_f,
                 min_density=min_rho,
                 min_pressure=min_p,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
-                gx=gx_f, gy=gy_f,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
+                gx=gx_f,
+                gy=gy_f,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -154,47 +164,57 @@ def main() raises:
     var n_nodes = gpu_mesh.num_elements * NP_p
     for i in range(n_nodes):
         var rho_now = hptr_q[i * NC + 0]
-        var rhou    = hptr_q[i * NC + 1]
-        var rhov    = hptr_q[i * NC + 2]
-        var E_now   = hptr_q[i * NC + 3]
+        var rhou = hptr_q[i * NC + 1]
+        var rhov = hptr_q[i * NC + 2]
+        var E_now = hptr_q[i * NC + 3]
         if isnan(rho_now) or isinf(rho_now):
             raise Error("bench_euler_hydrostatic_2d_p5: non-finite output")
         var u = rhou / rho_now
         var v = rhov / rho_now
         var v_mag = sqrt(Float64(u) * Float64(u) + Float64(v) * Float64(v))
-        if v_mag > max_v: max_v = v_mag
+        if v_mag > max_v:
+            max_v = v_mag
         var rho_dev = Float64(rho_now) - RHO0
-        if rho_dev < 0.0: rho_dev = -rho_dev
+        if rho_dev < 0.0:
+            rho_dev = -rho_dev
         var rho_dev_rel = rho_dev / RHO0
-        if rho_dev_rel > max_rho_dev: max_rho_dev = rho_dev_rel
+        if rho_dev_rel > max_rho_dev:
+            max_rho_dev = rho_dev_rel
         var ke = Float32(0.5) * rho_now * (u * u + v * v)
         var p_now = (GAMMA - 1.0) * Float64(E_now - ke)
         var p_dev = p_now - host_p[i]
-        if p_dev < 0.0: p_dev = -p_dev
+        if p_dev < 0.0:
+            p_dev = -p_dev
         var p_dev_rel = p_dev / P0
-        if p_dev_rel > max_p_dev: max_p_dev = p_dev_rel
+        if p_dev_rel > max_p_dev:
+            max_p_dev = p_dev_rel
 
-    print("  max |v_mag|       =", max_v,
-          "  (threshold", VMAX_TOL, ")")
-    print("  max |rho-rho0|/rho0 =", max_rho_dev,
-          "  (threshold", RHO_REL_TOL, ")")
-    print("  max |p-p_exact|/p0  =", max_p_dev,
-          "  (threshold", P_REL_TOL, ")")
+    print("  max |v_mag|       =", max_v, "  (threshold", VMAX_TOL, ")")
+    print(
+        "  max |rho-rho0|/rho0 =", max_rho_dev, "  (threshold", RHO_REL_TOL, ")"
+    )
+    print("  max |p-p_exact|/p0  =", max_p_dev, "  (threshold", P_REL_TOL, ")")
 
     if max_v > VMAX_TOL:
         raise Error(
             String("bench_euler_hydrostatic_2d_p5 FAILED: |v_mag| ")
-            + String(max_v) + " > " + String(VMAX_TOL)
+            + String(max_v)
+            + " > "
+            + String(VMAX_TOL)
         )
     if max_rho_dev > RHO_REL_TOL:
         raise Error(
             String("bench_euler_hydrostatic_2d_p5 FAILED: density drift ")
-            + String(max_rho_dev) + " > " + String(RHO_REL_TOL)
+            + String(max_rho_dev)
+            + " > "
+            + String(RHO_REL_TOL)
         )
     if max_p_dev > P_REL_TOL:
         raise Error(
             String("bench_euler_hydrostatic_2d_p5 FAILED: pressure drift ")
-            + String(max_p_dev) + " > " + String(P_REL_TOL)
+            + String(max_p_dev)
+            + " > "
+            + String(P_REL_TOL)
         )
 
     print("=== bench_euler_hydrostatic_2d_p5 PASSED ===")

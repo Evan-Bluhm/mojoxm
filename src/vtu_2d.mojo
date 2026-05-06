@@ -25,6 +25,7 @@ from std.pathlib import Path
 from std.memory import alloc, memcpy, memset
 from src.local_mesh_2d import LocalMesh2D
 from src.reference_2d import num_tri_nodes_2d
+
 # Re-exported so the 2D example drivers can emit `.pvd` collections
 # through the same code path as 3D `FrameWriter.finalize`.  `_u32_le`
 # packs a UInt32 into 4 little-endian bytes -- shared with the 3D
@@ -45,7 +46,9 @@ def _cell_type_for(nodes_per_elem: Int) -> Int:
     return VTK_LAGRANGE_TRIANGLE
 
 
-def dump_vtu_2d_frame[P: Int](
+def dump_vtu_2d_frame[
+    P: Int
+](
     mesh: LocalMesh2D[P],
     q: List[Float64],
     path: String,
@@ -74,48 +77,78 @@ def dump_vtu_2d_frame[P: Int](
     var off_bytes = num_elements * 4
     var typ_bytes = num_elements
 
-    var off_field   = 0
-    var off_points  = off_field + 4 + field_bytes
-    var off_conn    = off_points + 4 + points_bytes
+    var off_field = 0
+    var off_points = off_field + 4 + field_bytes
+    var off_conn = off_points + 4 + points_bytes
     var off_offsets = off_conn + 4 + conn_bytes
-    var off_types   = off_offsets + 4 + off_bytes
+    var off_types = off_offsets + 4 + off_bytes
 
     var hdr = String()
     hdr += '<?xml version="1.0"?>\n'
-    hdr += ('<VTKFile type="UnstructuredGrid" version="0.1"'
-            ' byte_order="LittleEndian" header_type="UInt32">\n')
-    hdr += '<UnstructuredGrid>\n'
-    hdr += ('<Piece NumberOfPoints="' + String(total_points)
-            + '" NumberOfCells="' + String(num_elements) + '">\n')
+    hdr += (
+        '<VTKFile type="UnstructuredGrid" version="0.1"'
+        ' byte_order="LittleEndian" header_type="UInt32">\n'
+    )
+    hdr += "<UnstructuredGrid>\n"
+    hdr += (
+        '<Piece NumberOfPoints="'
+        + String(total_points)
+        + '" NumberOfCells="'
+        + String(num_elements)
+        + '">\n'
+    )
     hdr += '<PointData Scalars="' + field_name + '">\n'
-    hdr += ('<DataArray type="Float32" Name="' + field_name
-            + '" format="appended" offset="' + String(off_field) + '"/>\n')
-    hdr += '</PointData>\n'
-    hdr += '<Points>\n'
-    hdr += ('<DataArray type="Float32" NumberOfComponents="3"'
-            ' format="appended" offset="' + String(off_points) + '"/>\n')
-    hdr += '</Points>\n'
-    hdr += '<Cells>\n'
-    hdr += ('<DataArray type="Int32" Name="connectivity"'
-            ' format="appended" offset="' + String(off_conn) + '"/>\n')
-    hdr += ('<DataArray type="Int32" Name="offsets"'
-            ' format="appended" offset="' + String(off_offsets) + '"/>\n')
-    hdr += ('<DataArray type="UInt8" Name="types"'
-            ' format="appended" offset="' + String(off_types) + '"/>\n')
-    hdr += '</Cells>\n'
-    hdr += '</Piece>\n'
-    hdr += '</UnstructuredGrid>\n'
+    hdr += (
+        '<DataArray type="Float32" Name="'
+        + field_name
+        + '" format="appended" offset="'
+        + String(off_field)
+        + '"/>\n'
+    )
+    hdr += "</PointData>\n"
+    hdr += "<Points>\n"
+    hdr += (
+        '<DataArray type="Float32" NumberOfComponents="3"'
+        ' format="appended" offset="'
+        + String(off_points)
+        + '"/>\n'
+    )
+    hdr += "</Points>\n"
+    hdr += "<Cells>\n"
+    hdr += (
+        '<DataArray type="Int32" Name="connectivity" format="appended" offset="'
+        + String(off_conn)
+        + '"/>\n'
+    )
+    hdr += (
+        '<DataArray type="Int32" Name="offsets" format="appended" offset="'
+        + String(off_offsets)
+        + '"/>\n'
+    )
+    hdr += (
+        '<DataArray type="UInt8" Name="types" format="appended" offset="'
+        + String(off_types)
+        + '"/>\n'
+    )
+    hdr += "</Cells>\n"
+    hdr += "</Piece>\n"
+    hdr += "</UnstructuredGrid>\n"
     hdr += '<AppendedData encoding="raw">\n_'
 
-    var tail = String('\n</AppendedData>\n</VTKFile>\n')
+    var tail = String("\n</AppendedData>\n</VTKFile>\n")
 
     # Total buffer size.
     var blob_size = (
-        4 + field_bytes
-        + 4 + points_bytes
-        + 4 + conn_bytes
-        + 4 + off_bytes
-        + 4 + typ_bytes
+        4
+        + field_bytes
+        + 4
+        + points_bytes
+        + 4
+        + conn_bytes
+        + 4
+        + off_bytes
+        + 4
+        + typ_bytes
     )
     var total_size = hdr.byte_length() + blob_size + tail.byte_length()
     var out = alloc[UInt8](total_size)
@@ -131,7 +164,9 @@ def dump_vtu_2d_frame[P: Int](
 
     # Field data.
     _u32_le(
-        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(field_bytes)
+        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out),
+        cur,
+        UInt32(field_bytes),
     )
     cur += 4
     var field_f32 = (out + cur).bitcast[Float32]()
@@ -141,7 +176,9 @@ def dump_vtu_2d_frame[P: Int](
 
     # Points: pad to 3D with z=0.
     _u32_le(
-        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(points_bytes)
+        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out),
+        cur,
+        UInt32(points_bytes),
     )
     cur += 4
     var pts_f32 = (out + cur).bitcast[Float32]()
@@ -212,7 +249,10 @@ def dump_vtu_2d_frame[P: Int](
 # attribute (ParaView's default-displayed field).
 # ----------------------------------------------------------------------
 
-def dump_vtu_2d_frame_multi[P: Int](
+
+def dump_vtu_2d_frame_multi[
+    P: Int
+](
     mesh: LocalMesh2D[P],
     field_names: List[String],
     field_data: List[List[Float64]],
@@ -224,9 +264,11 @@ def dump_vtu_2d_frame_multi[P: Int](
     PointData `Scalars` default."""
     if len(field_names) != len(field_data):
         raise Error(
-            "dump_vtu_2d_frame_multi: field_names/field_data length "
-            "mismatch (" + String(len(field_names)) + " vs "
-            + String(len(field_data)) + ")"
+            "dump_vtu_2d_frame_multi: field_names/field_data length mismatch ("
+            + String(len(field_names))
+            + " vs "
+            + String(len(field_data))
+            + ")"
         )
     if len(field_names) == 0:
         raise Error("dump_vtu_2d_frame_multi: at least one field required")
@@ -238,8 +280,10 @@ def dump_vtu_2d_frame_multi[P: Int](
         if len(field_data[i]) != total_points:
             raise Error(
                 String("dump_vtu_2d_frame_multi: field_data[")
-                + String(i) + "] size "
-                + String(len(field_data[i])) + " != "
+                + String(i)
+                + "] size "
+                + String(len(field_data[i]))
+                + " != "
                 + String(total_points)
             )
     var n_fields = len(field_names)
@@ -257,48 +301,76 @@ def dump_vtu_2d_frame_multi[P: Int](
     var off_fields = List[Int]()
     for i in range(n_fields):
         off_fields.append(i * (4 + field_bytes))
-    var off_points  = n_fields * (4 + field_bytes)
-    var off_conn    = off_points + 4 + points_bytes
+    var off_points = n_fields * (4 + field_bytes)
+    var off_conn = off_points + 4 + points_bytes
     var off_offsets = off_conn + 4 + conn_bytes
-    var off_types   = off_offsets + 4 + off_bytes
+    var off_types = off_offsets + 4 + off_bytes
 
     var hdr = String()
     hdr += '<?xml version="1.0"?>\n'
-    hdr += ('<VTKFile type="UnstructuredGrid" version="0.1"'
-            ' byte_order="LittleEndian" header_type="UInt32">\n')
-    hdr += '<UnstructuredGrid>\n'
-    hdr += ('<Piece NumberOfPoints="' + String(total_points)
-            + '" NumberOfCells="' + String(num_elements) + '">\n')
+    hdr += (
+        '<VTKFile type="UnstructuredGrid" version="0.1"'
+        ' byte_order="LittleEndian" header_type="UInt32">\n'
+    )
+    hdr += "<UnstructuredGrid>\n"
+    hdr += (
+        '<Piece NumberOfPoints="'
+        + String(total_points)
+        + '" NumberOfCells="'
+        + String(num_elements)
+        + '">\n'
+    )
     hdr += '<PointData Scalars="' + field_names[0] + '">\n'
     for i in range(n_fields):
-        hdr += ('<DataArray type="Float32" Name="' + field_names[i]
-                + '" format="appended" offset="'
-                + String(off_fields[i]) + '"/>\n')
-    hdr += '</PointData>\n'
-    hdr += '<Points>\n'
-    hdr += ('<DataArray type="Float32" NumberOfComponents="3"'
-            ' format="appended" offset="' + String(off_points) + '"/>\n')
-    hdr += '</Points>\n'
-    hdr += '<Cells>\n'
-    hdr += ('<DataArray type="Int32" Name="connectivity"'
-            ' format="appended" offset="' + String(off_conn) + '"/>\n')
-    hdr += ('<DataArray type="Int32" Name="offsets"'
-            ' format="appended" offset="' + String(off_offsets) + '"/>\n')
-    hdr += ('<DataArray type="UInt8" Name="types"'
-            ' format="appended" offset="' + String(off_types) + '"/>\n')
-    hdr += '</Cells>\n'
-    hdr += '</Piece>\n'
-    hdr += '</UnstructuredGrid>\n'
+        hdr += (
+            '<DataArray type="Float32" Name="'
+            + field_names[i]
+            + '" format="appended" offset="'
+            + String(off_fields[i])
+            + '"/>\n'
+        )
+    hdr += "</PointData>\n"
+    hdr += "<Points>\n"
+    hdr += (
+        '<DataArray type="Float32" NumberOfComponents="3"'
+        ' format="appended" offset="'
+        + String(off_points)
+        + '"/>\n'
+    )
+    hdr += "</Points>\n"
+    hdr += "<Cells>\n"
+    hdr += (
+        '<DataArray type="Int32" Name="connectivity" format="appended" offset="'
+        + String(off_conn)
+        + '"/>\n'
+    )
+    hdr += (
+        '<DataArray type="Int32" Name="offsets" format="appended" offset="'
+        + String(off_offsets)
+        + '"/>\n'
+    )
+    hdr += (
+        '<DataArray type="UInt8" Name="types" format="appended" offset="'
+        + String(off_types)
+        + '"/>\n'
+    )
+    hdr += "</Cells>\n"
+    hdr += "</Piece>\n"
+    hdr += "</UnstructuredGrid>\n"
     hdr += '<AppendedData encoding="raw">\n_'
 
-    var tail = String('\n</AppendedData>\n</VTKFile>\n')
+    var tail = String("\n</AppendedData>\n</VTKFile>\n")
 
     var blob_size = (
         n_fields * (4 + field_bytes)
-        + 4 + points_bytes
-        + 4 + conn_bytes
-        + 4 + off_bytes
-        + 4 + typ_bytes
+        + 4
+        + points_bytes
+        + 4
+        + conn_bytes
+        + 4
+        + off_bytes
+        + 4
+        + typ_bytes
     )
     var total_size = hdr.byte_length() + blob_size + tail.byte_length()
     var out = alloc[UInt8](total_size)
@@ -314,7 +386,8 @@ def dump_vtu_2d_frame_multi[P: Int](
     # Each field's [u32 size][float32 data] block.
     for i in range(n_fields):
         _u32_le(
-            rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur,
+            rebind[UnsafePointer[UInt8, MutAnyOrigin]](out),
+            cur,
             UInt32(field_bytes),
         )
         cur += 4
@@ -325,7 +398,9 @@ def dump_vtu_2d_frame_multi[P: Int](
 
     # Points: pad to 3D with z=0.
     _u32_le(
-        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out), cur, UInt32(points_bytes)
+        rebind[UnsafePointer[UInt8, MutAnyOrigin]](out),
+        cur,
+        UInt32(points_bytes),
     )
     cur += 4
     var pts_f32 = (out + cur).bitcast[Float32]()
@@ -384,6 +459,7 @@ def dump_vtu_2d_frame_multi[P: Int](
 # in use by the 3D `FrameWriter.finalize` (`src.vtu.write_pvd`).
 # ----------------------------------------------------------------------
 
+
 def vtu_frame_name(prefix: String, i: Int, width: Int = 5) raises -> String:
     """Build a zero-padded VTU frame filename: `prefix + NNNNN + .vtu`.
     Default width=5 matches the convention used by every 2D-GPU
@@ -397,5 +473,3 @@ def vtu_frame_name(prefix: String, i: Int, width: Int = 5) raises -> String:
     s += idx
     s += ".vtu"
     return s^
-
-

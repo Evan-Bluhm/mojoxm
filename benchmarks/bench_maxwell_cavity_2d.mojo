@@ -34,7 +34,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL
@@ -91,14 +93,20 @@ def main() raises:
             var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var y = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
             var Ez = sin(k * x) * sin(k * y)
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # Ex
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # Ey
-            host_q.append(Float32(Ez));   host_ic.append(Float32(Ez))    # Ez
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # Bx
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # By
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))   # Bz
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Ex
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Ey
+            host_q.append(Float32(Ez))
+            host_ic.append(Float32(Ez))  # Ez
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Bx
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # By
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # Bz
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -135,7 +143,10 @@ def main() raises:
                 q_out=stage.q_out,
                 fstar_scratch=d_fstar.unsafe_ptr(),
                 c=C_LIGHT,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -158,7 +169,9 @@ def main() raises:
     if rel > L2_MAX_REL:
         raise Error(
             String("bench_maxwell_cavity_2d FAILED: rel L2 ")
-            + String(rel) + " > " + String(L2_MAX_REL)
+            + String(rel)
+            + " > "
+            + String(L2_MAX_REL)
         )
 
     print("=== bench_maxwell_cavity_2d PASSED ===")

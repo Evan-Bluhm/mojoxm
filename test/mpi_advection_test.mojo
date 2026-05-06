@@ -72,16 +72,20 @@ comptime NUM_TEST_STEPS = 50
 # garbage to the kernel and the file ends up with bits like 0o300
 # instead of the intended 0o644.  creat() is POSIX and has a fixed
 # 2-arg signature that round-trips cleanly through external_call.
-comptime _OPEN_MODE  = c_int(0o644)
+comptime _OPEN_MODE = c_int(0o644)
 
 
 def gaussian_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
-    cx: Float32, cy: Float32, cz: Float32,
-    Lx: Float32, Ly: Float32, Lz: Float32,
+    cx: Float32,
+    cy: Float32,
+    cz: Float32,
+    Lx: Float32,
+    Ly: Float32,
+    Lz: Float32,
     inv_two_sigma2: Float32,
 ):
     var idx = Int(global_idx.x)
@@ -95,17 +99,21 @@ def gaussian_ic_kernel(
     var py = elem_node_xyz[(e * N_P + nn) * 3 + 1]
     var pz = elem_node_xyz[(e * N_P + nn) * 3 + 2]
     var dx = px - cx
-    if dx >  Lx * Float32(0.5): dx -= Lx
-    if dx < -Lx * Float32(0.5): dx += Lx
+    if dx > Lx * Float32(0.5):
+        dx -= Lx
+    if dx < -Lx * Float32(0.5):
+        dx += Lx
     var dy = py - cy
-    if dy >  Ly * Float32(0.5): dy -= Ly
-    if dy < -Ly * Float32(0.5): dy += Ly
+    if dy > Ly * Float32(0.5):
+        dy -= Ly
+    if dy < -Ly * Float32(0.5):
+        dy += Ly
     var dz = pz - cz
-    if dz >  Lz * Float32(0.5): dz -= Lz
-    if dz < -Lz * Float32(0.5): dz += Lz
-    q[e * N_P + nn] = exp(
-        -(dx * dx + dy * dy + dz * dz) * inv_two_sigma2
-    )
+    if dz > Lz * Float32(0.5):
+        dz -= Lz
+    if dz < -Lz * Float32(0.5):
+        dz += Lz
+    q[e * N_P + nn] = exp(-(dx * dx + dy * dy + dz * dz) * inv_two_sigma2)
 
 
 def choose_dt() raises -> Float32:
@@ -115,14 +123,16 @@ def choose_dt() raises -> Float32:
 
 
 def _write_bytes(
-    fd: Int, buf: UnsafePointer[UInt8, MutAnyOrigin], n: Int,
+    fd: Int,
+    buf: UnsafePointer[UInt8, MutAnyOrigin],
+    n: Int,
 ) raises:
     var remaining = n
     var p = buf
     while remaining > 0:
-        var wrote = Int(external_call["write", c_ssize_t](
-            fd, p, c_size_t(remaining)
-        ))
+        var wrote = Int(
+            external_call["write", c_ssize_t](fd, p, c_size_t(remaining))
+        )
         if wrote <= 0:
             raise Error("write() failed while dumping final q")
         remaining -= wrote
@@ -132,7 +142,9 @@ def _write_bytes(
 def dump_final_q(
     mut solver: Solver[Advection],
     rank: Int,
-    nx_global: Int, ny_global: Int, nz_global: Int,
+    nx_global: Int,
+    ny_global: Int,
+    nz_global: Int,
     mut nvtx: NvtxContext,
 ) raises:
     # Gather per-rank q + global element ids into host buffers.
@@ -144,8 +156,12 @@ def dump_final_q(
     for _ in range(num_owned):
         id_buf.append(Int32(0))
     solver.download_owned_component_with_ids(
-        0, q_buf, id_buf,
-        nx_global, ny_global, nz_global,
+        0,
+        q_buf,
+        id_buf,
+        nx_global,
+        ny_global,
+        nz_global,
         nvtx,
     )
 
@@ -161,23 +177,26 @@ def dump_final_q(
         path_c[i] = UInt8(path_s.unsafe_ptr()[i])
     path_c[pn] = 0
 
-    var fd = Int(external_call["creat", c_int](
-        path_c, _OPEN_MODE,
-    ))
+    var fd = Int(
+        external_call["creat", c_int](
+            path_c,
+            _OPEN_MODE,
+        )
+    )
     if fd < 0:
         path_c.free()
         raise Error("creat() failed for " + path_s)
 
     # Write the file header.
     var header = InlineArray[UInt32, 5](fill=UInt32(0))
-    header[0] = UInt32(0x514D584D)        # "MXMQ" in little-endian
-    header[1] = UInt32(1)                  # version
+    header[0] = UInt32(0x514D584D)  # "MXMQ" in little-endian
+    header[1] = UInt32(1)  # version
     header[2] = UInt32(num_owned)
-    header[3] = UInt32(1)                  # NC for scalar advection
+    header[3] = UInt32(1)  # NC for scalar advection
     header[4] = UInt32(N_P)
-    var header_ptr = rebind[
-        UnsafePointer[UInt8, MutAnyOrigin]
-    ](header.unsafe_ptr())
+    var header_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
+        header.unsafe_ptr()
+    )
     _write_bytes(fd, header_ptr, 5 * 4)
 
     # Global element IDs.
@@ -203,28 +222,44 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print("mpi_advection_test:",
-              NUM_TEST_STEPS, "step dump for correctness check, ",
-              size, "ranks")
+        print(
+            "mpi_advection_test:",
+            NUM_TEST_STEPS,
+            "step dump for correctness check, ",
+            size,
+            "ranks",
+        )
 
     var nvtx = NvtxContext()
     var ctx = DeviceContext()
     var re = ReferenceElement()
-    var D_ref    = to_float32(re.D_ref)
+    var D_ref = to_float32(re.D_ref)
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Advection.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        Advection.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = Advection(VX, VY, VZ)
     var solver = Solver[Advection](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     var inv_two_sigma2 = Float32(1.0) / (
@@ -235,12 +270,14 @@ def main() raises:
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
-        Float32(GAUSS_CX), Float32(GAUSS_CY), Float32(GAUSS_CZ),
-        Float32(LX), Float32(LY), Float32(LZ),
+        Float32(GAUSS_CX),
+        Float32(GAUSS_CY),
+        Float32(GAUSS_CZ),
+        Float32(LX),
+        Float32(LY),
+        Float32(LZ),
         inv_two_sigma2,
-        grid_dim=ceildiv(
-            solver.num_owned_elements * N_P, IC_BLOCK
-        ),
+        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
     solver.ctx.synchronize()

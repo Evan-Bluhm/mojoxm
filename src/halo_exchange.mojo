@@ -40,9 +40,10 @@ from std.memory import memcpy
 # Kernel: remap an array of element-id VALUES through a permutation.
 # ----------------------------------------------------------------------
 
+
 def remap_ids_kernel(
-    ids:  UnsafePointer[Int32, MutAnyOrigin],
-    perm: UnsafePointer[Int32, MutAnyOrigin],   # perm[old] = new
+    ids: UnsafePointer[Int32, MutAnyOrigin],
+    perm: UnsafePointer[Int32, MutAnyOrigin],  # perm[old] = new
     n: Int,
 ):
     var idx = Int(global_idx.x)
@@ -51,6 +52,7 @@ def remap_ids_kernel(
     var old_v = Int(ids[idx])
     if old_v >= 0:
         ids[idx] = perm[old_v]
+
 
 # Kuhn tets per Cartesian cube (keep in sync with src/mesh.mojo).
 comptime KUHN_TETS = 6
@@ -62,11 +64,11 @@ comptime HALO_BLOCK = 256
 # the sender's viewpoint.  A recv from the d-neighbour expects the
 # opposite-direction tag (XOR 1 on the low bit).
 comptime TAG_MINUS_X = 0
-comptime TAG_PLUS_X  = 1
+comptime TAG_PLUS_X = 1
 comptime TAG_MINUS_Y = 2
-comptime TAG_PLUS_Y  = 3
+comptime TAG_PLUS_Y = 3
 comptime TAG_MINUS_Z = 4
-comptime TAG_PLUS_Z  = 5
+comptime TAG_PLUS_Z = 5
 
 
 # Direction ordering for all 6-entry arrays below:
@@ -79,11 +81,13 @@ comptime TAG_PLUS_Z  = 5
 # over the NC components.
 # ----------------------------------------------------------------------
 
+
 def pack_kernel(
     send_buf: UnsafePointer[Float32, MutAnyOrigin],
-    q:        UnsafePointer[Float32, MutAnyOrigin],
-    indices:  UnsafePointer[Int32,   MutAnyOrigin],
-    count: Int, NC: Int,
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    indices: UnsafePointer[Int32, MutAnyOrigin],
+    count: Int,
+    NC: Int,
 ):
     var idx = Int(global_idx.x)
     var total = count * N_P
@@ -93,15 +97,15 @@ def pack_kernel(
     var nn = idx % N_P
     var elem = Int(indices[i])
     for c in range(NC):
-        send_buf[(i * N_P + nn) * NC + c] = (
-            q[(elem * N_P + nn) * NC + c]
-        )
+        send_buf[(i * N_P + nn) * NC + c] = q[(elem * N_P + nn) * NC + c]
+
 
 def unpack_kernel(
-    q:        UnsafePointer[Float32, MutAnyOrigin],
+    q: UnsafePointer[Float32, MutAnyOrigin],
     recv_buf: UnsafePointer[Float32, MutAnyOrigin],
-    indices:  UnsafePointer[Int32,   MutAnyOrigin],
-    count: Int, NC: Int,
+    indices: UnsafePointer[Int32, MutAnyOrigin],
+    count: Int,
+    NC: Int,
 ):
     var idx = Int(global_idx.x)
     var total = count * N_P
@@ -111,9 +115,7 @@ def unpack_kernel(
     var nn = idx % N_P
     var elem = Int(indices[i])
     for c in range(NC):
-        q[(elem * N_P + nn) * NC + c] = (
-            recv_buf[(i * N_P + nn) * NC + c]
-        )
+        q[(elem * N_P + nn) * NC + c] = recv_buf[(i * N_P + nn) * NC + c]
 
 
 # ----------------------------------------------------------------------
@@ -126,12 +128,17 @@ def unpack_kernel(
 # neighbour pair.
 # ----------------------------------------------------------------------
 
+
 def _pack_list_for_dir(
     mut out: List[Int32],
-    nx: Int, ny: Int, nz: Int,
-    loc_nx: Int, loc_ny: Int,
-    axis: Int, sign: Int,   # axis in [0,1,2]; sign in {-1, +1}
-    is_ghost: Bool,          # False = owned boundary, True = ghost ring
+    nx: Int,
+    ny: Int,
+    nz: Int,
+    loc_nx: Int,
+    loc_ny: Int,
+    axis: Int,
+    sign: Int,  # axis in [0,1,2]; sign in {-1, +1}
+    is_ghost: Bool,  # False = owned boundary, True = ghost ring
 ) raises -> Int:
     # Determine which local cube coordinate is fixed, and which range.
     # Owned -x face has fixed lcx = 1; ghost -x ring has fixed lcx = 0.
@@ -188,6 +195,7 @@ def _pack_list_for_dir(
 # HaloExchange
 # ----------------------------------------------------------------------
 
+
 struct HaloExchange(Movable):
     var nc: Int
     # Runtime flag: if True we hand device pointers directly to MPI
@@ -214,20 +222,20 @@ struct HaloExchange(Movable):
 
     # Per-direction device buffers.  Index [d] in each list refers to
     # the same (axis, sign) direction encoded above.
-    var d_pack_idx:   List[DeviceBuffer[halo_i]]
+    var d_pack_idx: List[DeviceBuffer[halo_i]]
     var d_unpack_idx: List[DeviceBuffer[halo_i]]
-    var d_send_buf:   List[DeviceBuffer[halo_f]]
-    var d_recv_buf:   List[DeviceBuffer[halo_f]]
+    var d_send_buf: List[DeviceBuffer[halo_f]]
+    var d_recv_buf: List[DeviceBuffer[halo_f]]
     # Pinned host staging buffers.  Populated only when cuda_aware is
     # False (skipping the allocation entirely when we don't need it).
-    var h_send_buf:   List[HostBuffer[halo_f]]
-    var h_recv_buf:   List[HostBuffer[halo_f]]
+    var h_send_buf: List[HostBuffer[halo_f]]
+    var h_recv_buf: List[HostBuffer[halo_f]]
 
     # 12 MPI_Request handles stored contiguously as Int64 (OpenMPI
     # MPI_Request is an opaque 8-byte pointer).  Layout:
     #   [0..6):  send requests
     #   [6..12): recv requests
-    var req_storage:  UnsafePointer[Int64, MutExternalOrigin]
+    var req_storage: UnsafePointer[Int64, MutExternalOrigin]
 
     def __init__(
         out self,
@@ -254,20 +262,26 @@ struct HaloExchange(Movable):
         # rank actually sits on that global face.  Interior-of-the-
         # partition edges still need to exchange with their neighbour.
         self.skip_mpi = List[Bool]()
-        self.skip_mpi.append(part.rx == 0           and bcs.bc_x_lo != BC_INTERIOR)
-        self.skip_mpi.append(part.rx == part.px - 1 and bcs.bc_x_hi != BC_INTERIOR)
-        self.skip_mpi.append(part.ry == 0           and bcs.bc_y_lo != BC_INTERIOR)
-        self.skip_mpi.append(part.ry == part.py - 1 and bcs.bc_y_hi != BC_INTERIOR)
-        self.skip_mpi.append(part.rz == 0           and bcs.bc_z_lo != BC_INTERIOR)
-        self.skip_mpi.append(part.rz == part.pz - 1 and bcs.bc_z_hi != BC_INTERIOR)
+        self.skip_mpi.append(part.rx == 0 and bcs.bc_x_lo != BC_INTERIOR)
+        self.skip_mpi.append(
+            part.rx == part.px - 1 and bcs.bc_x_hi != BC_INTERIOR
+        )
+        self.skip_mpi.append(part.ry == 0 and bcs.bc_y_lo != BC_INTERIOR)
+        self.skip_mpi.append(
+            part.ry == part.py - 1 and bcs.bc_y_hi != BC_INTERIOR
+        )
+        self.skip_mpi.append(part.rz == 0 and bcs.bc_z_lo != BC_INTERIOR)
+        self.skip_mpi.append(
+            part.rz == part.pz - 1 and bcs.bc_z_hi != BC_INTERIOR
+        )
 
         self.ring_count = List[Int]()
-        self.d_pack_idx   = List[DeviceBuffer[halo_i]]()
+        self.d_pack_idx = List[DeviceBuffer[halo_i]]()
         self.d_unpack_idx = List[DeviceBuffer[halo_i]]()
-        self.d_send_buf   = List[DeviceBuffer[halo_f]]()
-        self.d_recv_buf   = List[DeviceBuffer[halo_f]]()
-        self.h_send_buf   = List[HostBuffer[halo_f]]()
-        self.h_recv_buf   = List[HostBuffer[halo_f]]()
+        self.d_send_buf = List[DeviceBuffer[halo_f]]()
+        self.d_recv_buf = List[DeviceBuffer[halo_f]]()
+        self.h_send_buf = List[HostBuffer[halo_f]]()
+        self.h_recv_buf = List[HostBuffer[halo_f]]()
         self.req_storage = alloc[Int64](12)
 
         # Single-patch fast path: the Mesh at np=1 has no ghost ring,
@@ -293,17 +307,29 @@ struct HaloExchange(Movable):
             var owned_list = List[Int32]()
             var ghost_list = List[Int32]()
             var n_owned = _pack_list_for_dir(
-                owned_list, nx, ny, nz, loc_nx, loc_ny,
-                axes[d], signs[d], is_ghost=False,
+                owned_list,
+                nx,
+                ny,
+                nz,
+                loc_nx,
+                loc_ny,
+                axes[d],
+                signs[d],
+                is_ghost=False,
             )
             var n_ghost = _pack_list_for_dir(
-                ghost_list, nx, ny, nz, loc_nx, loc_ny,
-                axes[d], signs[d], is_ghost=True,
+                ghost_list,
+                nx,
+                ny,
+                nz,
+                loc_nx,
+                loc_ny,
+                axes[d],
+                signs[d],
+                is_ghost=True,
             )
             if n_owned != n_ghost:
-                raise Error(
-                    "HaloExchange: owned/ghost ring size mismatch"
-                )
+                raise Error("HaloExchange: owned/ghost ring size mismatch")
             self.ring_count.append(n_owned)
             # Upload the build-time (pre-permutation) IDs, then remap
             # through the Mesh element permutation so references
@@ -311,12 +337,16 @@ struct HaloExchange(Movable):
             var d_pack = _upload_i32(ctx, owned_list)
             var d_unpack = _upload_i32(ctx, ghost_list)
             ctx.enqueue_function[remap_ids_kernel, remap_ids_kernel](
-                d_pack.unsafe_ptr(), d_perm, n_owned,
+                d_pack.unsafe_ptr(),
+                d_perm,
+                n_owned,
                 grid_dim=ceildiv(n_owned, HALO_BLOCK),
                 block_dim=HALO_BLOCK,
             )
             ctx.enqueue_function[remap_ids_kernel, remap_ids_kernel](
-                d_unpack.unsafe_ptr(), d_perm, n_ghost,
+                d_unpack.unsafe_ptr(),
+                d_perm,
+                n_ghost,
                 grid_dim=ceildiv(n_ghost, HALO_BLOCK),
                 block_dim=HALO_BLOCK,
             )
@@ -379,14 +409,16 @@ struct HaloExchange(Movable):
             var total = count * N_P
             ctx.enqueue_function[pack_kernel, pack_kernel](
                 self.d_send_buf[d].unsafe_ptr(),
-                q, self.d_pack_idx[d].unsafe_ptr(),
-                count, self.nc,
+                q,
+                self.d_pack_idx[d].unsafe_ptr(),
+                count,
+                self.nc,
                 grid_dim=ceildiv(total, HALO_BLOCK),
                 block_dim=HALO_BLOCK,
             )
             if not self.cuda_aware:
                 ctx.enqueue_copy(self.h_send_buf[d], self.d_send_buf[d])
-        ctx.synchronize()   # pack (+ D->H if staged) done before MPI
+        ctx.synchronize()  # pack (+ D->H if staged) done before MPI
 
         # ---- Phase 2: post non-blocking Irecvs + Isends -------------
         # Tag encoding: directions 0..5 for (-x, +x, -y, +y, -z, +z).
@@ -399,21 +431,27 @@ struct HaloExchange(Movable):
             var send_tag = d
             var recv_tag = d ^ 1
             var recv_ptr = (
-                self.d_recv_buf[d].unsafe_ptr()
-                if self.cuda_aware
-                else self.h_recv_buf[d].unsafe_ptr()
+                self.d_recv_buf[d]
+                .unsafe_ptr() if self.cuda_aware else self.h_recv_buf[d]
+                .unsafe_ptr()
             )
             var send_ptr = (
-                self.d_send_buf[d].unsafe_ptr()
-                if self.cuda_aware
-                else self.h_send_buf[d].unsafe_ptr()
+                self.d_send_buf[d]
+                .unsafe_ptr() if self.cuda_aware else self.h_send_buf[d]
+                .unsafe_ptr()
             )
             mpi.irecv_float(
-                recv_ptr, count_fl, neigh, recv_tag,
+                recv_ptr,
+                count_fl,
+                neigh,
+                recv_tag,
                 self.req_storage + (6 + d),
             )
             mpi.isend_float(
-                send_ptr, count_fl, neigh, send_tag,
+                send_ptr,
+                count_fl,
+                neigh,
+                send_tag,
                 self.req_storage + d,
             )
 
@@ -441,9 +479,11 @@ struct HaloExchange(Movable):
                 ctx.enqueue_copy(self.d_recv_buf[d], self.h_recv_buf[d])
             var total = count * N_P
             ctx.enqueue_function[unpack_kernel, unpack_kernel](
-                q, self.d_recv_buf[d].unsafe_ptr(),
+                q,
+                self.d_recv_buf[d].unsafe_ptr(),
                 self.d_unpack_idx[d].unsafe_ptr(),
-                count, self.nc,
+                count,
+                self.nc,
                 grid_dim=ceildiv(total, HALO_BLOCK),
                 block_dim=HALO_BLOCK,
             )
@@ -464,6 +504,7 @@ struct HaloExchange(Movable):
 # ----------------------------------------------------------------------
 # Small helper: upload a List[Int32] to the device, returns the buffer.
 # ----------------------------------------------------------------------
+
 
 def _upload_i32(
     mut ctx: DeviceContext, src: List[Int32]

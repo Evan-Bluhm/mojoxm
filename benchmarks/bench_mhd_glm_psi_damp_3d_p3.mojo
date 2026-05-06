@@ -39,7 +39,7 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 3
-comptime NP = num_tet_nodes(P)   # 20 at P=3
+comptime NP = num_tet_nodes(P)  # 20 at P=3
 comptime NX = 4
 comptime NY = 4
 comptime NZ = 4
@@ -47,14 +47,14 @@ comptime LX = 1.0
 comptime LY = 1.0
 comptime LZ = 1.0
 
-comptime GAMMA     = Float32(5.0 / 3.0)
-comptime RHO0      = Float32(1.0)
-comptime P0_GAS    = Float32(1.0)
-comptime B0        = Float32(1.0)
-comptime A0        = Float32(0.1)
-comptime C_H       = Float32(0.0)
-comptime ALPHA_D   = Float32(1.0)
-comptime MIN_DENSITY  = Float32(1.0e-6)
+comptime GAMMA = Float32(5.0 / 3.0)
+comptime RHO0 = Float32(1.0)
+comptime P0_GAS = Float32(1.0)
+comptime B0 = Float32(1.0)
+comptime A0 = Float32(0.1)
+comptime C_H = Float32(0.0)
+comptime ALPHA_D = Float32(1.0)
+comptime MIN_DENSITY = Float32(1.0e-6)
 comptime MIN_PRESSURE = Float32(1.0e-6)
 comptime T_FINAL: Float32 = 1.0
 comptime CFL = Float32(0.10)
@@ -67,7 +67,7 @@ comptime STATE_TOL: Float64 = 1.0e-4
 def damp_ic_kernel_p3(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -83,9 +83,8 @@ def damp_ic_kernel_p3(
     var bx = B0
     var by = Float32(0.0)
     var bz = Float32(0.0)
-    var E = (
-        p_gas / (GAMMA - Float32(1.0))
-        + Float32(0.5) * (bx * bx + by * by + bz * bz)
+    var E = p_gas / (GAMMA - Float32(1.0)) + Float32(0.5) * (
+        bx * bx + by * by + bz * bz
     )
 
     var base = (e * NP + nn) * 9
@@ -110,8 +109,22 @@ def main() raises:
         return
 
     print("bench_mhd_glm_psi_damp_3d_p3 (3D GLM psi damping at P=3)")
-    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ,
-          "   alpha_d=", ALPHA_D, "   T=", T_FINAL)
+    print(
+        "  P=",
+        P,
+        "  NP=",
+        NP,
+        "  mesh=",
+        NX,
+        "x",
+        NY,
+        "x",
+        NZ,
+        "   alpha_d=",
+        ALPHA_D,
+        "   T=",
+        T_FINAL,
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -125,17 +138,35 @@ def main() raises:
 
     var bcs = BoundaryConditions.periodic()
     var mesh = Mesh[P](
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        IdealMHD.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = IdealMHD(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D,
+        GAMMA,
+        MIN_DENSITY,
+        MIN_PRESSURE,
+        C_H,
+        ALPHA_D,
     )
     var solver = Solver[IdealMHD, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     solver.ctx.enqueue_function[damp_ic_kernel_p3, damp_ic_kernel_p3](
@@ -174,7 +205,9 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
     )
@@ -193,29 +226,43 @@ def main() raises:
                 raise Error("bench_mhd_glm_psi_damp_3d_p3: non-finite output")
             if c == 8:
                 var psi_dev = Float64(v) - psi_exact
-                if psi_dev < 0.0: psi_dev = -psi_dev
-                if psi_dev > max_psi_dev: max_psi_dev = psi_dev
+                if psi_dev < 0.0:
+                    psi_dev = -psi_dev
+                if psi_dev > max_psi_dev:
+                    max_psi_dev = psi_dev
             else:
                 var dv = Float64(v - host_ic[i * 9 + c])
-                if dv < 0.0: dv = -dv
-                if dv > max_state_drift: max_state_drift = dv
+                if dv < 0.0:
+                    dv = -dv
+                if dv > max_state_drift:
+                    max_state_drift = dv
 
     var psi_rel = max_psi_dev / Float64(A0)
     print("  psi exact      =", psi_exact)
-    print("  max |psi - exact| / A0 =", psi_rel,
-          "  (threshold", PSI_TOL_REL, ")")
-    print("  max state drift (rho, momenta, B, E) =", max_state_drift,
-          "  (threshold", STATE_TOL, ")")
+    print(
+        "  max |psi - exact| / A0 =", psi_rel, "  (threshold", PSI_TOL_REL, ")"
+    )
+    print(
+        "  max state drift (rho, momenta, B, E) =",
+        max_state_drift,
+        "  (threshold",
+        STATE_TOL,
+        ")",
+    )
 
     if psi_rel > PSI_TOL_REL:
         raise Error(
             "bench_mhd_glm_psi_damp_3d_p3 FAILED: psi rel err "
-            + String(psi_rel) + " > " + String(PSI_TOL_REL)
+            + String(psi_rel)
+            + " > "
+            + String(PSI_TOL_REL)
         )
     if max_state_drift > STATE_TOL:
         raise Error(
             "bench_mhd_glm_psi_damp_3d_p3 FAILED: state drift "
-            + String(max_state_drift) + " > " + String(STATE_TOL)
+            + String(max_state_drift)
+            + " > "
+            + String(STATE_TOL)
         )
 
     print("=== bench_mhd_glm_psi_damp_3d_p3 PASSED ===")

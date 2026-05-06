@@ -56,8 +56,10 @@ comptime N_D = 3
 # Compile-time size helpers
 # ----------------------------------------------------------------------
 
+
 def num_tet_nodes(P: Int) -> Int:
     return (P + 1) * (P + 2) * (P + 3) // 6
+
 
 def num_tri_nodes(P: Int) -> Int:
     return (P + 1) * (P + 2) // 2
@@ -69,6 +71,7 @@ def num_tri_nodes(P: Int) -> Int:
 # labelling Lagrange nodes (in which case the `c` field is unused).
 # ----------------------------------------------------------------------
 
+
 @fieldwise_init
 struct Monomial(ImplicitlyCopyable, Movable):
     var a0: Int
@@ -78,9 +81,7 @@ struct Monomial(ImplicitlyCopyable, Movable):
     var c: Float64
 
 
-def poly_mul(
-    a: List[Monomial], b: List[Monomial]
-) raises -> List[Monomial]:
+def poly_mul(a: List[Monomial], b: List[Monomial]) raises -> List[Monomial]:
     var out = List[Monomial]()
     for ai in range(len(a)):
         for bi in range(len(b)):
@@ -89,7 +90,7 @@ def poly_mul(
                 a[ai].a1 + b[bi].a1,
                 a[ai].a2 + b[bi].a2,
                 a[ai].a3 + b[bi].a3,
-                a[ai].c  * b[bi].c,
+                a[ai].c * b[bi].c,
             )
             out.append(m)
     return out^
@@ -109,8 +110,10 @@ def integrate_ref_tet(p: List[Monomial]) raises -> Float64:
         var m = p[i]
         var denom_n = m.a0 + m.a1 + m.a2 + m.a3 + 3
         var num = (
-            factorial(m.a0) * factorial(m.a1)
-            * factorial(m.a2) * factorial(m.a3)
+            factorial(m.a0)
+            * factorial(m.a1)
+            * factorial(m.a2)
+            * factorial(m.a3)
         )
         s += m.c * num / factorial(denom_n)
     return s
@@ -140,17 +143,26 @@ def integrate_ref_tri(p: List[Monomial]) raises -> Float64:
 # Faces opposite vertex f, with the OTHER three vertices kept in
 # ascending order: (1,2,3), (0,2,3), (0,1,3), (0,1,2).
 
+
 def _tet_node_exponents(P: Int) raises -> List[Monomial]:
     """Canonical-ordered Lagrange tet nodes at order P.  The returned
     `Monomial` objects carry the (a0, a1, a2, a3) exponents; the `c`
     field is unused (set to 0)."""
     # VTK Lagrange tet edge order: (0,1), (1,2), (2,0), (0,3), (1,3), (2,3).
     var edges_a = List[Int]()
-    edges_a.append(0); edges_a.append(1); edges_a.append(2)
-    edges_a.append(0); edges_a.append(1); edges_a.append(2)
+    edges_a.append(0)
+    edges_a.append(1)
+    edges_a.append(2)
+    edges_a.append(0)
+    edges_a.append(1)
+    edges_a.append(2)
     var edges_b = List[Int]()
-    edges_b.append(1); edges_b.append(2); edges_b.append(0)
-    edges_b.append(3); edges_b.append(3); edges_b.append(3)
+    edges_b.append(1)
+    edges_b.append(2)
+    edges_b.append(0)
+    edges_b.append(3)
+    edges_b.append(3)
+    edges_b.append(3)
 
     var out = List[Monomial]()
     # Vertex nodes.
@@ -183,10 +195,18 @@ def _tet_node_exponents(P: Int) raises -> List[Monomial]:
         for a0v in range(P - 2, 0, -1):
             for a1v in range(P - a0v - 1, 0, -1):
                 var a2v = P - a0v - a1v
-                var exp0 = a0v if ni[0] == 0 else (a1v if ni[1] == 0 else (a2v if ni[2] == 0 else 0))
-                var exp1 = a0v if ni[0] == 1 else (a1v if ni[1] == 1 else (a2v if ni[2] == 1 else 0))
-                var exp2 = a0v if ni[0] == 2 else (a1v if ni[1] == 2 else (a2v if ni[2] == 2 else 0))
-                var exp3 = a0v if ni[0] == 3 else (a1v if ni[1] == 3 else (a2v if ni[2] == 3 else 0))
+                var exp0 = a0v if ni[0] == 0 else (
+                    a1v if ni[1] == 0 else (a2v if ni[2] == 0 else 0)
+                )
+                var exp1 = a0v if ni[0] == 1 else (
+                    a1v if ni[1] == 1 else (a2v if ni[2] == 1 else 0)
+                )
+                var exp2 = a0v if ni[0] == 2 else (
+                    a1v if ni[1] == 2 else (a2v if ni[2] == 2 else 0)
+                )
+                var exp3 = a0v if ni[0] == 3 else (
+                    a1v if ni[1] == 3 else (a2v if ni[2] == 3 else 0)
+                )
                 out.append(Monomial(exp0, exp1, exp2, exp3, 0.0))
     if P < 4:
         return out^
@@ -211,9 +231,13 @@ def _tri_node_exponents(P: Int) raises -> List[Monomial]:
         return out^
     # Edge (0,1), (1,2), (2,0) in face-local order.
     var edges_a = List[Int]()
-    edges_a.append(0); edges_a.append(1); edges_a.append(2)
+    edges_a.append(0)
+    edges_a.append(1)
+    edges_a.append(2)
     var edges_b = List[Int]()
-    edges_b.append(1); edges_b.append(2); edges_b.append(0)
+    edges_b.append(1)
+    edges_b.append(2)
+    edges_b.append(0)
     for e in range(3):
         var a_idx = edges_a[e]
         var b_idx = edges_b[e]
@@ -241,6 +265,7 @@ def _tri_node_exponents(P: Int) raises -> List[Monomial]:
 # Lagrange nodes.  This is the basis in which we expand each Lagrange
 # nodal polynomial.
 
+
 def _tet_degP_monomials(P: Int) raises -> List[Monomial]:
     var out = List[Monomial]()
     for a0v in range(P + 1):
@@ -264,14 +289,17 @@ def _tri_degP_monomials(P: Int) raises -> List[Monomial]:
 # Linear algebra helpers (host-side, Float64).
 # ----------------------------------------------------------------------
 
+
 def mat_zero(n: Int) raises -> List[Float64]:
     var m = List[Float64]()
     for _ in range(n * n):
         m.append(0.0)
     return m^
 
+
 def mat_get(m: List[Float64], n: Int, i: Int, j: Int) raises -> Float64:
     return m[i * n + j]
+
 
 def mat_set(mut m: List[Float64], n: Int, i: Int, j: Int, v: Float64):
     m[i * n + j] = v
@@ -336,8 +364,11 @@ def mat_inv(m_in: List[Float64], n: Int) raises -> List[Float64]:
 # satisfies  phi_i(x_j) = delta_ij.  So  C^T = V^{-1},  i.e.
 # C[i, k] = V^{-1}[k, i].
 
+
 def _build_basis_coefs(
-    nodes: List[Monomial], monos: List[Monomial], P: Int,
+    nodes: List[Monomial],
+    monos: List[Monomial],
+    P: Int,
 ) raises -> List[Float64]:
     """Return coefficients C[i, k] flattened as row-major (N_P x N_P).
     Works for either tet (a0..a3) or tri (a0..a2 only; a3=0)."""
@@ -359,10 +390,14 @@ def _build_basis_coefs(
             # l_i ^ a_i factor.  We hand-roll int-power via repeated
             # multiply: a_i <= P <= 6 or so, so this is a tight loop.
             var v: Float64 = 1.0
-            for _ in range(mk.a0): v *= l0
-            for _ in range(mk.a1): v *= l1
-            for _ in range(mk.a2): v *= l2
-            for _ in range(mk.a3): v *= l3
+            for _ in range(mk.a0):
+                v *= l0
+            for _ in range(mk.a1):
+                v *= l1
+            for _ in range(mk.a2):
+                v *= l2
+            for _ in range(mk.a3):
+                v *= l3
             V[j * N + k] = v
     var Vinv = mat_inv(V, N)
     # C[i, k] = Vinv[k, i]
@@ -376,7 +411,8 @@ def _build_basis_coefs(
 
 
 def _coefs_to_monomial_list(
-    coefs: List[Float64], basis_idx: Int,
+    coefs: List[Float64],
+    basis_idx: Int,
     monos: List[Monomial],
 ) raises -> List[Monomial]:
     """Extract basis function i as a List[Monomial] (c = coefficient)."""
@@ -398,6 +434,7 @@ def _coefs_to_monomial_list(
 # Since l0 = 1 - r - s - t, dl0/dr_k = -1.  Otherwise dl_{k+1}/dr_k = 1,
 # dl_{other}/dr_k = 0.
 
+
 def _poly_drdx(p: List[Monomial], k: Int) raises -> List[Monomial]:
     var dl0: Float64 = -1.0
     var dl1: Float64 = 1.0 if k == 0 else 0.0
@@ -407,17 +444,21 @@ def _poly_drdx(p: List[Monomial], k: Int) raises -> List[Monomial]:
     for idx in range(len(p)):
         var m = p[idx]
         if m.a0 > 0:
-            out.append(Monomial(m.a0 - 1, m.a1, m.a2, m.a3,
-                                m.c * Float64(m.a0) * dl0))
+            out.append(
+                Monomial(m.a0 - 1, m.a1, m.a2, m.a3, m.c * Float64(m.a0) * dl0)
+            )
         if m.a1 > 0 and dl1 != 0.0:
-            out.append(Monomial(m.a0, m.a1 - 1, m.a2, m.a3,
-                                m.c * Float64(m.a1) * dl1))
+            out.append(
+                Monomial(m.a0, m.a1 - 1, m.a2, m.a3, m.c * Float64(m.a1) * dl1)
+            )
         if m.a2 > 0 and dl2 != 0.0:
-            out.append(Monomial(m.a0, m.a1, m.a2 - 1, m.a3,
-                                m.c * Float64(m.a2) * dl2))
+            out.append(
+                Monomial(m.a0, m.a1, m.a2 - 1, m.a3, m.c * Float64(m.a2) * dl2)
+            )
         if m.a3 > 0 and dl3 != 0.0:
-            out.append(Monomial(m.a0, m.a1, m.a2, m.a3 - 1,
-                                m.c * Float64(m.a3) * dl3))
+            out.append(
+                Monomial(m.a0, m.a1, m.a2, m.a3 - 1, m.c * Float64(m.a3) * dl3)
+            )
     return out^
 
 
@@ -434,9 +475,13 @@ def _poly_drdx(p: List[Monomial], k: Int) raises -> List[Monomial]:
 # Returns a flat list of shape [N_F * N_FP] where entry [f * N_FP + l]
 # is the element-local index of the l-th face-local node on face f.
 
+
 def _lookup_tet_node(
     tet_nodes: List[Monomial],
-    a0: Int, a1: Int, a2: Int, a3: Int,
+    a0: Int,
+    a1: Int,
+    a2: Int,
+    a3: Int,
 ) raises -> Int:
     """Linear-scan reverse lookup (a0..a3) -> element-node index."""
     for i in range(len(tet_nodes)):
@@ -447,7 +492,8 @@ def _lookup_tet_node(
 
 
 def _face_to_element_node(
-    P: Int, tet_nodes: List[Monomial],
+    P: Int,
+    tet_nodes: List[Monomial],
 ) raises -> List[Int32]:
     var N_FP_P = num_tri_nodes(P)
     var out = List[Int32]()
@@ -463,7 +509,7 @@ def _face_to_element_node(
         var vC = 3 if f <= 2 else 2
 
         # Face-local node 0, 1, 2: the three vertices.
-        for (l_idx, v_idx) in [(0, vA), (1, vB), (2, vC)]:
+        for l_idx, v_idx in [(0, vA), (1, vB), (2, vC)]:
             var e0 = P if v_idx == 0 else 0
             var e1 = P if v_idx == 1 else 0
             var e2 = P if v_idx == 2 else 0
@@ -478,9 +524,12 @@ def _face_to_element_node(
         var pos = 3
         var e_a = List[Int]()
         var e_b = List[Int]()
-        e_a.append(vA); e_b.append(vB)
-        e_a.append(vB); e_b.append(vC)
-        e_a.append(vC); e_b.append(vA)
+        e_a.append(vA)
+        e_b.append(vB)
+        e_a.append(vB)
+        e_b.append(vC)
+        e_a.append(vC)
+        e_b.append(vA)
         for e in range(3):
             var a_i = e_a[e]
             var b_i = e_b[e]
@@ -501,10 +550,18 @@ def _face_to_element_node(
         for a0v in range(P - 2, 0, -1):
             for a1v in range(P - a0v - 1, 0, -1):
                 var a2v = P - a0v - a1v
-                var exp0 = a0v if vA == 0 else (a1v if vB == 0 else (a2v if vC == 0 else 0))
-                var exp1 = a0v if vA == 1 else (a1v if vB == 1 else (a2v if vC == 1 else 0))
-                var exp2 = a0v if vA == 2 else (a1v if vB == 2 else (a2v if vC == 2 else 0))
-                var exp3 = a0v if vA == 3 else (a1v if vB == 3 else (a2v if vC == 3 else 0))
+                var exp0 = a0v if vA == 0 else (
+                    a1v if vB == 0 else (a2v if vC == 0 else 0)
+                )
+                var exp1 = a0v if vA == 1 else (
+                    a1v if vB == 1 else (a2v if vC == 1 else 0)
+                )
+                var exp2 = a0v if vA == 2 else (
+                    a1v if vB == 2 else (a2v if vC == 2 else 0)
+                )
+                var exp3 = a0v if vA == 3 else (
+                    a1v if vB == 3 else (a2v if vC == 3 else 0)
+                )
                 out[f * N_FP_P + pos] = Int32(
                     _lookup_tet_node(tet_nodes, exp0, exp1, exp2, exp3)
                 )
@@ -515,6 +572,7 @@ def _face_to_element_node(
 # ======================================================================
 # ReferenceElement[P] -- pre-computed operators for order P
 # ======================================================================
+
 
 struct ReferenceElement[P: Int = 2](Copyable, Movable):
     # Reference-space coordinates of each node, flattened as [N_P * 3].
@@ -595,7 +653,9 @@ struct ReferenceElement[P: Int = 2](Copyable, Movable):
                 var dpi = _poly_drdx(tet_phi[i], k)
                 for j in range(N_P_P):
                     var prod = poly_mul(dpi, tet_phi[j])
-                    S[k * N_P_P * N_P_P + i * N_P_P + j] = integrate_ref_tet(prod)
+                    S[k * N_P_P * N_P_P + i * N_P_P + j] = integrate_ref_tet(
+                        prod
+                    )
 
         # D_ref[k] = M_inv @ S[k].
         self.D_ref = List[Float64]()
@@ -671,6 +731,7 @@ struct ReferenceElement[P: Int = 2](Copyable, Movable):
 # Back-compat helpers -- existing drivers still call this name-shape.
 # ----------------------------------------------------------------------
 
+
 def to_float32(src: List[Float64]) raises -> List[Float32]:
     var out = List[Float32]()
     for i in range(len(src)):
@@ -708,6 +769,7 @@ def build_reference_operators(
 # that still uses the hand-coded P=2 ref_face_node function).
 # ----------------------------------------------------------------------
 
+
 def ref_face_node(f: Int, l: Int) raises -> Int:
     """Element-local node index for face-local position l on face f
     at order P=2.  Kept alongside the new `ReferenceElement.face_to_elem`
@@ -715,30 +777,50 @@ def ref_face_node(f: Int, l: Int) raises -> Int:
     keeps compiling."""
     # Hand-unrolled P=2 table for speed.
     if f == 0:
-        if l == 0: return 1
-        if l == 1: return 2
-        if l == 2: return 3
-        if l == 3: return 5
-        if l == 4: return 9
+        if l == 0:
+            return 1
+        if l == 1:
+            return 2
+        if l == 2:
+            return 3
+        if l == 3:
+            return 5
+        if l == 4:
+            return 9
         return 8
     if f == 1:
-        if l == 0: return 0
-        if l == 1: return 2
-        if l == 2: return 3
-        if l == 3: return 6
-        if l == 4: return 9
+        if l == 0:
+            return 0
+        if l == 1:
+            return 2
+        if l == 2:
+            return 3
+        if l == 3:
+            return 6
+        if l == 4:
+            return 9
         return 7
     if f == 2:
-        if l == 0: return 0
-        if l == 1: return 1
-        if l == 2: return 3
-        if l == 3: return 4
-        if l == 4: return 8
+        if l == 0:
+            return 0
+        if l == 1:
+            return 1
+        if l == 2:
+            return 3
+        if l == 3:
+            return 4
+        if l == 4:
+            return 8
         return 7
     # f == 3
-    if l == 0: return 0
-    if l == 1: return 1
-    if l == 2: return 2
-    if l == 3: return 4
-    if l == 4: return 5
+    if l == 0:
+        return 0
+    if l == 1:
+        return 1
+    if l == 2:
+        return 2
+    if l == 3:
+        return 4
+    if l == 4:
+        return 5
     return 6

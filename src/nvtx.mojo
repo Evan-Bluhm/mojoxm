@@ -27,6 +27,7 @@
 
 from std.ffi import OwnedDLHandle
 
+
 struct NvtxContext(Movable):
     var _lib: OwnedDLHandle
     var _enabled: Bool
@@ -49,7 +50,7 @@ struct NvtxContext(Movable):
             self._lib = opt_lib.take()
             self._enabled = True
         else:
-            self._lib = OwnedDLHandle()   # RTLD_DEFAULT placeholder
+            self._lib = OwnedDLHandle()  # RTLD_DEFAULT placeholder
             self._enabled = False
 
     def push_range(mut self, name: String) raises:
@@ -59,9 +60,7 @@ struct NvtxContext(Movable):
         var f = self._lib.get_function[
             def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> Int32
         ]("nvtxRangePushA")
-        _ = f(
-            rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr())
-        )
+        _ = f(rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr()))
 
     def pop_range(mut self) raises:
         if not self._enabled:
@@ -76,9 +75,7 @@ struct NvtxContext(Movable):
         var f = self._lib.get_function[
             def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> NoneType
         ]("nvtxMarkA")
-        f(
-            rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr())
-        )
+        f(rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr()))
 
     def is_enabled(self) -> Bool:
         return self._enabled

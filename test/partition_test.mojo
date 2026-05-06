@@ -36,12 +36,23 @@ def main() raises:
         raise Error("partition_test FAILED: nprocs=1 expected (1,1,1)")
     if p1.nx != 4 or p1.ny != 4 or p1.nz != 4:
         raise Error("partition_test FAILED: nprocs=1 owned counts wrong")
-    if p1.cx0 != 0 or p1.cx1 != 4 or p1.cy0 != 0 or p1.cy1 != 4 \
-            or p1.cz0 != 0 or p1.cz1 != 4:
+    if (
+        p1.cx0 != 0
+        or p1.cx1 != 4
+        or p1.cy0 != 0
+        or p1.cy1 != 4
+        or p1.cz0 != 0
+        or p1.cz1 != 4
+    ):
         raise Error("partition_test FAILED: nprocs=1 owned range wrong")
-    if (p1.neighbour_minus_x != 0 or p1.neighbour_plus_x != 0
-            or p1.neighbour_minus_y != 0 or p1.neighbour_plus_y != 0
-            or p1.neighbour_minus_z != 0 or p1.neighbour_plus_z != 0):
+    if (
+        p1.neighbour_minus_x != 0
+        or p1.neighbour_plus_x != 0
+        or p1.neighbour_minus_y != 0
+        or p1.neighbour_plus_y != 0
+        or p1.neighbour_minus_z != 0
+        or p1.neighbour_plus_z != 0
+    ):
         raise Error("partition_test FAILED: nprocs=1 neighbours not self")
     if p1.num_owned_cubes() != 64:
         raise Error("partition_test FAILED: nprocs=1 num_owned_cubes != 64")
@@ -55,8 +66,12 @@ def main() raises:
     if p2_r0.px != 1 or p2_r0.py != 1 or p2_r0.pz != 2:
         raise Error(
             "partition_test FAILED: nprocs=2 4x4x4 expected (1,1,2), got ("
-            + String(p2_r0.px) + "," + String(p2_r0.py) + ","
-            + String(p2_r0.pz) + ")"
+            + String(p2_r0.px)
+            + ","
+            + String(p2_r0.py)
+            + ","
+            + String(p2_r0.pz)
+            + ")"
         )
     if p2_r0.cz0 != 0 or p2_r0.cz1 != 2:
         raise Error("partition_test FAILED: nprocs=2 r0 z-range wrong")
@@ -69,21 +84,32 @@ def main() raises:
     if p2_r0.neighbour_plus_z != 1 or p2_r0.neighbour_minus_z != 1:
         raise Error(
             "partition_test FAILED: nprocs=2 r0 z-neighbours expected 1, got "
-            + String(p2_r0.neighbour_plus_z) + "/"
+            + String(p2_r0.neighbour_plus_z)
+            + "/"
             + String(p2_r0.neighbour_minus_z)
         )
     # x and y neighbours of rank 0 are itself (px=py=1).
-    if (p2_r0.neighbour_minus_x != 0 or p2_r0.neighbour_plus_x != 0
-            or p2_r0.neighbour_minus_y != 0 or p2_r0.neighbour_plus_y != 0):
-        raise Error("partition_test FAILED: nprocs=2 r0 x/y neighbours not self")
+    if (
+        p2_r0.neighbour_minus_x != 0
+        or p2_r0.neighbour_plus_x != 0
+        or p2_r0.neighbour_minus_y != 0
+        or p2_r0.neighbour_plus_y != 0
+    ):
+        raise Error(
+            "partition_test FAILED: nprocs=2 r0 x/y neighbours not self"
+        )
 
     # ---------- (3) nprocs=8, 4x4x4 mesh: balanced (2,2,2) ----------
     var p3_r0 = build_partition(rank=0, nprocs=8, nx=4, ny=4, nz=4)
     if p3_r0.px != 2 or p3_r0.py != 2 or p3_r0.pz != 2:
         raise Error(
             "partition_test FAILED: nprocs=8 4x4x4 expected (2,2,2), got ("
-            + String(p3_r0.px) + "," + String(p3_r0.py) + ","
-            + String(p3_r0.pz) + ")"
+            + String(p3_r0.px)
+            + ","
+            + String(p3_r0.py)
+            + ","
+            + String(p3_r0.pz)
+            + ")"
         )
     if p3_r0.nx != 2 or p3_r0.ny != 2 or p3_r0.nz != 2:
         raise Error("partition_test FAILED: nprocs=8 r0 owned counts != 2,2,2")
@@ -107,19 +133,22 @@ def main() raises:
     if p3_r0.neighbour_minus_x != 4 or p3_r0.neighbour_plus_x != 4:
         raise Error(
             "partition_test FAILED: nprocs=8 r0 x-neighbour expected 4, got "
-            + String(p3_r0.neighbour_minus_x) + "/"
+            + String(p3_r0.neighbour_minus_x)
+            + "/"
             + String(p3_r0.neighbour_plus_x)
         )
     if p3_r0.neighbour_minus_y != 2 or p3_r0.neighbour_plus_y != 2:
         raise Error(
             "partition_test FAILED: nprocs=8 r0 y-neighbour expected 2, got "
-            + String(p3_r0.neighbour_minus_y) + "/"
+            + String(p3_r0.neighbour_minus_y)
+            + "/"
             + String(p3_r0.neighbour_plus_y)
         )
     if p3_r0.neighbour_minus_z != 1 or p3_r0.neighbour_plus_z != 1:
         raise Error(
             "partition_test FAILED: nprocs=8 r0 z-neighbour expected 1, got "
-            + String(p3_r0.neighbour_minus_z) + "/"
+            + String(p3_r0.neighbour_minus_z)
+            + "/"
             + String(p3_r0.neighbour_plus_z)
         )
 
@@ -133,8 +162,12 @@ def main() raises:
     if p4_r0.px != 1 or p4_r0.py != 2 or p4_r0.pz != 2:
         raise Error(
             "partition_test FAILED: nprocs=4 4x4x4 expected (1,2,2), got ("
-            + String(p4_r0.px) + "," + String(p4_r0.py) + ","
-            + String(p4_r0.pz) + ")"
+            + String(p4_r0.px)
+            + ","
+            + String(p4_r0.py)
+            + ","
+            + String(p4_r0.pz)
+            + ")"
         )
     if p4_r0.nx != 4 or p4_r0.ny != 2 or p4_r0.nz != 2:
         raise Error(
@@ -157,13 +190,15 @@ def main() raises:
     if p4_r0.neighbour_minus_y != 2 or p4_r0.neighbour_plus_y != 2:
         raise Error(
             "partition_test FAILED: nprocs=4 r0 y-neighbour expected 2, got "
-            + String(p4_r0.neighbour_minus_y) + "/"
+            + String(p4_r0.neighbour_minus_y)
+            + "/"
             + String(p4_r0.neighbour_plus_y)
         )
     if p4_r0.neighbour_minus_z != 1 or p4_r0.neighbour_plus_z != 1:
         raise Error(
             "partition_test FAILED: nprocs=4 r0 z-neighbour expected 1, got "
-            + String(p4_r0.neighbour_minus_z) + "/"
+            + String(p4_r0.neighbour_minus_z)
+            + "/"
             + String(p4_r0.neighbour_plus_z)
         )
 

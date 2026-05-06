@@ -63,7 +63,8 @@ comptime PATCH_BLOCK = 256
 # Used by the single-patch fast path where owned_elem_ids, the perm,
 # and its inverse are all the identity.
 def _upload_identity_i32(
-    mut ctx: DeviceContext, n: Int,
+    mut ctx: DeviceContext,
+    n: Int,
 ) raises -> DeviceBuffer[patch_i]:
     var hbuf = ctx.enqueue_create_host_buffer[patch_i](n)
     var p = hbuf.unsafe_ptr()
@@ -78,10 +79,13 @@ def _upload_identity_i32(
 # Kernel: shift every stored node coordinate by (ox, oy, oz).
 # ----------------------------------------------------------------------
 
+
 def offset_nodes_kernel(
     elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_points: Int,
-    ox: Float32, oy: Float32, oz: Float32,
+    ox: Float32,
+    oy: Float32,
+    oz: Float32,
 ):
     var idx = Int(global_idx.x)
     if idx >= num_points:
@@ -99,10 +103,14 @@ def offset_nodes_kernel(
 # num_owned = nx * ny * nz * KUHN_TETS_PER_CELL element IDs.
 # ----------------------------------------------------------------------
 
+
 def build_owned_elem_ids_kernel(
     o_owned_ids: UnsafePointer[Int32, MutAnyOrigin],  # [num_owned]
-    nx: Int, ny: Int, nz: Int,      # owned-cube counts per axis
-    loc_nx: Int, loc_ny: Int,        # local-mesh nx, ny (= owned + 2)
+    nx: Int,
+    ny: Int,
+    nz: Int,  # owned-cube counts per axis
+    loc_nx: Int,
+    loc_ny: Int,  # local-mesh nx, ny (= owned + 2)
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -129,10 +137,15 @@ def build_owned_elem_ids_kernel(
 # ghost geometry.
 # ----------------------------------------------------------------------
 
-def gather_owned_nodes_kernel[NP: Int](
+
+def gather_owned_nodes_kernel[
+    NP: Int
+](
     o_owned_node_xyz: UnsafePointer[Float32, MutAnyOrigin],  # [num_owned*NP*3]
-    owned_ids:  UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned]
-    local_node_xyz: UnsafePointer[Float32, MutAnyOrigin],    # [num_local_elements*NP*3]
+    owned_ids: UnsafePointer[Int32, MutAnyOrigin],  # [num_owned]
+    local_node_xyz: UnsafePointer[
+        Float32, MutAnyOrigin
+    ],  # [num_local_elements*NP*3]
     num_owned: Int,
 ):
     var tid = Int(global_idx.x)
@@ -143,9 +156,9 @@ def gather_owned_nodes_kernel[NP: Int](
     var nn = tid % NP
     var src_elem = Int(owned_ids[owned_idx])
     for d in range(3):
-        o_owned_node_xyz[(owned_idx * NP + nn) * 3 + d] = (
-            local_node_xyz[(src_elem * NP + nn) * 3 + d]
-        )
+        o_owned_node_xyz[(owned_idx * NP + nn) * 3 + d] = local_node_xyz[
+            (src_elem * NP + nn) * 3 + d
+        ]
 
 
 # ----------------------------------------------------------------------
@@ -171,6 +184,7 @@ def gather_owned_nodes_kernel[NP: Int](
 # layout using inv_perm and writes to the new layout at contiguous
 # positions.
 # ----------------------------------------------------------------------
+
 
 def gather_stride_f32_kernel(
     new_arr: UnsafePointer[Float32, MutAnyOrigin],
@@ -207,9 +221,9 @@ def gather_stride_i32_kernel(
 
 
 def remap_face_elem_values_kernel(
-    face_elem: UnsafePointer[Int32, MutAnyOrigin],   # [num_faces * 2]
-    perm: UnsafePointer[Int32, MutAnyOrigin],        # [num_local] old -> new
-    num_entries: Int,                                 # = num_faces * 2
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],  # [num_faces * 2]
+    perm: UnsafePointer[Int32, MutAnyOrigin],  # [num_local] old -> new
+    num_entries: Int,  # = num_faces * 2
 ):
     var idx = Int(global_idx.x)
     if idx >= num_entries:
@@ -222,14 +236,19 @@ def remap_face_elem_values_kernel(
 
 
 def classify_owned_kernel(
-    o_halo_flag:      UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned]
-    o_primary_ring:   UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned], -1 if interior
-    owned_elem_ids:   UnsafePointer[Int32,   MutAnyOrigin],  # [num_owned]
-    elem_faces:       UnsafePointer[Int32,   MutAnyOrigin],  # [num_local*N_F]
-    face_elem:        UnsafePointer[Int32,   MutAnyOrigin],  # [num_faces*2]
+    o_halo_flag: UnsafePointer[Int32, MutAnyOrigin],  # [num_owned]
+    o_primary_ring: UnsafePointer[
+        Int32, MutAnyOrigin
+    ],  # [num_owned], -1 if interior
+    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],  # [num_owned]
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],  # [num_local*N_F]
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],  # [num_faces*2]
     num_owned: Int,
-    loc_nx: Int, loc_ny: Int,
-    nx: Int, ny: Int, nz: Int,
+    loc_nx: Int,
+    loc_ny: Int,
+    nx: Int,
+    ny: Int,
+    nz: Int,
 ):
     var idx = Int(global_idx.x)
     if idx >= num_owned:
@@ -258,9 +277,12 @@ def classify_owned_kernel(
         var n_lcy = rem // loc_nx
         var n_lcx = rem - n_lcy * loc_nx
         var n_owned = (
-            n_lcx >= 1 and n_lcx <= nx
-            and n_lcy >= 1 and n_lcy <= ny
-            and n_lcz >= 1 and n_lcz <= nz
+            n_lcx >= 1
+            and n_lcx <= nx
+            and n_lcy >= 1
+            and n_lcy <= ny
+            and n_lcz >= 1
+            and n_lcz <= nz
         )
         if not n_owned:
             is_halo = 1
@@ -269,12 +291,18 @@ def classify_owned_kernel(
             var dy = n_lcy - my_lcy
             var dz = n_lcz - my_lcz
             var this_dir: Int32 = -1
-            if dx == -1 and dy == 0 and dz == 0: this_dir = 0   # -x
-            elif dx == 1 and dy == 0 and dz == 0: this_dir = 1  # +x
-            elif dx == 0 and dy == -1 and dz == 0: this_dir = 2 # -y
-            elif dx == 0 and dy == 1 and dz == 0: this_dir = 3  # +y
-            elif dx == 0 and dy == 0 and dz == -1: this_dir = 4 # -z
-            elif dx == 0 and dy == 0 and dz == 1: this_dir = 5  # +z
+            if dx == -1 and dy == 0 and dz == 0:
+                this_dir = 0  # -x
+            elif dx == 1 and dy == 0 and dz == 0:
+                this_dir = 1  # +x
+            elif dx == 0 and dy == -1 and dz == 0:
+                this_dir = 2  # -y
+            elif dx == 0 and dy == 1 and dz == 0:
+                this_dir = 3  # +y
+            elif dx == 0 and dy == 0 and dz == -1:
+                this_dir = 4  # -z
+            elif dx == 0 and dy == 0 and dz == 1:
+                this_dir = 5  # +z
             # First-match by direction index wins (i.e. lowest index).
             if this_dir != -1 and (primary == -1 or this_dir < primary):
                 primary = this_dir
@@ -285,6 +313,7 @@ def classify_owned_kernel(
 # ----------------------------------------------------------------------
 # Mesh
 # ----------------------------------------------------------------------
+
 
 struct Mesh[P: Int = 2](Movable):
     # Per-P nodal-DOF count.  Kept as a comptime alias so any Mesh
@@ -355,14 +384,16 @@ struct Mesh[P: Int = 2](Movable):
     # `d_perm` maps the BUILD-time (cube_id * 6 + tet) element id to
     # the post-permutation id; `d_inv_perm` is the reverse.  Kept on
     # the device so HaloExchange can remap its pack-index lists.
-    var d_perm:     DeviceBuffer[patch_i]
+    var d_perm: DeviceBuffer[patch_i]
     var d_inv_perm: DeviceBuffer[patch_i]
 
     def __init__(
         out self,
         mut ctx: DeviceContext,
         var part: Partition,
-        Lx: Float64, Ly: Float64, Lz: Float64,
+        Lx: Float64,
+        Ly: Float64,
+        Lz: Float64,
         bcs: BoundaryConditions,
     ) raises:
         # Single-patch fast path: at np=1 the entire global domain lives
@@ -378,7 +409,14 @@ struct Mesh[P: Int = 2](Movable):
         # call that every struct field gets initialised.
         if part.px * part.py * part.pz == 1:
             self.local = LocalMesh[Self.P](
-                ctx, part.nx, part.ny, part.nz, Lx, Ly, Lz, bcs,
+                ctx,
+                part.nx,
+                part.ny,
+                part.nz,
+                Lx,
+                Ly,
+                Lz,
+                bcs,
             )
             self.ghost_width = 0
 
@@ -434,11 +472,11 @@ struct Mesh[P: Int = 2](Movable):
         # face builder handles them normally (with halo exchange
         # feeding the ghost ring).
         var rank_bcs = BoundaryConditions(
-            bcs.bc_x_lo if part.rx == 0           else BC_INTERIOR,
+            bcs.bc_x_lo if part.rx == 0 else BC_INTERIOR,
             bcs.bc_x_hi if part.rx == part.px - 1 else BC_INTERIOR,
-            bcs.bc_y_lo if part.ry == 0           else BC_INTERIOR,
+            bcs.bc_y_lo if part.ry == 0 else BC_INTERIOR,
             bcs.bc_y_hi if part.ry == part.py - 1 else BC_INTERIOR,
-            bcs.bc_z_lo if part.rz == 0           else BC_INTERIOR,
+            bcs.bc_z_lo if part.rz == 0 else BC_INTERIOR,
             bcs.bc_z_hi if part.rz == part.pz - 1 else BC_INTERIOR,
         )
 
@@ -448,9 +486,15 @@ struct Mesh[P: Int = 2](Movable):
         # OWNED cube layer (local lcx=1, lcy=1, lcz=1 etc.), skipping
         # the 1-cube ghost ring.
         self.local = LocalMesh[Self.P](
-            ctx, nx_loc, ny_loc, nz_loc,
-            Lx_loc, Ly_loc, Lz_loc,
-            rank_bcs, 1,
+            ctx,
+            nx_loc,
+            ny_loc,
+            nz_loc,
+            Lx_loc,
+            Ly_loc,
+            Lz_loc,
+            rank_bcs,
+            1,
         )
         self.ghost_width = 1
 
@@ -464,7 +508,10 @@ struct Mesh[P: Int = 2](Movable):
         var num_points = self.local.num_elements * Self.NP
         ctx.enqueue_function[offset_nodes_kernel, offset_nodes_kernel](
             self.local.d_elem_node_xyz.unsafe_ptr(),
-            num_points, ox, oy, oz,
+            num_points,
+            ox,
+            oy,
+            oz,
             grid_dim=ceildiv(num_points, PATCH_BLOCK),
             block_dim=PATCH_BLOCK,
         )
@@ -477,11 +524,15 @@ struct Mesh[P: Int = 2](Movable):
             self.num_owned_elements
         )
         ctx.enqueue_function[
-            build_owned_elem_ids_kernel, build_owned_elem_ids_kernel,
+            build_owned_elem_ids_kernel,
+            build_owned_elem_ids_kernel,
         ](
             self.d_owned_elem_ids.unsafe_ptr(),
-            part.nx, part.ny, part.nz,
-            nx_loc, ny_loc,
+            part.nx,
+            part.ny,
+            part.nz,
+            nx_loc,
+            ny_loc,
             self.num_owned_elements,
             grid_dim=ceildiv(self.num_owned_elements, PATCH_BLOCK),
             block_dim=PATCH_BLOCK,
@@ -490,9 +541,7 @@ struct Mesh[P: Int = 2](Movable):
         # Gather owned-element node coordinates into a contiguous
         # device buffer, then download to host for the VTU writer.
         var owned_points = self.num_owned_elements * Self.NP
-        var d_owned_nodes = ctx.enqueue_create_buffer[patch_f](
-            owned_points * 3
-        )
+        var d_owned_nodes = ctx.enqueue_create_buffer[patch_f](owned_points * 3)
         comptime _gather_owned_initial = gather_owned_nodes_kernel[Self.NP]
         ctx.enqueue_function[_gather_owned_initial, _gather_owned_initial](
             d_owned_nodes.unsafe_ptr(),
@@ -524,8 +573,11 @@ struct Mesh[P: Int = 2](Movable):
             self.local.d_elem_faces.unsafe_ptr(),
             self.local.d_face_elem.unsafe_ptr(),
             self.num_owned_elements,
-            nx_loc, ny_loc,
-            part.nx, part.ny, part.nz,
+            nx_loc,
+            ny_loc,
+            part.nx,
+            part.ny,
+            part.nz,
             grid_dim=ceildiv(self.num_owned_elements, PATCH_BLOCK),
             block_dim=PATCH_BLOCK,
         )
@@ -545,9 +597,9 @@ struct Mesh[P: Int = 2](Movable):
         ctx.enqueue_copy(h_owned, self.d_owned_elem_ids)
         ctx.synchronize()
 
-        var pflag    = h_flag.unsafe_ptr()
+        var pflag = h_flag.unsafe_ptr()
         var pprimary = h_primary.unsafe_ptr()
-        var powned   = h_owned.unsafe_ptr()
+        var powned = h_owned.unsafe_ptr()
 
         # Count per-bucket sizes: [interior, halo_-x, halo_+x, halo_-y,
         # halo_+y, halo_-z, halo_+z].
@@ -571,12 +623,24 @@ struct Mesh[P: Int = 2](Movable):
         # the -x ring contributes 6 tets, regardless of primary-ring
         # picks; the face-ring size is nx*ny*6 at the -z ring etc.).
         self.ghost_ring_count = List[Int]()
-        self.ghost_ring_count.append(part.ny * part.nz * KUHN_TETS_PER_CELL)  # -x
-        self.ghost_ring_count.append(part.ny * part.nz * KUHN_TETS_PER_CELL)  # +x
-        self.ghost_ring_count.append(part.nx * part.nz * KUHN_TETS_PER_CELL)  # -y
-        self.ghost_ring_count.append(part.nx * part.nz * KUHN_TETS_PER_CELL)  # +y
-        self.ghost_ring_count.append(part.nx * part.ny * KUHN_TETS_PER_CELL)  # -z
-        self.ghost_ring_count.append(part.nx * part.ny * KUHN_TETS_PER_CELL)  # +z
+        self.ghost_ring_count.append(
+            part.ny * part.nz * KUHN_TETS_PER_CELL
+        )  # -x
+        self.ghost_ring_count.append(
+            part.ny * part.nz * KUHN_TETS_PER_CELL
+        )  # +x
+        self.ghost_ring_count.append(
+            part.nx * part.nz * KUHN_TETS_PER_CELL
+        )  # -y
+        self.ghost_ring_count.append(
+            part.nx * part.nz * KUHN_TETS_PER_CELL
+        )  # +y
+        self.ghost_ring_count.append(
+            part.nx * part.ny * KUHN_TETS_PER_CELL
+        )  # -z
+        self.ghost_ring_count.append(
+            part.nx * part.ny * KUHN_TETS_PER_CELL
+        )  # +z
 
         # Host-side interior / halo ID lists.  Not uploaded to device
         # (the solver dispatches over contiguous [base, base+count)
@@ -586,9 +650,9 @@ struct Mesh[P: Int = 2](Movable):
         # should go into the "first interior_count" slots and which
         # into the "halo" block.
         var h_halo = ctx.enqueue_create_host_buffer[patch_i](halo_count)
-        var h_int  = ctx.enqueue_create_host_buffer[patch_i](interior_count)
+        var h_int = ctx.enqueue_create_host_buffer[patch_i](interior_count)
         var p_halo = h_halo.unsafe_ptr()
-        var p_int  = h_int.unsafe_ptr()
+        var p_int = h_int.unsafe_ptr()
 
         # Compute cumulative primary offsets.
         var halo_offset = InlineArray[Int, 6](fill=0)
@@ -642,9 +706,7 @@ struct Mesh[P: Int = 2](Movable):
         var halo_offset_abs = InlineArray[Int, 6](fill=0)
         halo_offset_abs[0] = interior_count
         for d in range(1, 6):
-            halo_offset_abs[d] = (
-                halo_offset_abs[d - 1] + halo_per_dir[d - 1]
-            )
+            halo_offset_abs[d] = halo_offset_abs[d - 1] + halo_per_dir[d - 1]
         # Cumulative ghost-ring offsets after owned region.
         var ghost_offset_abs = InlineArray[Int, 7](fill=0)
         ghost_offset_abs[0] = self.num_owned_elements
@@ -677,10 +739,17 @@ struct Mesh[P: Int = 2](Movable):
         def _assign_ghost_ring(
             mut perm_p: UnsafePointer[Int32, MutAnyOrigin],
             mut cursor: List[Int],
-            d: Int, fx: Int, fy: Int, fz: Int,
-            iter_a_lo: Int, iter_a_hi: Int,
-            iter_b_lo: Int, iter_b_hi: Int,
-            axis: Int, loc_nx_cap: Int, loc_ny_cap: Int,
+            d: Int,
+            fx: Int,
+            fy: Int,
+            fz: Int,
+            iter_a_lo: Int,
+            iter_a_hi: Int,
+            iter_b_lo: Int,
+            iter_b_hi: Int,
+            axis: Int,
+            loc_nx_cap: Int,
+            loc_ny_cap: Int,
         ) capturing:
             # `axis` == 0 means x-axis ring: fx set, iterate (lcy, lcz).
             # `axis` == 1 means y-axis ring: fy set, iterate (lcx, lcz).
@@ -691,14 +760,18 @@ struct Mesh[P: Int = 2](Movable):
                     var lcy: Int
                     var lcz: Int
                     if axis == 0:
-                        lcx = fx; lcy = a; lcz = b
+                        lcx = fx
+                        lcy = a
+                        lcz = b
                     elif axis == 1:
-                        lcx = a;  lcy = fy; lcz = b
+                        lcx = a
+                        lcy = fy
+                        lcz = b
                     else:
-                        lcx = a;  lcy = b;  lcz = fz
-                    var cell = lcx + loc_nx_cap * (
-                        lcy + loc_ny_cap * lcz
-                    )
+                        lcx = a
+                        lcy = b
+                        lcz = fz
+                    var cell = lcx + loc_nx_cap * (lcy + loc_ny_cap * lcz)
                     for t in range(KUHN_TETS_PER_CELL):
                         var old_id = cell * KUHN_TETS_PER_CELL + t
                         perm_p[old_id] = Int32(cursor[d])
@@ -709,39 +782,99 @@ struct Mesh[P: Int = 2](Movable):
         var nz_p = self.part.nz
         # -x ghost ring (lcx=0), iterate (lcy, lcz).
         _assign_ghost_ring(
-            pp, ghost_cursor, 0, 0, -1, -1,
-            1, ny_p + 1, 1, nz_p + 1,
-            0, nx_loc, ny_loc,
+            pp,
+            ghost_cursor,
+            0,
+            0,
+            -1,
+            -1,
+            1,
+            ny_p + 1,
+            1,
+            nz_p + 1,
+            0,
+            nx_loc,
+            ny_loc,
         )
         # +x ghost ring (lcx=nx+1).
         _assign_ghost_ring(
-            pp, ghost_cursor, 1, nx_p + 1, -1, -1,
-            1, ny_p + 1, 1, nz_p + 1,
-            0, nx_loc, ny_loc,
+            pp,
+            ghost_cursor,
+            1,
+            nx_p + 1,
+            -1,
+            -1,
+            1,
+            ny_p + 1,
+            1,
+            nz_p + 1,
+            0,
+            nx_loc,
+            ny_loc,
         )
         # -y ghost ring (lcy=0), iterate (lcx, lcz).
         _assign_ghost_ring(
-            pp, ghost_cursor, 2, -1, 0, -1,
-            1, nx_p + 1, 1, nz_p + 1,
-            1, nx_loc, ny_loc,
+            pp,
+            ghost_cursor,
+            2,
+            -1,
+            0,
+            -1,
+            1,
+            nx_p + 1,
+            1,
+            nz_p + 1,
+            1,
+            nx_loc,
+            ny_loc,
         )
         # +y ghost ring (lcy=ny+1).
         _assign_ghost_ring(
-            pp, ghost_cursor, 3, -1, ny_p + 1, -1,
-            1, nx_p + 1, 1, nz_p + 1,
-            1, nx_loc, ny_loc,
+            pp,
+            ghost_cursor,
+            3,
+            -1,
+            ny_p + 1,
+            -1,
+            1,
+            nx_p + 1,
+            1,
+            nz_p + 1,
+            1,
+            nx_loc,
+            ny_loc,
         )
         # -z ghost ring (lcz=0), iterate (lcx, lcy).
         _assign_ghost_ring(
-            pp, ghost_cursor, 4, -1, -1, 0,
-            1, nx_p + 1, 1, ny_p + 1,
-            2, nx_loc, ny_loc,
+            pp,
+            ghost_cursor,
+            4,
+            -1,
+            -1,
+            0,
+            1,
+            nx_p + 1,
+            1,
+            ny_p + 1,
+            2,
+            nx_loc,
+            ny_loc,
         )
         # +z ghost ring (lcz=nz+1).
         _assign_ghost_ring(
-            pp, ghost_cursor, 5, -1, -1, nz_p + 1,
-            1, nx_p + 1, 1, ny_p + 1,
-            2, nx_loc, ny_loc,
+            pp,
+            ghost_cursor,
+            5,
+            -1,
+            -1,
+            nz_p + 1,
+            1,
+            nx_p + 1,
+            1,
+            ny_p + 1,
+            2,
+            nx_loc,
+            ny_loc,
         )
 
         # --- Unused buckets: everything still at -1 (edge/corner
@@ -774,7 +907,8 @@ struct Mesh[P: Int = 2](Movable):
         # in [num_interior, num_owned)).  Uploaded for IC kernels that
         # still iterate owned DOFs by index.
         self.d_owned_elem_ids = _upload_identity_i32(
-            ctx, self.num_owned_elements,
+            ctx,
+            self.num_owned_elements,
         )
         ctx.synchronize()
 
@@ -796,7 +930,9 @@ struct Mesh[P: Int = 2](Movable):
         ctx.synchronize()
 
     def _permute_mesh_arrays(
-        mut self, mut ctx: DeviceContext, num_local: Int,
+        mut self,
+        mut ctx: DeviceContext,
+        num_local: Int,
     ) raises:
         """Apply `d_inv_perm` to every per-element mesh array and
         remap element-id values in `face_elem`.  Each per-element
@@ -809,17 +945,20 @@ struct Mesh[P: Int = 2](Movable):
         # elem_inv_6V).
         @parameter
         def _gather_f32(
-            mut old: DeviceBuffer[patch_f], stride: Int,
+            mut old: DeviceBuffer[patch_f],
+            stride: Int,
         ) raises -> DeviceBuffer[patch_f]:
-            var new = ctx.enqueue_create_buffer[patch_f](
-                num_local * stride
-            )
+            var new = ctx.enqueue_create_buffer[patch_f](num_local * stride)
             var total = num_local * stride
             ctx.enqueue_function[
-                gather_stride_f32_kernel, gather_stride_f32_kernel,
+                gather_stride_f32_kernel,
+                gather_stride_f32_kernel,
             ](
-                new.unsafe_ptr(), old.unsafe_ptr(), inv,
-                num_local, stride,
+                new.unsafe_ptr(),
+                old.unsafe_ptr(),
+                inv,
+                num_local,
+                stride,
                 grid_dim=ceildiv(total, PATCH_BLOCK),
                 block_dim=PATCH_BLOCK,
             )
@@ -827,17 +966,20 @@ struct Mesh[P: Int = 2](Movable):
 
         @parameter
         def _gather_i32(
-            mut old: DeviceBuffer[patch_i], stride: Int,
+            mut old: DeviceBuffer[patch_i],
+            stride: Int,
         ) raises -> DeviceBuffer[patch_i]:
-            var new = ctx.enqueue_create_buffer[patch_i](
-                num_local * stride
-            )
+            var new = ctx.enqueue_create_buffer[patch_i](num_local * stride)
             var total = num_local * stride
             ctx.enqueue_function[
-                gather_stride_i32_kernel, gather_stride_i32_kernel,
+                gather_stride_i32_kernel,
+                gather_stride_i32_kernel,
             ](
-                new.unsafe_ptr(), old.unsafe_ptr(), inv,
-                num_local, stride,
+                new.unsafe_ptr(),
+                old.unsafe_ptr(),
+                inv,
+                num_local,
+                stride,
                 grid_dim=ceildiv(total, PATCH_BLOCK),
                 block_dim=PATCH_BLOCK,
             )
@@ -846,29 +988,27 @@ struct Mesh[P: Int = 2](Movable):
         self.local.d_elem_node_xyz = _gather_f32(
             self.local.d_elem_node_xyz, Self.NP * 3
         )
-        self.local.d_elem_invJ = _gather_f32(
-            self.local.d_elem_invJ, 9
-        )
-        self.local.d_elem_inv_6V = _gather_f32(
-            self.local.d_elem_inv_6V, 1
-        )
-        self.local.d_elem_faces = _gather_i32(
-            self.local.d_elem_faces, N_F
-        )
+        self.local.d_elem_invJ = _gather_f32(self.local.d_elem_invJ, 9)
+        self.local.d_elem_inv_6V = _gather_f32(self.local.d_elem_inv_6V, 1)
+        self.local.d_elem_faces = _gather_i32(self.local.d_elem_faces, N_F)
         self.local.d_elem_face_side = _gather_i32(
             self.local.d_elem_face_side, N_F
         )
         self.local.d_elem_canon_to_ref = _gather_i32(
-            self.local.d_elem_canon_to_ref, N_F * 6,
+            self.local.d_elem_canon_to_ref,
+            N_F * 6,
         )
 
         # Remap element-id VALUES inside face_elem (face entries
         # reference elements by id).
         var n_entries = self.local.num_faces * 2
         ctx.enqueue_function[
-            remap_face_elem_values_kernel, remap_face_elem_values_kernel,
+            remap_face_elem_values_kernel,
+            remap_face_elem_values_kernel,
         ](
-            self.local.d_face_elem.unsafe_ptr(), perm, n_entries,
+            self.local.d_face_elem.unsafe_ptr(),
+            perm,
+            n_entries,
             grid_dim=ceildiv(n_entries, PATCH_BLOCK),
             block_dim=PATCH_BLOCK,
         )

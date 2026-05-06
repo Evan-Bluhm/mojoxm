@@ -32,6 +32,7 @@ struct TimeLoopResult(Copyable, Movable):
     `solver.step_ssprk3` calls (kernel enqueue, no synchronize); actual
     GPU work runs asynchronously, so this number is usually much smaller
     than wall_sec on anything beyond a trivial problem."""
+
     var total_steps: Int
     var wall_sec: Float64
     var step_loop_sec: Float64
@@ -40,7 +41,8 @@ struct TimeLoopResult(Copyable, Movable):
 
 
 def run_ssprk3_loop[
-    PhysT: Physics, P: Int = 2,
+    PhysT: Physics,
+    P: Int = 2,
 ](
     mut solver: Solver[PhysT, P],
     mut writer: FrameWriter[PhysT, P],
@@ -109,7 +111,8 @@ def run_ssprk3_loop[
 
 
 def run_ssprk3_loop_with_diagnostics[
-    PhysT: Physics, P: Int = 2,
+    PhysT: Physics,
+    P: Int = 2,
 ](
     mut solver: Solver[PhysT, P],
     mut writer: FrameWriter[PhysT, P],

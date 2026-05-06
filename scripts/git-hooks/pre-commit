@@ -13,19 +13,22 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-# Pick a mojo binary: explicit override, then PATH, then the project
-# venv that the Makefile defaults to.
-MOJO="${MOJO:-}"
-if [[ -z "$MOJO" ]]; then
-    if command -v mojo >/dev/null 2>&1; then
-        MOJO=mojo
-    elif [[ -x .venv/bin/mojo ]]; then
-        MOJO=.venv/bin/mojo
-    else
-        echo "pre-commit: 'mojo' not on PATH and .venv/bin/mojo not found." >&2
-        echo "            Set MOJO=<path> or activate the venv." >&2
-        exit 1
-    fi
+# Pick a mojo invocation: explicit MOJO override, then PATH, then the
+# pixi-managed env that the Makefile defaults to.  Stored as an array
+# because the pixi fallback is multi-word ("pixi run mojo").  The pixi
+# env's bare binary won't find its stdlib without MODULAR_HOME, so we
+# go through `pixi run`.
+if [[ -n "${MOJO:-}" ]]; then
+    # shellcheck disable=SC2206 -- intentional word-split on user override
+    mojo_cmd=($MOJO)
+elif command -v mojo >/dev/null 2>&1; then
+    mojo_cmd=(mojo)
+elif [[ -f pixi.toml || -f pyproject.toml ]] && command -v pixi >/dev/null 2>&1; then
+    mojo_cmd=(pixi run mojo)
+else
+    echo "pre-commit: 'mojo' not on PATH and pixi/pyproject.toml not found." >&2
+    echo "            Set MOJO=<path> or run 'pixi install'." >&2
+    exit 1
 fi
 
 # Staged Mojo files (added/copied/modified/renamed only -- skip deletes).
@@ -44,7 +47,7 @@ for f in "${files[@]}"; do
     tmp="$tmpdir/$f"
     mkdir -p "$(dirname "$tmp")"
     git show ":$f" > "$tmp"
-    "$MOJO" format -q "$tmp"
+    "${mojo_cmd[@]}" format -q "$tmp"
     if ! git show ":$f" | diff -q - "$tmp" >/dev/null 2>&1; then
         bad+=("$f")
     fi

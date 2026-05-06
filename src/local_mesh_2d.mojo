@@ -36,21 +36,27 @@
 # ======================================================================
 
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.boundary import (
-    BoundaryConditions2D, BC_INTERIOR, BC_WALL, BC_OUTFLOW,
+    BoundaryConditions2D,
+    BC_INTERIOR,
+    BC_WALL,
+    BC_OUTFLOW,
 )
 from std.math import sqrt
 
 
 comptime TRIS_PER_CELL = 2
-comptime FACES_PER_CELL = 3   # 1 diagonal + 1 +x + 1 +y
+comptime FACES_PER_CELL = 3  # 1 diagonal + 1 +x + 1 +y
 
 
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
+
 
 def _zeros_f64(n: Int) raises -> List[Float64]:
     var out = List[Float64]()
@@ -69,6 +75,7 @@ def _zeros_i32(n: Int) raises -> List[Int32]:
 # ----------------------------------------------------------------------
 # Mesh tables container
 # ----------------------------------------------------------------------
+
 
 struct LocalMesh2D[P: Int = 2](Movable):
     """Order-P Lagrange triangle mesh on a Cartesian grid with /-diagonal
@@ -105,8 +112,10 @@ struct LocalMesh2D[P: Int = 2](Movable):
 
     def __init__(
         out self,
-        Nx: Int, Ny: Int,
-        Lx: Float64, Ly: Float64,
+        Nx: Int,
+        Ny: Int,
+        Lx: Float64,
+        Ly: Float64,
         bcs: BoundaryConditions2D = BoundaryConditions2D.periodic(),
     ) raises:
         self.Nx = Nx
@@ -153,13 +162,19 @@ struct LocalMesh2D[P: Int = 2](Movable):
                     var v2x: Float64
                     var v2y: Float64
                     if t == 0:
-                        v0x = base_x;             v0y = base_y
-                        v1x = base_x + self.dx;   v1y = base_y
-                        v2x = base_x + self.dx;   v2y = base_y + self.dy
+                        v0x = base_x
+                        v0y = base_y
+                        v1x = base_x + self.dx
+                        v1y = base_y
+                        v2x = base_x + self.dx
+                        v2y = base_y + self.dy
                     else:
-                        v0x = base_x;             v0y = base_y
-                        v1x = base_x + self.dx;   v1y = base_y + self.dy
-                        v2x = base_x;             v2y = base_y + self.dy
+                        v0x = base_x
+                        v0y = base_y
+                        v1x = base_x + self.dx
+                        v1y = base_y + self.dy
+                        v2x = base_x
+                        v2y = base_y + self.dy
 
                     # Node positions: interpolate in barycentric coords.
                     for nn in range(NP_p):
@@ -181,13 +196,15 @@ struct LocalMesh2D[P: Int = 2](Movable):
                     var J11 = v2y - v0y
                     var detJ = J00 * J11 - J01 * J10
                     if detJ <= 0.0:
-                        raise Error("LocalMesh2D: triangle has non-positive area")
+                        raise Error(
+                            "LocalMesh2D: triangle has non-positive area"
+                        )
                     var inv_det = 1.0 / detJ
                     # J^-1 = (1/detJ) * [[J11, -J01], [-J10, J00]]
-                    self.elem_invJ[elem * 4 + 0] =  J11 * inv_det
+                    self.elem_invJ[elem * 4 + 0] = J11 * inv_det
                     self.elem_invJ[elem * 4 + 1] = -J01 * inv_det
                     self.elem_invJ[elem * 4 + 2] = -J10 * inv_det
-                    self.elem_invJ[elem * 4 + 3] =  J00 * inv_det
+                    self.elem_invJ[elem * 4 + 3] = J00 * inv_det
                     # 1 / (2 * area) = 1 / detJ because detJ = 2 * area for
                     # the reference simplex (area 1/2).
                     self.elem_inv_2A[elem] = inv_det
@@ -220,17 +237,29 @@ struct LocalMesh2D[P: Int = 2](Movable):
         #   ft 1 (+x):       side 0 = T0 e1, side 1 = T1 e2 of (i+1, j), di = +1.
         #   ft 2 (+y):       side 0 = T1 e1, side 1 = T0 e0 of (i, j+1), dj = +1.
         var ft_side0_tri = List[Int]()
-        ft_side0_tri.append(0); ft_side0_tri.append(0); ft_side0_tri.append(1)
+        ft_side0_tri.append(0)
+        ft_side0_tri.append(0)
+        ft_side0_tri.append(1)
         var ft_side0_edge = List[Int]()
-        ft_side0_edge.append(2); ft_side0_edge.append(1); ft_side0_edge.append(1)
+        ft_side0_edge.append(2)
+        ft_side0_edge.append(1)
+        ft_side0_edge.append(1)
         var ft_side1_tri = List[Int]()
-        ft_side1_tri.append(1); ft_side1_tri.append(1); ft_side1_tri.append(0)
+        ft_side1_tri.append(1)
+        ft_side1_tri.append(1)
+        ft_side1_tri.append(0)
         var ft_side1_edge = List[Int]()
-        ft_side1_edge.append(0); ft_side1_edge.append(2); ft_side1_edge.append(0)
+        ft_side1_edge.append(0)
+        ft_side1_edge.append(2)
+        ft_side1_edge.append(0)
         var ft_di = List[Int]()
-        ft_di.append(0); ft_di.append(1); ft_di.append(0)
+        ft_di.append(0)
+        ft_di.append(1)
+        ft_di.append(0)
         var ft_dj = List[Int]()
-        ft_dj.append(0); ft_dj.append(0); ft_dj.append(1)
+        ft_dj.append(0)
+        ft_dj.append(0)
+        ft_dj.append(1)
 
         # Face normal + length for each face type, computed from the
         # unit cell (dx, dy) with diagonal length sqrt(dx^2 + dy^2).
@@ -291,7 +320,9 @@ struct LocalMesh2D[P: Int = 2](Movable):
                     for m in range(NFP_e):
                         # Side 0: node = re.edge_to_elem[e0_lf * NFP_e + m]
                         var n0 = Int(re.edge_to_elem[e0_lf * NFP_e + m])
-                        self.face_elem_node[(fid * 2 + 0) * NFP_e + m] = Int32(n0)
+                        self.face_elem_node[(fid * 2 + 0) * NFP_e + m] = Int32(
+                            n0
+                        )
                         # Side 1: same edge but walked in reverse, because
                         # the two elements share this face with opposite
                         # orientation.  Side 1's edge-local index P-m
@@ -299,7 +330,9 @@ struct LocalMesh2D[P: Int = 2](Movable):
                         var n1 = Int(
                             re.edge_to_elem[e1_lf * NFP_e + (NFP_e - 1 - m)]
                         )
-                        self.face_elem_node[(fid * 2 + 1) * NFP_e + m] = Int32(n1)
+                        self.face_elem_node[(fid * 2 + 1) * NFP_e + m] = Int32(
+                            n1
+                        )
                         # canon_to_ref: the canonical (side-0-ordering)
                         # slot m maps to ref-edge slot m on side 0 and
                         # (P-m) on side 1, in the tri-local edge index
@@ -324,7 +357,7 @@ struct LocalMesh2D[P: Int = 2](Movable):
         if bcs.bc_x_hi != BC_INTERIOR:
             for j in range(Ny):
                 var cell = j * Nx + (Nx - 1)
-                var fid = cell * FACES_PER_CELL + 1   # ft 1 = +x
+                var fid = cell * FACES_PER_CELL + 1  # ft 1 = +x
                 # Safe no-op dereference of side 1 (points at cell 0 T1;
                 # the solver's boundary_flux ignores q_r).
                 self.face_elem[fid * 2 + 1] = self.face_elem[fid * 2 + 0]
@@ -332,7 +365,7 @@ struct LocalMesh2D[P: Int = 2](Movable):
         if bcs.bc_y_hi != BC_INTERIOR:
             for i in range(Nx):
                 var cell = (Ny - 1) * Nx + i
-                var fid = cell * FACES_PER_CELL + 2   # ft 2 = +y
+                var fid = cell * FACES_PER_CELL + 2  # ft 2 = +y
                 self.face_elem[fid * 2 + 1] = self.face_elem[fid * 2 + 0]
                 self.face_bc_type[fid] = bcs.bc_y_hi
 
@@ -347,9 +380,9 @@ struct LocalMesh2D[P: Int = 2](Movable):
             var mx_base = nf_periodic
             for j in range(Ny):
                 var cell = j * Nx + 0
-                var elem = cell * TRIS_PER_CELL + 1   # T1 owns -x edge
+                var elem = cell * TRIS_PER_CELL + 1  # T1 owns -x edge
                 var new_fid = mx_base + j
-                var lf = 2                            # T1's edge 2 = -x
+                var lf = 2  # T1's edge 2 = -x
                 self.face_elem[new_fid * 2 + 0] = Int32(elem)
                 self.face_elem[new_fid * 2 + 1] = Int32(elem)
                 # Normal points outward from the interior: (-1, 0) for
@@ -363,22 +396,22 @@ struct LocalMesh2D[P: Int = 2](Movable):
                 self.elem_face_side[elem * 3 + lf] = Int32(0)
                 for m in range(NFP_e):
                     var nn = Int(re.edge_to_elem[lf * NFP_e + m])
-                    self.face_elem_node[
-                        (new_fid * 2 + 0) * NFP_e + m
-                    ] = Int32(nn)
-                    self.face_elem_node[
-                        (new_fid * 2 + 1) * NFP_e + m
-                    ] = Int32(nn)
-                    self.elem_canon_to_ref[
-                        (elem * 3 + lf) * NFP_e + m
-                    ] = Int32(m)
+                    self.face_elem_node[(new_fid * 2 + 0) * NFP_e + m] = Int32(
+                        nn
+                    )
+                    self.face_elem_node[(new_fid * 2 + 1) * NFP_e + m] = Int32(
+                        nn
+                    )
+                    self.elem_canon_to_ref[(elem * 3 + lf) * NFP_e + m] = Int32(
+                        m
+                    )
         if bcs.bc_y_lo != BC_INTERIOR:
             var my_base = nf_periodic + extra_mx
             for i in range(Nx):
                 var cell = 0 * Nx + i
-                var elem = cell * TRIS_PER_CELL + 0   # T0 owns -y edge
+                var elem = cell * TRIS_PER_CELL + 0  # T0 owns -y edge
                 var new_fid = my_base + i
-                var lf = 0                            # T0's edge 0 = -y
+                var lf = 0  # T0's edge 0 = -y
                 self.face_elem[new_fid * 2 + 0] = Int32(elem)
                 self.face_elem[new_fid * 2 + 1] = Int32(elem)
                 self.face_normal[new_fid * 2 + 0] = 0.0
@@ -389,12 +422,12 @@ struct LocalMesh2D[P: Int = 2](Movable):
                 self.elem_face_side[elem * 3 + lf] = Int32(0)
                 for m in range(NFP_e):
                     var nn = Int(re.edge_to_elem[lf * NFP_e + m])
-                    self.face_elem_node[
-                        (new_fid * 2 + 0) * NFP_e + m
-                    ] = Int32(nn)
-                    self.face_elem_node[
-                        (new_fid * 2 + 1) * NFP_e + m
-                    ] = Int32(nn)
-                    self.elem_canon_to_ref[
-                        (elem * 3 + lf) * NFP_e + m
-                    ] = Int32(m)
+                    self.face_elem_node[(new_fid * 2 + 0) * NFP_e + m] = Int32(
+                        nn
+                    )
+                    self.face_elem_node[(new_fid * 2 + 1) * NFP_e + m] = Int32(
+                        nn
+                    )
+                    self.elem_canon_to_ref[(elem * 3 + lf) * NFP_e + m] = Int32(
+                        m
+                    )

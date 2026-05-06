@@ -25,9 +25,14 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import (
-    euler_rk_stage_2d, euler_rk_stage_hllc_2d,
+    euler_rk_stage_2d,
+    euler_rk_stage_hllc_2d,
 )
-from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
+from src.reference_2d import (
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
+)
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -51,9 +56,12 @@ def _check_constant(
             raise Error(label + ": non-finite value at index " + String(k))
         var expect: Float32 = expect_rho
         var c = k % 4
-        if c == 1: expect = expect_mx
-        elif c == 2: expect = expect_my
-        elif c == 3: expect = expect_E
+        if c == 1:
+            expect = expect_mx
+        elif c == 2:
+            expect = expect_my
+        elif c == 3:
+            expect = expect_E
         var err = _abs32(v - expect)
         if err > max_err:
             max_err = err
@@ -64,8 +72,10 @@ def _check_constant(
     # err into the O(dt * f) range which is >> 1e-4 for these values).
     if max_err > Float32(1.0e-4):
         raise Error(
-            label + ": constant state not preserved (max err "
-            + String(max_err) + ")"
+            label
+            + ": constant state not preserved (max err "
+            + String(max_err)
+            + ")"
         )
 
 
@@ -93,19 +103,21 @@ def main() raises:
     var re_gpu = ReferenceElement2DGpu[P](ctx, re_host)
 
     # Uniform IC (analytic steady state on a periodic domain).
-    var rho0  = Float32(1.0)
-    var u0    = Float32(0.5)
-    var v0    = Float32(0.3)
-    var p0    = Float32(1.0)
+    var rho0 = Float32(1.0)
+    var u0 = Float32(0.5)
+    var v0 = Float32(0.3)
+    var p0 = Float32(1.0)
     var gamma = Float32(1.4)
     var mx0 = rho0 * u0
     var my0 = rho0 * v0
-    var E0  = p0 / (gamma - Float32(1.0)) + Float32(0.5) * rho0 * (u0 * u0 + v0 * v0)
+    var E0 = p0 / (gamma - Float32(1.0)) + Float32(0.5) * rho0 * (
+        u0 * u0 + v0 * v0
+    )
     var min_rho = Float32(1.0e-8)
-    var min_p   = Float32(1.0e-8)
+    var min_p = Float32(1.0e-8)
 
     var n_q = gpu.num_elements * NP_p * NC
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -125,40 +137,69 @@ def main() raises:
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
     euler_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(1.0), Float32(0.0), Float32(1.0), dt,
+        gamma,
+        min_rho,
+        min_p,
+        Float32(1.0),
+        Float32(0.0),
+        Float32(1.0),
+        dt,
     )
     euler_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(0.75), Float32(0.25), Float32(0.25), dt,
+        gamma,
+        min_rho,
+        min_p,
+        Float32(0.75),
+        Float32(0.25),
+        Float32(0.25),
+        dt,
     )
     euler_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt,
+        gamma,
+        min_rho,
+        min_p,
+        Float32(1.0 / 3.0),
+        Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0),
+        dt,
     )
     ctx.enqueue_copy(hbuf, d_q)
     ctx.synchronize()
     _check_constant(
-        String("Euler Rusanov"), hptr, n_q, rho0, mx0, my0, E0,
+        String("Euler Rusanov"),
+        hptr,
+        n_q,
+        rho0,
+        mx0,
+        my0,
+        E0,
     )
 
     # ---- HLLC: same check ---------------------------------------
@@ -170,40 +211,69 @@ def main() raises:
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
     euler_rk_stage_hllc_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(1.0), Float32(0.0), Float32(1.0), dt,
+        gamma,
+        min_rho,
+        min_p,
+        Float32(1.0),
+        Float32(0.0),
+        Float32(1.0),
+        dt,
     )
     euler_rk_stage_hllc_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(0.75), Float32(0.25), Float32(0.25), dt,
+        gamma,
+        min_rho,
+        min_p,
+        Float32(0.75),
+        Float32(0.25),
+        Float32(0.25),
+        dt,
     )
     euler_rk_stage_hllc_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt,
+        gamma,
+        min_rho,
+        min_p,
+        Float32(1.0 / 3.0),
+        Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0),
+        dt,
     )
     ctx.enqueue_copy(hbuf, d_q)
     ctx.synchronize()
     _check_constant(
-        String("Euler HLLC"), hptr, n_q, rho0, mx0, my0, E0,
+        String("Euler HLLC"),
+        hptr,
+        n_q,
+        rho0,
+        mx0,
+        my0,
+        E0,
     )
 
     print("=== euler_2d_gpu_test PASSED ===")

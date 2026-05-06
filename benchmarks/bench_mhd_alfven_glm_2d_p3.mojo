@@ -38,7 +38,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd_glm import mhd_glm_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -48,14 +50,14 @@ comptime NX = 32
 comptime NY = 4
 comptime LX = 1.0
 
-comptime GAMMA     = 5.0 / 3.0
-comptime RHO0      = 1.0
-comptime B0        = 1.0
-comptime P0        = 0.1
+comptime GAMMA = 5.0 / 3.0
+comptime RHO0 = 1.0
+comptime B0 = 1.0
+comptime P0 = 0.1
 comptime AMPLITUDE = 0.1
 
-comptime T_FINAL   = 1.0
-comptime CFL       = 0.10
+comptime T_FINAL = 1.0
+comptime CFL = 0.10
 
 comptime L2_MAX_REL: Float64 = 5.0e-3
 comptime PSI_TOL: Float32 = Float32(1.0e-5)
@@ -89,16 +91,23 @@ def _run() raises -> Float64:
             var my = RHO0 * uy
             var ke = 0.5 * RHO0 * (uy * uy)
             var mp = 0.5 * (Bx * Bx + By * By)
-            var E  = P0 / (GAMMA - 1.0) + ke + mp
-            host_q.append(Float32(RHO0));   host_ic.append(Float32(RHO0))
-            host_q.append(Float32(mx));     host_ic.append(Float32(mx))
-            host_q.append(Float32(my));     host_ic.append(Float32(my))
-            host_q.append(Float32(Bx));     host_ic.append(Float32(Bx))
-            host_q.append(Float32(By));     host_ic.append(Float32(By))
-            host_q.append(Float32(E));      host_ic.append(Float32(E))
-            host_q.append(Float32(0.0));    host_ic.append(Float32(0.0))   # psi
+            var E = P0 / (GAMMA - 1.0) + ke + mp
+            host_q.append(Float32(RHO0))
+            host_ic.append(Float32(RHO0))
+            host_q.append(Float32(mx))
+            host_ic.append(Float32(mx))
+            host_q.append(Float32(my))
+            host_ic.append(Float32(my))
+            host_q.append(Float32(Bx))
+            host_ic.append(Float32(Bx))
+            host_q.append(Float32(By))
+            host_ic.append(Float32(By))
+            host_q.append(Float32(E))
+            host_ic.append(Float32(E))
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))  # psi
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -121,24 +130,36 @@ def _run() raises -> Float64:
 
     var gamma_f = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
-    var min_p   = Float32(1.0e-6)
+    var min_p = Float32(1.0e-6)
     # GLM disabled (c_h=0, alpha_d=0): the GLM kernels should reduce
     # to plain ideal MHD on this smooth IC.
     var c_h_f = Float32(0.0)
 
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for _ in range(num_steps):
         for stage in stage_plans:
             mhd_glm_rk_stage_2d[P](
-                ctx, gpu_mesh,
+                ctx,
+                gpu_mesh,
                 gpu_re.d_Lift_ref.unsafe_ptr(),
                 gpu_re.d_D_ref.unsafe_ptr(),
-                stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                stage.q_in,
+                stage.q_a,
+                stage.q_b,
+                stage.q_out,
                 d_fstar.unsafe_ptr(),
-                gamma_f, min_rho, min_p, c_h_f,
-                stage.a, stage.b, stage.c, dt,
+                gamma_f,
+                min_rho,
+                min_p,
+                c_h_f,
+                stage.a,
+                stage.b,
+                stage.c,
+                dt,
             )
     ctx.synchronize()
 
@@ -151,8 +172,9 @@ def _run() raises -> Float64:
     for k in range(n_q):
         var v = hptr_q[k]
         if isnan(v) or isinf(v):
-            raise Error("bench_mhd_alfven_glm_2d_p3: non-finite at index "
-                        + String(k))
+            raise Error(
+                "bench_mhd_alfven_glm_2d_p3: non-finite at index " + String(k)
+            )
         var err = Float64(v - host_ic[k])
         sum_sq += err * err
         var ic = Float64(host_ic[k])
@@ -161,7 +183,8 @@ def _run() raises -> Float64:
     for i in range(n_elem_nodes):
         var p = hptr_q[i * NC + 6]
         var a = p if p >= Float32(0.0) else -p
-        if a > psi_max: psi_max = a
+        if a > psi_max:
+            psi_max = a
 
     var l2 = sqrt(sum_sq / Float64(n_q))
     var l2_ic = sqrt(sum_ic / Float64(n_q))
@@ -169,7 +192,9 @@ def _run() raises -> Float64:
     if psi_max > PSI_TOL:
         raise Error(
             String("bench_mhd_alfven_glm_2d_p3 FAILED: psi_max ")
-            + String(psi_max) + " > tol " + String(PSI_TOL)
+            + String(psi_max)
+            + " > tol "
+            + String(PSI_TOL)
         )
     return rel_l2
 
@@ -181,8 +206,7 @@ def main() raises:
     print("  P=", P, "  NP=", num_tri_nodes_2d(P), "  NX=", NX)
 
     var rel_l2 = _run()
-    print("  rel L2(state) =", rel_l2,
-          "  (threshold", L2_MAX_REL, ")")
+    print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
     if rel_l2 > L2_MAX_REL:
         raise Error(
             "bench_mhd_alfven_glm_2d_p3 FAILED: rel L2 "

@@ -31,7 +31,9 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_advection import advection_rk_stage_2d
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.ssprk3 import ssprk3_stage_plans
@@ -51,16 +53,20 @@ comptime CY: Float32 = 0.5
 # Measured ~7.2e-4 at N=32 on current code; 1.5e-3 is ~2x margin.
 # (Old gate at 1e-2 was 14x looser -- only caught catastrophic regressions.)
 comptime L2_MAX_REL_AT_32: Float64 = 1.5e-3
-comptime RATE_MIN:         Float64 = 2.0
+comptime RATE_MIN: Float64 = 2.0
 
 
 def _gauss(x: Float32, y: Float32) -> Float32:
     var dx = x - CX
-    if dx >  LX * Float32(0.5): dx -= LX
-    if dx < -LX * Float32(0.5): dx += LX
+    if dx > LX * Float32(0.5):
+        dx -= LX
+    if dx < -LX * Float32(0.5):
+        dx += LX
     var dy = y - CY
-    if dy >  LY * Float32(0.5): dy -= LY
-    if dy < -LY * Float32(0.5): dy += LY
+    if dy > LY * Float32(0.5):
+        dy -= LY
+    if dy < -LY * Float32(0.5):
+        dy += LY
     var s2 = SIGMA * SIGMA
     return exp(-(dx * dx + dy * dy) / (Float32(2.0) * s2))
 
@@ -82,13 +88,17 @@ def _run(N: Int) raises -> Float64:
     var host_ic = List[Float32]()
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            var x = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0])
-            var y = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1])
+            var x = Float32(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
+            )
+            var y = Float32(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
+            )
             var v = _gauss(x, y)
             host_q.append(v)
             host_ic.append(v)
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -108,18 +118,28 @@ def _run(N: Int) raises -> Float64:
     var dt = T_FINAL / Float32(num_steps)
 
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for _ in range(num_steps):
         for stage in stage_plans:
             advection_rk_stage_2d[P](
-                ctx, gpu_mesh,
+                ctx,
+                gpu_mesh,
                 gpu_re.d_Lift_ref.unsafe_ptr(),
                 gpu_re.d_D_ref.unsafe_ptr(),
-                stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                stage.q_in,
+                stage.q_a,
+                stage.q_b,
+                stage.q_out,
                 d_fstar.unsafe_ptr(),
-                VX, VY,
-                stage.a, stage.b, stage.c, dt,
+                VX,
+                VY,
+                stage.a,
+                stage.b,
+                stage.c,
+                dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -163,15 +183,22 @@ def main() raises:
     if err32 > L2_MAX_REL_AT_32:
         raise Error(
             "bench_advection_translation_2d FAILED: rel L2 at N=32 "
-            + String(err32) + " exceeds " + String(L2_MAX_REL_AT_32)
+            + String(err32)
+            + " exceeds "
+            + String(L2_MAX_REL_AT_32)
         )
 
     # Strict monotone decrease under refinement.
     if not (err16 > err32 and err32 > err64):
         raise Error(
             "bench_advection_translation_2d FAILED: L2 did not decrease "
-            + "monotonically under refinement (16: " + String(err16)
-            + ", 32: " + String(err32) + ", 64: " + String(err64) + ")"
+            + "monotonically under refinement (16: "
+            + String(err16)
+            + ", 32: "
+            + String(err32)
+            + ", 64: "
+            + String(err64)
+            + ")"
         )
 
     # Observed rate 16->32 and 32->64.  Assert at least one pair
@@ -180,14 +207,25 @@ def main() raises:
     # dissipation that dominates the truncation error).
     var rate_1632 = log(err16 / err32) / log(2.0)
     var rate_3264 = log(err32 / err64) / log(2.0)
-    print("  observed rates: log2(e16/e32) =", rate_1632,
-          "  log2(e32/e64) =", rate_3264,
-          "  (P+1 =", P + 1, ", floor", RATE_MIN, ")")
+    print(
+        "  observed rates: log2(e16/e32) =",
+        rate_1632,
+        "  log2(e32/e64) =",
+        rate_3264,
+        "  (P+1 =",
+        P + 1,
+        ", floor",
+        RATE_MIN,
+        ")",
+    )
     if rate_1632 < RATE_MIN and rate_3264 < RATE_MIN:
         raise Error(
             "bench_advection_translation_2d FAILED: observed rates "
-            + String(rate_1632) + " and " + String(rate_3264)
-            + " both below " + String(RATE_MIN)
+            + String(rate_1632)
+            + " and "
+            + String(rate_3264)
+            + " both below "
+            + String(RATE_MIN)
         )
 
     print("=== bench_advection_translation_2d PASSED ===")

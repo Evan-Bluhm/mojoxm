@@ -42,7 +42,10 @@ from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import (
-    Euler, FLUX_RUSANOV, FLUX_ROE, FLUX_HLLE,
+    Euler,
+    FLUX_RUSANOV,
+    FLUX_ROE,
+    FLUX_HLLE,
 )
 from src.nvtx import NvtxContext
 
@@ -53,13 +56,13 @@ comptime LX = 1.0
 comptime LY = 1.0
 comptime LZ = 1.0
 comptime GAMMA: Float32 = 1.4
-comptime RHO0:  Float32 = 1.0
-comptime U0:    Float32 = 1.0
-comptime V0:    Float32 = 1.0
-comptime W0:    Float32 = 1.0
-comptime P0:    Float32 = 1.0
+comptime RHO0: Float32 = 1.0
+comptime U0: Float32 = 1.0
+comptime V0: Float32 = 1.0
+comptime W0: Float32 = 1.0
+comptime P0: Float32 = 1.0
 comptime AMPLITUDE: Float32 = 0.1
-comptime T_FINAL: Float32 = 1.0       # one advection period at u0 = 1
+comptime T_FINAL: Float32 = 1.0  # one advection period at u0 = 1
 comptime CFL = Float32(0.2)
 comptime IC_BLOCK = 256
 comptime PI_F: Float32 = 3.14159265358979323846
@@ -72,7 +75,7 @@ comptime L2_MAX_REL: Float64 = 5.0e-3
 def entropy_wave_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -88,11 +91,12 @@ def entropy_wave_ic_kernel(
 
     var k = Float32(2.0) * PI_F / Float32(LX)
     var rho = RHO0 + AMPLITUDE * sin(k * px) * sin(k * py) * sin(k * pz)
-    var u = U0; var v = V0; var w = W0
+    var u = U0
+    var v = V0
+    var w = W0
     var p = P0
-    var E = (
-        p / (GAMMA - Float32(1.0))
-        + Float32(0.5) * rho * (u * u + v * v + w * w)
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (
+        u * u + v * v + w * w
     )
 
     var base = (e * N_P + nn) * 5
@@ -112,26 +116,37 @@ def _run(flux_type: Int) raises -> Float64:
     var ctx = DeviceContext()
 
     var mesh = Mesh(
-        ctx, build_partition(rank, size, N_RES, N_RES, N_RES),
-        LX, LY, LZ,
+        ctx,
+        build_partition(rank, size, N_RES, N_RES, N_RES),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Euler.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        Euler.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = Euler(
-        GAMMA, Float32(1.0e-6), Float32(1.0e-6),
-        flux_type, False,
+        GAMMA,
+        Float32(1.0e-6),
+        Float32(1.0e-6),
+        flux_type,
+        False,
     )
     var solver = Solver[Euler](
-        ctx^, mesh^, halo^, physics^,
-        refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
-    solver.ctx.enqueue_function[
-        entropy_wave_ic_kernel, entropy_wave_ic_kernel
-    ](
+    solver.ctx.enqueue_function[entropy_wave_ic_kernel, entropy_wave_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -192,13 +207,15 @@ def _run(flux_type: Int) raises -> Float64:
 
 
 def _gate(name: String, rel_l2: Float64) raises:
-    print("  ", name, "rel L2 =", rel_l2,
-          "  (threshold", L2_MAX_REL, ")")
+    print("  ", name, "rel L2 =", rel_l2, "  (threshold", L2_MAX_REL, ")")
     if rel_l2 > L2_MAX_REL:
         raise Error(
             String("bench_euler_flux_coverage_3d FAILED: ")
-            + name + " rel L2 " + String(rel_l2)
-            + " exceeds " + String(L2_MAX_REL)
+            + name
+            + " rel L2 "
+            + String(rel_l2)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
 
 
@@ -212,8 +229,13 @@ def main() raises:
         return
 
     print("bench_euler_flux_coverage_3d (3D entropy wave under 3 fluxes)")
-    print("  P=", P, "  N=", N_RES,
-          "  exercising FLUX_RUSANOV, FLUX_ROE, FLUX_HLLE")
+    print(
+        "  P=",
+        P,
+        "  N=",
+        N_RES,
+        "  exercising FLUX_RUSANOV, FLUX_ROE, FLUX_HLLE",
+    )
 
     var err_rusanov = _run(FLUX_RUSANOV)
     _gate("Rusanov", err_rusanov)

@@ -28,14 +28,14 @@ from src.boundary import BC_WALL, BC_OUTFLOW, BC_INFLOW
 from std.math import sqrt
 
 
-struct ShallowWater(Physics, ImplicitlyCopyable):
+struct ShallowWater(ImplicitlyCopyable, Physics):
     comptime NUM_COMPONENTS = 3
 
-    var g:      Float32   # gravitational acceleration
-    var h_min:  Float32   # depth floor; below this, flux computation
-                           # treats the cell as dry (c = 0, u = v = 0)
+    var g: Float32  # gravitational acceleration
+    var h_min: Float32  # depth floor; below this, flux computation
+    # treats the cell as dry (c = 0, u = v = 0)
     # BC_INFLOW ghost state (h, h*u, h*v).  Defaults zero.
-    var inflow_h:  Float32
+    var inflow_h: Float32
     var inflow_hu: Float32
     var inflow_hv: Float32
 
@@ -56,9 +56,9 @@ struct ShallowWater(Physics, ImplicitlyCopyable):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[origin: MutOrigin](
-        self, target: UnsafePointer[NoneType, origin]
-    ):
+    def _to_device_type[
+        origin: MutOrigin
+    ](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -71,10 +71,10 @@ struct ShallowWater(Physics, ImplicitlyCopyable):
     # F^z = 0
     def internal_flux(
         self,
-        q:    UnsafePointer[Float32, MutAnyOrigin],
+        q: UnsafePointer[Float32, MutAnyOrigin],
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
-        var h  = q[0] if q[0] > self.h_min else self.h_min
+        var h = q[0] if q[0] > self.h_min else self.h_min
         var hu = q[1]
         var hv = q[2]
         var u = hu / h
@@ -104,10 +104,12 @@ struct ShallowWater(Physics, ImplicitlyCopyable):
         self,
         q_l: UnsafePointer[Float32, MutAnyOrigin],
         q_r: UnsafePointer[Float32, MutAnyOrigin],
-        nx: Float32, ny: Float32, nz: Float32,
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
-        var hl  = q_l[0] if q_l[0] > self.h_min else self.h_min
+        var hl = q_l[0] if q_l[0] > self.h_min else self.h_min
         var hul = q_l[1]
         var hvl = q_l[2]
         var ul = hul / hl
@@ -116,7 +118,7 @@ struct ShallowWater(Physics, ImplicitlyCopyable):
         var cl = sqrt(self.g * hl)
         var gh2_2_l = Float32(0.5) * self.g * hl * hl
 
-        var hr  = q_r[0] if q_r[0] > self.h_min else self.h_min
+        var hr = q_r[0] if q_r[0] > self.h_min else self.h_min
         var hur = q_r[1]
         var hvr = q_r[2]
         var ur = hur / hr
@@ -150,7 +152,9 @@ struct ShallowWater(Physics, ImplicitlyCopyable):
         self,
         q_int: UnsafePointer[Float32, MutAnyOrigin],
         bc_type: Int32,
-        nx: Float32, ny: Float32, nz: Float32,
+        nx: Float32,
+        ny: Float32,
+        nz: Float32,
         flux: UnsafePointer[Float32, MutAnyOrigin],
     ) -> Float32:
         var q_ghost = InlineArray[Float32, 3](fill=0.0)
@@ -180,7 +184,9 @@ struct ShallowWater(Physics, ImplicitlyCopyable):
     def source_term(
         self,
         q: UnsafePointer[Float32, MutAnyOrigin],
-        x: Float32, y: Float32, z: Float32,
+        x: Float32,
+        y: Float32,
+        z: Float32,
         source_out: UnsafePointer[Float32, MutAnyOrigin],
     ):
         source_out[0] = Float32(0.0)

@@ -32,7 +32,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -43,7 +45,7 @@ comptime NY = 8
 comptime LX = 1.0
 comptime LY = 1.0
 comptime C_LIGHT: Float32 = 1.0
-comptime JX:      Float32 = 1.0
+comptime JX: Float32 = 1.0
 comptime CFL = 0.2
 comptime T_FINAL: Float64 = 0.5
 
@@ -77,7 +79,7 @@ def main() raises:
 
     # Zero IC -- q = 0 everywhere.
     var n_q = gpu_mesh.num_elements * NP_p * NC
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -114,7 +116,10 @@ def main() raises:
                 q_out=stage.q_out,
                 fstar_scratch=d_fstar.unsafe_ptr(),
                 c=C_LIGHT,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
                 Jx=JX,
             )
     ctx.synchronize()
@@ -132,40 +137,72 @@ def main() raises:
         var bx = hptr_q[i * 6 + 3]
         var by = hptr_q[i * 6 + 4]
         var bz = hptr_q[i * 6 + 5]
-        if (isnan(ex) or isinf(ex) or isnan(ey) or isinf(ey)
-            or isnan(ez) or isinf(ez) or isnan(bx) or isinf(bx)
-            or isnan(by) or isinf(by) or isnan(bz) or isinf(bz)):
+        if (
+            isnan(ex)
+            or isinf(ex)
+            or isnan(ey)
+            or isinf(ey)
+            or isnan(ez)
+            or isinf(ez)
+            or isnan(bx)
+            or isinf(bx)
+            or isnan(by)
+            or isinf(by)
+            or isnan(bz)
+            or isinf(bz)
+        ):
             raise Error("bench_maxwell_uniform_j_2d: non-finite output")
         var d_ex = Float64(ex) - Ex_expect
-        if d_ex < 0.0: d_ex = -d_ex
+        if d_ex < 0.0:
+            d_ex = -d_ex
         var rel = d_ex / abs(Ex_expect)
-        if rel > max_ex_rel: max_ex_rel = rel
+        if rel > max_ex_rel:
+            max_ex_rel = rel
         var av_ey = Float64(ey if ey >= Float32(0.0) else -ey)
         var av_ez = Float64(ez if ez >= Float32(0.0) else -ez)
         var av_bx = Float64(bx if bx >= Float32(0.0) else -bx)
         var av_by = Float64(by if by >= Float32(0.0) else -by)
         var av_bz = Float64(bz if bz >= Float32(0.0) else -bz)
-        if av_ey > max_zero: max_zero = av_ey
-        if av_ez > max_zero: max_zero = av_ez
-        if av_bx > max_zero: max_zero = av_bx
-        if av_by > max_zero: max_zero = av_by
-        if av_bz > max_zero: max_zero = av_bz
+        if av_ey > max_zero:
+            max_zero = av_ey
+        if av_ez > max_zero:
+            max_zero = av_ez
+        if av_bx > max_zero:
+            max_zero = av_bx
+        if av_by > max_zero:
+            max_zero = av_by
+        if av_bz > max_zero:
+            max_zero = av_bz
 
     print("  Ex(T) expected =", Ex_expect)
-    print("  max |Ex - exact| / |Ex_exact| =", max_ex_rel,
-          "  (threshold", EX_REL_TOL, ")")
-    print("  max |Ey,Ez,Bx,By,Bz| =", max_zero,
-          "  (threshold", ZERO_COMPONENT_TOL, ")")
+    print(
+        "  max |Ex - exact| / |Ex_exact| =",
+        max_ex_rel,
+        "  (threshold",
+        EX_REL_TOL,
+        ")",
+    )
+    print(
+        "  max |Ey,Ez,Bx,By,Bz| =",
+        max_zero,
+        "  (threshold",
+        ZERO_COMPONENT_TOL,
+        ")",
+    )
 
     if max_ex_rel > EX_REL_TOL:
         raise Error(
             String("bench_maxwell_uniform_j_2d FAILED: Ex rel err ")
-            + String(max_ex_rel) + " > " + String(EX_REL_TOL)
+            + String(max_ex_rel)
+            + " > "
+            + String(EX_REL_TOL)
         )
     if max_zero > ZERO_COMPONENT_TOL:
         raise Error(
             String("bench_maxwell_uniform_j_2d FAILED: zero-component drift ")
-            + String(max_zero) + " > " + String(ZERO_COMPONENT_TOL)
+            + String(max_zero)
+            + " > "
+            + String(ZERO_COMPONENT_TOL)
         )
 
     print("=== bench_maxwell_uniform_j_2d PASSED ===")

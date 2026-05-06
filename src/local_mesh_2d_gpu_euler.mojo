@@ -29,34 +29,40 @@ from std.math import ceildiv, sqrt
 # and one of the three kernel launches per RK stage.
 # ----------------------------------------------------------------------
 
-def euler_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
-    q_in:              UnsafePointer[Float32, MutAnyOrigin],
-    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
-    fstar:             UnsafePointer[Float32, MutAnyOrigin],
-    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
-    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
-    face_length:       UnsafePointer[Float32, MutAnyOrigin],
-    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
-    q_a:               UnsafePointer[Float32, MutAnyOrigin],
-    q_b:               UnsafePointer[Float32, MutAnyOrigin],
-    num_elements:      Int,
-    gamma:             Float32,
-    min_density:       Float32,
-    min_pressure:      Float32,
-    gx:                Float32,
-    gy:                Float32,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
-    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+
+def euler_vol_lift_combine_rk_kernel_2d[
+    NP: Int, NFP: Int
+](
+    q_in: UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ: UnsafePointer[Float32, MutAnyOrigin],
+    D_ref: UnsafePointer[Float32, MutAnyOrigin],
+    fstar: UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A: UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    elem_face_side: UnsafePointer[Int32, MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32, MutAnyOrigin],
+    face_length: UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
+    q_a: UnsafePointer[Float32, MutAnyOrigin],
+    q_b: UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    gamma: Float32,
+    min_density: Float32,
+    min_pressure: Float32,
+    gx: Float32,
+    gy: Float32,
+    a: Float32,
+    b: Float32,
+    cc: Float32,
+    dt: Float32,
+    q_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var tid = Int(global_idx.x)
     var total = num_elements * NP
     if tid >= total:
         return
     var elem = tid // NP
-    var i    = tid %  NP
+    var i = tid % NP
 
     # ---- Volume RHS contribution (4 components, computed locally).
     var iJ00 = elem_invJ[elem * 4 + 0]
@@ -74,7 +80,7 @@ def euler_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
             rho = min_density
         var mx = q_in[base + 1]
         var my = q_in[base + 2]
-        var E  = q_in[base + 3]
+        var E = q_in[base + 3]
         var u = mx / rho
         var v = my / rho
         var ke = Float32(0.5) * rho * (u * u + v * v)
@@ -91,10 +97,18 @@ def euler_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
         var Fy3 = v * (E + p)
         var D_r = D_ref[0 * NP * NP + i * NP + j]
         var D_s = D_ref[1 * NP * NP + i * NP + j]
-        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (iJ10 * Fx0 + iJ11 * Fy0) * D_s
-        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (iJ10 * Fx1 + iJ11 * Fy1) * D_s
-        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (iJ10 * Fx2 + iJ11 * Fy2) * D_s
-        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (iJ10 * Fx3 + iJ11 * Fy3) * D_s
+        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (
+            iJ10 * Fx0 + iJ11 * Fy0
+        ) * D_s
+        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (
+            iJ10 * Fx1 + iJ11 * Fy1
+        ) * D_s
+        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (
+            iJ10 * Fx2 + iJ11 * Fy2
+        ) * D_s
+        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (
+            iJ10 * Fx3 + iJ11 * Fy3
+        ) * D_s
 
     # ---- Lift contribution (NC=4, expanded inline).
     var inv_2A = elem_inv_2A[elem]
@@ -108,9 +122,7 @@ def euler_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
         var sign: Float32 = Float32(1.0) if side == 0 else Float32(-1.0)
         var flen = face_length[fid]
         for m in range(NFP):
-            var r = Int(
-                elem_canon_to_ref[(elem * 3 + lf) * NFP + m]
-            )
+            var r = Int(elem_canon_to_ref[(elem * 3 + lf) * NFP + m])
             var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
             var sLf = sign * flen * Lim
             var fbase = (fid * NFP + m) * 4
@@ -140,38 +152,60 @@ def euler_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
     q_out[idx + 3] = a * q_a[idx + 3] + b * q_b[idx + 3] + cc * dt * rhs3
 
 
-def launch_euler_vol_lift_2d[NP: Int, NFP: Int](
+def launch_euler_vol_lift_2d[
+    NP: Int, NFP: Int
+](
     mut ctx: DeviceContext,
-    q_in:              UnsafePointer[Float32, MutAnyOrigin],
-    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
-    fstar:             UnsafePointer[Float32, MutAnyOrigin],
-    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
-    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
-    face_length:       UnsafePointer[Float32, MutAnyOrigin],
-    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
-    q_a:               UnsafePointer[Float32, MutAnyOrigin],
-    q_b:               UnsafePointer[Float32, MutAnyOrigin],
-    num_elements:      Int,
-    gamma:             Float32,
-    min_density:       Float32,
-    min_pressure:      Float32,
-    gx:                Float32,
-    gy:                Float32,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
-    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+    q_in: UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ: UnsafePointer[Float32, MutAnyOrigin],
+    D_ref: UnsafePointer[Float32, MutAnyOrigin],
+    fstar: UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A: UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    elem_face_side: UnsafePointer[Int32, MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32, MutAnyOrigin],
+    face_length: UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
+    q_a: UnsafePointer[Float32, MutAnyOrigin],
+    q_b: UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    gamma: Float32,
+    min_density: Float32,
+    min_pressure: Float32,
+    gx: Float32,
+    gy: Float32,
+    a: Float32,
+    b: Float32,
+    cc: Float32,
+    dt: Float32,
+    q_out: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     var total = num_elements * NP
     comptime _kernel = euler_vol_lift_combine_rk_kernel_2d[NP, NFP]
     ctx.enqueue_function[_kernel, _kernel](
-        q_in, elem_invJ, D_ref, fstar,
-        elem_inv_2A, elem_faces, elem_face_side, elem_canon_to_ref,
-        face_length, Lift_ref, q_a, q_b,
-        num_elements, gamma, min_density, min_pressure,
-        gx, gy,
-        a, b, cc, dt, q_out,
+        q_in,
+        elem_invJ,
+        D_ref,
+        fstar,
+        elem_inv_2A,
+        elem_faces,
+        elem_face_side,
+        elem_canon_to_ref,
+        face_length,
+        Lift_ref,
+        q_a,
+        q_b,
+        num_elements,
+        gamma,
+        min_density,
+        min_pressure,
+        gx,
+        gy,
+        a,
+        b,
+        cc,
+        dt,
+        q_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
@@ -190,28 +224,31 @@ def launch_euler_vol_lift_2d[NP: Int, NFP: Int](
 # One thread per (face, slot) = num_faces * NFP threads.
 # ----------------------------------------------------------------------
 
-def euler_face_flux_kernel_2d[NP: Int, NFP: Int](
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    num_faces:      Int,
-    gamma:          Float32,
-    min_density:    Float32,
-    min_pressure:   Float32,
-    inflow_rho:     Float32,
-    inflow_rhou:    Float32,
-    inflow_rhov:    Float32,
-    inflow_E:       Float32,
-    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+
+def euler_face_flux_kernel_2d[
+    NP: Int, NFP: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    num_faces: Int,
+    gamma: Float32,
+    min_density: Float32,
+    min_pressure: Float32,
+    inflow_rho: Float32,
+    inflow_rhou: Float32,
+    inflow_rhov: Float32,
+    inflow_E: Float32,
+    fstar_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var tid = Int(global_idx.x)
     var total = num_faces * NFP
     if tid >= total:
         return
     var fid = tid // NFP
-    var m   = tid %  NFP
+    var m = tid % NFP
 
     var nx = face_normal[fid * 2 + 0]
     var ny = face_normal[fid * 2 + 1]
@@ -302,40 +339,55 @@ def euler_face_flux_kernel_2d[NP: Int, NFP: Int](
     var alpha: Float32 = speedL if speedL > speedR else speedR
     var half = Float32(0.5)
     var out = (fid * NFP + m) * 4
-    fstar_out[out + 0] = half * ((FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny) \
-                         - half * alpha * (qR0 - qL0)
-    fstar_out[out + 1] = half * ((FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny) \
-                         - half * alpha * (qR1 - qL1)
-    fstar_out[out + 2] = half * ((FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny) \
-                         - half * alpha * (qR2 - qL2)
-    fstar_out[out + 3] = half * ((FxL3 + FxR3) * nx + (FyL3 + FyR3) * ny) \
-                         - half * alpha * (qR3 - qL3)
+    fstar_out[out + 0] = half * (
+        (FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny
+    ) - half * alpha * (qR0 - qL0)
+    fstar_out[out + 1] = half * (
+        (FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny
+    ) - half * alpha * (qR1 - qL1)
+    fstar_out[out + 2] = half * (
+        (FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny
+    ) - half * alpha * (qR2 - qL2)
+    fstar_out[out + 3] = half * (
+        (FxL3 + FxR3) * nx + (FyL3 + FyR3) * ny
+    ) - half * alpha * (qR3 - qL3)
 
 
-def launch_euler_face_flux_2d[NP: Int, NFP: Int](
+def launch_euler_face_flux_2d[
+    NP: Int, NFP: Int
+](
     mut ctx: DeviceContext,
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    num_faces:      Int,
-    gamma:          Float32,
-    min_density:    Float32,
-    min_pressure:   Float32,
-    inflow_rho:     Float32,
-    inflow_rhou:    Float32,
-    inflow_rhov:    Float32,
-    inflow_E:       Float32,
-    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    num_faces: Int,
+    gamma: Float32,
+    min_density: Float32,
+    min_pressure: Float32,
+    inflow_rho: Float32,
+    inflow_rhou: Float32,
+    inflow_rhov: Float32,
+    inflow_E: Float32,
+    fstar_out: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = euler_face_flux_kernel_2d[NP, NFP]
     ctx.enqueue_function[_kernel, _kernel](
-        q, face_elem, face_elem_node, face_normal, face_bc_type,
+        q,
+        face_elem,
+        face_elem_node,
+        face_normal,
+        face_bc_type,
         num_faces,
-        gamma, min_density, min_pressure,
-        inflow_rho, inflow_rhou, inflow_rhov, inflow_E,
+        gamma,
+        min_density,
+        min_pressure,
+        inflow_rho,
+        inflow_rhou,
+        inflow_rhov,
+        inflow_E,
         fstar_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
@@ -352,28 +404,31 @@ def launch_euler_face_flux_2d[NP: Int, NFP: Int](
 # -- only the interior flux differs.
 # ----------------------------------------------------------------------
 
-def euler_face_flux_hllc_kernel_2d[NP: Int, NFP: Int](
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    num_faces:      Int,
-    gamma:          Float32,
-    min_density:    Float32,
-    min_pressure:   Float32,
-    inflow_rho:     Float32,
-    inflow_rhou:    Float32,
-    inflow_rhov:    Float32,
-    inflow_E:       Float32,
-    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+
+def euler_face_flux_hllc_kernel_2d[
+    NP: Int, NFP: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    num_faces: Int,
+    gamma: Float32,
+    min_density: Float32,
+    min_pressure: Float32,
+    inflow_rho: Float32,
+    inflow_rhou: Float32,
+    inflow_rhov: Float32,
+    inflow_E: Float32,
+    fstar_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var tid = Int(global_idx.x)
     var total = num_faces * NFP
     if tid >= total:
         return
     var fid = tid // NFP
-    var m   = tid %  NFP
+    var m = tid % NFP
 
     var nx = face_normal[fid * 2 + 0]
     var ny = face_normal[fid * 2 + 1]
@@ -418,9 +473,11 @@ def euler_face_flux_hllc_kernel_2d[NP: Int, NFP: Int](
 
     # Primitives on each side (with floors).
     var rho_L = qL0
-    if rho_L < min_density: rho_L = min_density
+    if rho_L < min_density:
+        rho_L = min_density
     var rho_R = qR0
-    if rho_R < min_density: rho_R = min_density
+    if rho_R < min_density:
+        rho_R = min_density
     var uL = qL1 / rho_L
     var vL = qL2 / rho_L
     var uR = qR1 / rho_R
@@ -428,9 +485,11 @@ def euler_face_flux_hllc_kernel_2d[NP: Int, NFP: Int](
     var keL = Float32(0.5) * rho_L * (uL * uL + vL * vL)
     var keR = Float32(0.5) * rho_R * (uR * uR + vR * vR)
     var pL = (gamma - Float32(1.0)) * (qL3 - keL)
-    if pL < min_pressure: pL = min_pressure
+    if pL < min_pressure:
+        pL = min_pressure
     var pR = (gamma - Float32(1.0)) * (qR3 - keR)
-    if pR < min_pressure: pR = min_pressure
+    if pR < min_pressure:
+        pR = min_pressure
     var aL = sqrt(gamma * pL / rho_L)
     var aR = sqrt(gamma * pR / rho_R)
     var unL = uL * nx + vL * ny
@@ -449,10 +508,12 @@ def euler_face_flux_hllc_kernel_2d[NP: Int, NFP: Int](
     # Davis wave-speed estimates.
     var S_L = unL - aL
     var tmp = unR - aR
-    if tmp < S_L: S_L = tmp
+    if tmp < S_L:
+        S_L = tmp
     var S_R = unL + aL
     tmp = unR + aR
-    if tmp > S_R: S_R = tmp
+    if tmp > S_R:
+        S_R = tmp
 
     # Contact wave speed.
     var num = pR - pL + rho_L * unL * (S_L - unL) - rho_R * unR * (S_R - unR)
@@ -475,9 +536,8 @@ def euler_face_flux_hllc_kernel_2d[NP: Int, NFP: Int](
         var rho_s = rho_L * coef
         var u_s = uL + (S_star - unL) * nx
         var v_s = vL + (S_star - unL) * ny
-        var E_over_rho_s = (
-            qL3 / rho_L
-            + (S_star - unL) * (S_star + pL / (rho_L * (S_L - unL)))
+        var E_over_rho_s = qL3 / rho_L + (S_star - unL) * (
+            S_star + pL / (rho_L * (S_L - unL))
         )
         var qs0 = rho_s
         var qs1 = rho_s * u_s
@@ -492,9 +552,8 @@ def euler_face_flux_hllc_kernel_2d[NP: Int, NFP: Int](
         var rho_s = rho_R * coef
         var u_s = uR + (S_star - unR) * nx
         var v_s = vR + (S_star - unR) * ny
-        var E_over_rho_s = (
-            qR3 / rho_R
-            + (S_star - unR) * (S_star + pR / (rho_R * (S_R - unR)))
+        var E_over_rho_s = qR3 / rho_R + (S_star - unR) * (
+            S_star + pR / (rho_R * (S_R - unR))
         )
         var qs0 = rho_s
         var qs1 = rho_s * u_s
@@ -506,30 +565,41 @@ def euler_face_flux_hllc_kernel_2d[NP: Int, NFP: Int](
         fstar_out[out + 3] = FnR3 + S_R * (qs3 - qR3)
 
 
-def launch_euler_face_flux_hllc_2d[NP: Int, NFP: Int](
+def launch_euler_face_flux_hllc_2d[
+    NP: Int, NFP: Int
+](
     mut ctx: DeviceContext,
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    num_faces:      Int,
-    gamma:          Float32,
-    min_density:    Float32,
-    min_pressure:   Float32,
-    inflow_rho:     Float32,
-    inflow_rhou:    Float32,
-    inflow_rhov:    Float32,
-    inflow_E:       Float32,
-    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    num_faces: Int,
+    gamma: Float32,
+    min_density: Float32,
+    min_pressure: Float32,
+    inflow_rho: Float32,
+    inflow_rhou: Float32,
+    inflow_rhov: Float32,
+    inflow_E: Float32,
+    fstar_out: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = euler_face_flux_hllc_kernel_2d[NP, NFP]
     ctx.enqueue_function[_kernel, _kernel](
-        q, face_elem, face_elem_node, face_normal, face_bc_type,
+        q,
+        face_elem,
+        face_elem_node,
+        face_normal,
+        face_bc_type,
         num_faces,
-        gamma, min_density, min_pressure,
-        inflow_rho, inflow_rhou, inflow_rhov, inflow_E,
+        gamma,
+        min_density,
+        min_pressure,
+        inflow_rho,
+        inflow_rhou,
+        inflow_rhov,
+        inflow_E,
         fstar_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
@@ -545,18 +615,26 @@ def launch_euler_face_flux_hllc_2d[NP: Int, NFP: Int](
 # and rhs.
 # ----------------------------------------------------------------------
 
-def euler_rk_stage_2d[P: Int](
+
+def euler_rk_stage_2d[
+    P: Int
+](
     mut ctx: DeviceContext,
     mesh: LocalMesh2DGpu[P],
     Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:    UnsafePointer[Float32, MutAnyOrigin],
-    q_in:     UnsafePointer[Float32, MutAnyOrigin],
-    q_a:      UnsafePointer[Float32, MutAnyOrigin],
-    q_b:      UnsafePointer[Float32, MutAnyOrigin],
-    q_out:    UnsafePointer[Float32, MutAnyOrigin],
+    D_ref: UnsafePointer[Float32, MutAnyOrigin],
+    q_in: UnsafePointer[Float32, MutAnyOrigin],
+    q_a: UnsafePointer[Float32, MutAnyOrigin],
+    q_b: UnsafePointer[Float32, MutAnyOrigin],
+    q_out: UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    gamma: Float32, min_density: Float32, min_pressure: Float32,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    gamma: Float32,
+    min_density: Float32,
+    min_pressure: Float32,
+    a: Float32,
+    b: Float32,
+    cc: Float32,
+    dt: Float32,
     gx: Float32 = Float32(0.0),
     gy: Float32 = Float32(0.0),
     inflow_rho: Float32 = Float32(0.0),
@@ -572,28 +650,47 @@ def euler_rk_stage_2d[P: Int](
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_euler_face_flux_2d[NP, NFP](
-        ctx, q_in,
+        ctx,
+        q_in,
         mesh.d_face_elem.unsafe_ptr(),
         mesh.d_face_elem_node.unsafe_ptr(),
         mesh.d_face_normal.unsafe_ptr(),
         mesh.d_face_bc_type.unsafe_ptr(),
         mesh.num_faces,
-        gamma, min_density, min_pressure,
-        inflow_rho, inflow_rhou, inflow_rhov, inflow_E,
+        gamma,
+        min_density,
+        min_pressure,
+        inflow_rho,
+        inflow_rhou,
+        inflow_rhov,
+        inflow_E,
         fstar_scratch,
     )
     launch_euler_vol_lift_2d[NP, NFP](
-        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        ctx,
+        q_in,
+        mesh.d_elem_invJ.unsafe_ptr(),
+        D_ref,
         fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_elem_face_side.unsafe_ptr(),
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
-        Lift_ref, q_a, q_b,
-        mesh.num_elements, gamma, min_density, min_pressure,
-        gx, gy,
-        a, b, cc, dt, q_out,
+        Lift_ref,
+        q_a,
+        q_b,
+        mesh.num_elements,
+        gamma,
+        min_density,
+        min_pressure,
+        gx,
+        gy,
+        a,
+        b,
+        cc,
+        dt,
+        q_out,
     )
 
 
@@ -603,18 +700,26 @@ def euler_rk_stage_2d[P: Int](
 # unchanged -- HLLC affects only `fstar`.
 # ----------------------------------------------------------------------
 
-def euler_rk_stage_hllc_2d[P: Int](
+
+def euler_rk_stage_hllc_2d[
+    P: Int
+](
     mut ctx: DeviceContext,
     mesh: LocalMesh2DGpu[P],
     Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:    UnsafePointer[Float32, MutAnyOrigin],
-    q_in:     UnsafePointer[Float32, MutAnyOrigin],
-    q_a:      UnsafePointer[Float32, MutAnyOrigin],
-    q_b:      UnsafePointer[Float32, MutAnyOrigin],
-    q_out:    UnsafePointer[Float32, MutAnyOrigin],
+    D_ref: UnsafePointer[Float32, MutAnyOrigin],
+    q_in: UnsafePointer[Float32, MutAnyOrigin],
+    q_a: UnsafePointer[Float32, MutAnyOrigin],
+    q_b: UnsafePointer[Float32, MutAnyOrigin],
+    q_out: UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    gamma: Float32, min_density: Float32, min_pressure: Float32,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    gamma: Float32,
+    min_density: Float32,
+    min_pressure: Float32,
+    a: Float32,
+    b: Float32,
+    cc: Float32,
+    dt: Float32,
     gx: Float32 = Float32(0.0),
     gy: Float32 = Float32(0.0),
     inflow_rho: Float32 = Float32(0.0),
@@ -628,26 +733,45 @@ def euler_rk_stage_hllc_2d[P: Int](
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_euler_face_flux_hllc_2d[NP, NFP](
-        ctx, q_in,
+        ctx,
+        q_in,
         mesh.d_face_elem.unsafe_ptr(),
         mesh.d_face_elem_node.unsafe_ptr(),
         mesh.d_face_normal.unsafe_ptr(),
         mesh.d_face_bc_type.unsafe_ptr(),
         mesh.num_faces,
-        gamma, min_density, min_pressure,
-        inflow_rho, inflow_rhou, inflow_rhov, inflow_E,
+        gamma,
+        min_density,
+        min_pressure,
+        inflow_rho,
+        inflow_rhou,
+        inflow_rhov,
+        inflow_E,
         fstar_scratch,
     )
     launch_euler_vol_lift_2d[NP, NFP](
-        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        ctx,
+        q_in,
+        mesh.d_elem_invJ.unsafe_ptr(),
+        D_ref,
         fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_elem_face_side.unsafe_ptr(),
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
-        Lift_ref, q_a, q_b,
-        mesh.num_elements, gamma, min_density, min_pressure,
-        gx, gy,
-        a, b, cc, dt, q_out,
+        Lift_ref,
+        q_a,
+        q_b,
+        mesh.num_elements,
+        gamma,
+        min_density,
+        min_pressure,
+        gx,
+        gy,
+        a,
+        b,
+        cc,
+        dt,
+        q_out,
     )

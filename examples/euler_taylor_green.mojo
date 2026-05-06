@@ -59,12 +59,12 @@ comptime NZ = 32
 
 # Flow parameters.  Ma = U0 / sqrt(gamma p0 / rho0) ~ 0.3.
 comptime GAMMA: Float32 = 1.4
-comptime RHO0:  Float32 = 1.0
-comptime U0:    Float32 = 1.0
-comptime P0:    Float32 = 7.9365079    # chosen so c0 = sqrt(1.4 * p0) ~ 3.33 -> Ma = 0.3
+comptime RHO0: Float32 = 1.0
+comptime U0: Float32 = 1.0
+comptime P0: Float32 = 7.9365079  # chosen so c0 = sqrt(1.4 * p0) ~ 3.33 -> Ma = 0.3
 
 # Numerical-flux floors.
-comptime MIN_DENSITY:  Float32 = 1.0e-6
+comptime MIN_DENSITY: Float32 = 1.0e-6
 comptime MIN_PRESSURE: Float32 = 1.0e-6
 
 # Integration window.  ~3 eddy turnover times is enough to see the
@@ -86,12 +86,16 @@ comptime IC_BLOCK = 256
 # 5-component conserved state into q.  Layout: q[(e * N_P + nn) * 5 + c].
 # ----------------------------------------------------------------------
 
+
 def taylor_green_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
-    u0: Float32, rho0: Float32, p0: Float32, gamma: Float32,
+    u0: Float32,
+    rho0: Float32,
+    p0: Float32,
+    gamma: Float32,
 ):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
@@ -104,20 +108,26 @@ def taylor_green_ic_kernel(
     var y = elem_node_xyz[(e * N_P + nn) * 3 + 1]
     var z = elem_node_xyz[(e * N_P + nn) * 3 + 2]
 
-    var sx = sin(x); var cx = cos(x)
-    var sy = sin(y); var cy = cos(y)
+    var sx = sin(x)
+    var cx = cos(x)
+    var sy = sin(y)
+    var cy = cos(y)
     var cz = cos(z)
     var c2x = cos(Float32(2.0) * x)
     var c2y = cos(Float32(2.0) * y)
     var c2z = cos(Float32(2.0) * z)
 
-    var u =  u0 * sx * cy * cz
+    var u = u0 * sx * cy * cz
     var v = -u0 * cx * sy * cz
-    var w =  Float32(0.0)
+    var w = Float32(0.0)
 
     var rho = rho0
-    var p = p0 + (rho0 * u0 * u0 / Float32(16.0)) * (c2x + c2y) * (c2z + Float32(2.0))
-    var E = p / (gamma - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
+    var p = p0 + (rho0 * u0 * u0 / Float32(16.0)) * (c2x + c2y) * (
+        c2z + Float32(2.0)
+    )
+    var E = p / (gamma - Float32(1.0)) + Float32(0.5) * rho * (
+        u * u + v * v + w * w
+    )
 
     var base = (e * N_P + nn) * 5
     q[base + 0] = rho
@@ -136,6 +146,7 @@ def choose_dt() raises -> Float32:
     var dt_est = CFL * h / (wave * Float32(2 * 2 + 1))
     return dt_est
 
+
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
     mpi.init()
@@ -143,12 +154,25 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print("euler_taylor_green: GPU DG Euler, P2 tet, HLLEC flux,",
-              size, "rank(s)")
-        print("  global mesh: ", NX, "x", NY, "x", NZ,
-              " cells -> ", NX * NY * NZ * 6, "tets")
-        print("  nodes per element:", N_P, " total DOF:",
-              NX * NY * NZ * 6 * N_P)
+        print(
+            "euler_taylor_green: GPU DG Euler, P2 tet, HLLEC flux,",
+            size,
+            "rank(s)",
+        )
+        print(
+            "  global mesh: ",
+            NX,
+            "x",
+            NY,
+            "x",
+            NZ,
+            " cells -> ",
+            NX * NY * NZ * 6,
+            "tets",
+        )
+        print(
+            "  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P
+        )
 
     var nvtx = NvtxContext()
     if rank == 0:
@@ -162,35 +186,69 @@ def main() raises:
 
     nvtx.push_range("build_mesh")
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     nvtx.pop_range()
 
     nvtx.push_range("halo_setup")
     var halo = HaloExchange(
-        ctx, mesh.part, Euler.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        Euler.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     nvtx.pop_range()
 
     if rank == 0:
-        print("  proc-grid: ",
-              mesh.part.px, "x", mesh.part.py, "x", mesh.part.pz,
-              "  owned cubes per rank: ",
-              mesh.part.nx, "x", mesh.part.ny, "x", mesh.part.nz)
-        print("  per-rank: ", mesh.num_owned_elements,
-              "owned elements (halo=", mesh.num_halo_elements,
-              ", interior=", mesh.num_interior_elements, ")")
+        print(
+            "  proc-grid: ",
+            mesh.part.px,
+            "x",
+            mesh.part.py,
+            "x",
+            mesh.part.pz,
+            "  owned cubes per rank: ",
+            mesh.part.nx,
+            "x",
+            mesh.part.ny,
+            "x",
+            mesh.part.nz,
+        )
+        print(
+            "  per-rank: ",
+            mesh.num_owned_elements,
+            "owned elements (halo=",
+            mesh.num_halo_elements,
+            ", interior=",
+            mesh.num_interior_elements,
+            ")",
+        )
 
     var physics = Euler(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True,
-        Float32(0.0), Float32(0.0), Float32(0.0),
+        GAMMA,
+        MIN_DENSITY,
+        MIN_PRESSURE,
+        FLUX_HLLEC,
+        True,
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
     )
 
     nvtx.push_range("solver_setup")
     var solver = Solver[Euler](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
     nvtx.pop_range()
 
@@ -200,10 +258,11 @@ def main() raises:
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
-        U0, RHO0, P0, GAMMA,
-        grid_dim=ceildiv(
-            solver.num_owned_elements * N_P, IC_BLOCK
-        ),
+        U0,
+        RHO0,
+        P0,
+        GAMMA,
+        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
     solver.ctx.synchronize()
@@ -221,19 +280,24 @@ def main() raises:
     # components -- the sum (0.5 / rho) * int|rho u|^2 approximates
     # kinetic energy (the enstrophy cascade's observable).
     var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass",         0))
-    diag_linear.append(NamedComponent("momentum_x",   1))
-    diag_linear.append(NamedComponent("momentum_y",   2))
-    diag_linear.append(NamedComponent("momentum_z",   3))
+    diag_linear.append(NamedComponent("mass", 0))
+    diag_linear.append(NamedComponent("momentum_x", 1))
+    diag_linear.append(NamedComponent("momentum_y", 2))
+    diag_linear.append(NamedComponent("momentum_z", 3))
     diag_linear.append(NamedComponent("total_energy", 4))
     var diag_squared = List[NamedComponent]()
     diag_squared.append(NamedComponent("momentum_sq_x", 1))
     diag_squared.append(NamedComponent("momentum_sq_y", 2))
     diag_squared.append(NamedComponent("momentum_sq_z", 3))
     var diag = DiagnosticsWriter[Euler](
-        solver, "output/diagnostics.csv",
-        diag_linear, diag_squared, List[NamedComponent](),
-        LX, LY, LZ,
+        solver,
+        "output/diagnostics.csv",
+        diag_linear,
+        diag_squared,
+        List[NamedComponent](),
+        LX,
+        LY,
+        LZ,
     )
 
     var dt = choose_dt()
@@ -241,7 +305,13 @@ def main() raises:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
     var result = run_ssprk3_loop_with_diagnostics[Euler](
-        solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx,
+        solver,
+        writer,
+        diag,
+        dt,
+        T_FINAL,
+        NUM_FRAMES,
+        nvtx,
     )
 
     writer.finalize("output/solution.pvd", nvtx)
@@ -262,24 +332,24 @@ def main() raises:
             snap_rhov.append(Float32(0.0))
             snap_rhow.append(Float32(0.0))
             snap_E.append(Float32(0.0))
-        solver.download_owned_component(0, snap_rho,  nvtx)
+        solver.download_owned_component(0, snap_rho, nvtx)
         solver.download_owned_component(1, snap_rhou, nvtx)
         solver.download_owned_component(2, snap_rhov, nvtx)
         solver.download_owned_component(3, snap_rhow, nvtx)
-        solver.download_owned_component(4, snap_E,    nvtx)
-        var f_rho  = List[Float64]()
-        var f_p    = List[Float64]()
+        solver.download_owned_component(4, snap_E, nvtx)
+        var f_rho = List[Float64]()
+        var f_p = List[Float64]()
         var f_vmag = List[Float64]()
         for k in range(n_owned_dof):
             var rho = snap_rho[k]
             var u = snap_rhou[k] / rho
             var v = snap_rhov[k] / rho
             var w = snap_rhow[k] / rho
-            var ke = Float32(0.5) * rho * (u*u + v*v + w*w)
+            var ke = Float32(0.5) * rho * (u * u + v * v + w * w)
             var p = (GAMMA - Float32(1.0)) * (snap_E[k] - ke)
             f_rho.append(Float64(rho))
             f_p.append(Float64(p))
-            f_vmag.append(Float64(sqrt(u*u + v*v + w*w)))
+            f_vmag.append(Float64(sqrt(u * u + v * v + w * w)))
         var fields = List[List[Float64]]()
         fields.append(f_rho^)
         fields.append(f_p^)
@@ -289,20 +359,38 @@ def main() raises:
         names.append(String("p"))
         names.append(String("|v|"))
         write_snapshot_3d_multi(
-            solver=solver, field_names=names, field_data=fields,
-            path=String("output/snapshot_t_final.vtu"), nvtx=nvtx,
+            solver=solver,
+            field_names=names,
+            field_data=fields,
+            path=String("output/snapshot_t_final.vtu"),
+            nvtx=nvtx,
         )
         if rank == 0:
-            print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
+            print(
+                "  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=",
+                T_FINAL,
+                ")",
+            )
 
     if rank == 0:
         print("  final sync:", result.final_sync_sec, "s")
-        print("  total steps:", result.total_steps,
-              " wall time:", result.wall_sec, "s")
-        print("    step-loop time (enqueue only, no sync):",
-              result.step_loop_sec, "s")
-        print("    frame-write time (download + VTU):",
-              result.frame_write_sec, "s")
+        print(
+            "  total steps:",
+            result.total_steps,
+            " wall time:",
+            result.wall_sec,
+            "s",
+        )
+        print(
+            "    step-loop time (enqueue only, no sync):",
+            result.step_loop_sec,
+            "s",
+        )
+        print(
+            "    frame-write time (download + VTU):",
+            result.frame_write_sec,
+            "s",
+        )
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement (5-step warmup + 50-step
     # measure).  Run AFTER finalize so we don't pollute the production

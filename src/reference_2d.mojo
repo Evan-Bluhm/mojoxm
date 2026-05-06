@@ -25,16 +25,27 @@
 # ======================================================================
 
 from src.reference import (
-    Monomial, factorial, integrate_ref_tri, poly_mul,
-    mat_zero, mat_get, mat_set, mat_inv,
-    num_tri_nodes, _tri_node_exponents, _tri_degP_monomials,
-    _build_basis_coefs, _coefs_to_monomial_list, _poly_drdx,
+    Monomial,
+    factorial,
+    integrate_ref_tri,
+    poly_mul,
+    mat_zero,
+    mat_get,
+    mat_set,
+    mat_inv,
+    num_tri_nodes,
+    _tri_node_exponents,
+    _tri_degP_monomials,
+    _build_basis_coefs,
+    _coefs_to_monomial_list,
+    _poly_drdx,
 )
 
 
 # ----------------------------------------------------------------------
 # Size helpers
 # ----------------------------------------------------------------------
+
 
 def num_tri_nodes_2d(P: Int) -> Int:
     """Number of Lagrange nodes on a 2D triangular element at order P.
@@ -59,9 +70,12 @@ def num_edge_nodes(P: Int) -> Int:
 #
 # Returns a flat List[Int32] of shape [3 * (P + 1)].
 
+
 def _lookup_tri_node(
     tri_nodes: List[Monomial],
-    a0: Int, a1: Int, a2: Int,
+    a0: Int,
+    a1: Int,
+    a2: Int,
 ) raises -> Int:
     for i in range(len(tri_nodes)):
         var n = tri_nodes[i]
@@ -71,7 +85,8 @@ def _lookup_tri_node(
 
 
 def _edge_to_element_node(
-    P: Int, tri_nodes: List[Monomial],
+    P: Int,
+    tri_nodes: List[Monomial],
 ) raises -> List[Int32]:
     var nfp_edge = P + 1
     var out = List[Int32]()
@@ -80,9 +95,13 @@ def _edge_to_element_node(
 
     # Edges (va, vb).
     var va_list = List[Int]()
-    va_list.append(0); va_list.append(1); va_list.append(2)
+    va_list.append(0)
+    va_list.append(1)
+    va_list.append(2)
     var vb_list = List[Int]()
-    vb_list.append(1); vb_list.append(2); vb_list.append(0)
+    vb_list.append(1)
+    vb_list.append(2)
+    vb_list.append(0)
 
     for e in range(3):
         var va = va_list[e]
@@ -96,8 +115,10 @@ def _edge_to_element_node(
             var i = _lookup_tri_node(tri_nodes, exp0, exp1, exp2)
             if i < 0:
                 raise Error(
-                    "_edge_to_element_node: failed to locate node for "
-                    "edge " + String(e) + " slot " + String(k)
+                    "_edge_to_element_node: failed to locate node for edge "
+                    + String(e)
+                    + " slot "
+                    + String(k)
                 )
             out[e * nfp_edge + k] = Int32(i)
     return out^
@@ -112,6 +133,7 @@ def _edge_to_element_node(
 # doubles as both the volume and the edge-lift raw integral once paired
 # with a 1D edge mass.
 # ----------------------------------------------------------------------
+
 
 struct ReferenceElement2D[P: Int = 2](Copyable, Movable):
     # Reference-space coordinates of each node, flattened as [NP * 2].
@@ -234,11 +256,13 @@ struct ReferenceElement2D[P: Int = 2](Copyable, Movable):
             for l in range(NFP_edge):
                 var i = Int(self.edge_to_elem[e * NFP_edge + l])
                 if i < 0:
-                    raise Error("ReferenceElement2D: edge_to_elem lookup failed")
-                for m in range(NFP_edge):
-                    L_raw[e * NP_P * NFP_edge + i * NFP_edge + m] = (
-                        M_edge[l * NFP_edge + m]
+                    raise Error(
+                        "ReferenceElement2D: edge_to_elem lookup failed"
                     )
+                for m in range(NFP_edge):
+                    L_raw[e * NP_P * NFP_edge + i * NFP_edge + m] = M_edge[
+                        l * NFP_edge + m
+                    ]
 
         self.Lift_ref = List[Float64]()
         for _ in range(3 * NP_P * NFP_edge):
@@ -267,6 +291,7 @@ struct ReferenceElement2D[P: Int = 2](Copyable, Movable):
 #                = sum_{i, j} A[k, i] A[l, j] / (i + j + 1)
 #                = sum_{i, j} V^{-1}[i, k] V^{-1}[j, l] / (i + j + 1)
 # since integral_0^1 xi^{i+j} dxi = 1 / (i + j + 1).
+
 
 def _build_edge_mass_matrix(P: Int) raises -> List[Float64]:
     var NE = P + 1

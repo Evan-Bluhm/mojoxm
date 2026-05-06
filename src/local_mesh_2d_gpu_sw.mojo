@@ -23,31 +23,37 @@ from std.math import ceildiv, sqrt
 # Same fusion pattern as advection / Euler 2D variants.
 # ----------------------------------------------------------------------
 
-def sw_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
-    q_in:              UnsafePointer[Float32, MutAnyOrigin],
-    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
-    fstar:             UnsafePointer[Float32, MutAnyOrigin],
-    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
-    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
-    face_length:       UnsafePointer[Float32, MutAnyOrigin],
-    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
-    q_a:               UnsafePointer[Float32, MutAnyOrigin],
-    q_b:               UnsafePointer[Float32, MutAnyOrigin],
-    num_elements:      Int,
-    g:                 Float32,
-    min_h:             Float32,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
-    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+
+def sw_vol_lift_combine_rk_kernel_2d[
+    NP: Int, NFP: Int
+](
+    q_in: UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ: UnsafePointer[Float32, MutAnyOrigin],
+    D_ref: UnsafePointer[Float32, MutAnyOrigin],
+    fstar: UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A: UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    elem_face_side: UnsafePointer[Int32, MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32, MutAnyOrigin],
+    face_length: UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
+    q_a: UnsafePointer[Float32, MutAnyOrigin],
+    q_b: UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    g: Float32,
+    min_h: Float32,
+    a: Float32,
+    b: Float32,
+    cc: Float32,
+    dt: Float32,
+    q_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var tid = Int(global_idx.x)
     var total = num_elements * NP
     if tid >= total:
         return
     var elem = tid // NP
-    var i    = tid %  NP
+    var i = tid % NP
 
     # ---- Volume RHS contribution.
     var iJ00 = elem_invJ[elem * 4 + 0]
@@ -75,9 +81,15 @@ def sw_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
         var Fy2 = my * v + p
         var D_r = D_ref[0 * NP * NP + i * NP + j]
         var D_s = D_ref[1 * NP * NP + i * NP + j]
-        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (iJ10 * Fx0 + iJ11 * Fy0) * D_s
-        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (iJ10 * Fx1 + iJ11 * Fy1) * D_s
-        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (iJ10 * Fx2 + iJ11 * Fy2) * D_s
+        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (
+            iJ10 * Fx0 + iJ11 * Fy0
+        ) * D_s
+        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (
+            iJ10 * Fx1 + iJ11 * Fy1
+        ) * D_s
+        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (
+            iJ10 * Fx2 + iJ11 * Fy2
+        ) * D_s
 
     # ---- Lift contribution (NC=3).
     var inv_2A = elem_inv_2A[elem]
@@ -90,9 +102,7 @@ def sw_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
         var sign: Float32 = Float32(1.0) if side == 0 else Float32(-1.0)
         var flen = face_length[fid]
         for m in range(NFP):
-            var r = Int(
-                elem_canon_to_ref[(elem * 3 + lf) * NFP + m]
-            )
+            var r = Int(elem_canon_to_ref[(elem * 3 + lf) * NFP + m])
             var Lim = Lift_ref[lf * NP * NFP + i * NFP + r]
             var sLf = sign * flen * Lim
             var fbase = (fid * NFP + m) * 3
@@ -110,33 +120,54 @@ def sw_vol_lift_combine_rk_kernel_2d[NP: Int, NFP: Int](
     q_out[idx + 2] = a * q_a[idx + 2] + b * q_b[idx + 2] + cc * dt * rhs2
 
 
-def launch_sw_vol_lift_2d[NP: Int, NFP: Int](
+def launch_sw_vol_lift_2d[
+    NP: Int, NFP: Int
+](
     mut ctx: DeviceContext,
-    q_in:              UnsafePointer[Float32, MutAnyOrigin],
-    elem_invJ:         UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:             UnsafePointer[Float32, MutAnyOrigin],
-    fstar:             UnsafePointer[Float32, MutAnyOrigin],
-    elem_inv_2A:       UnsafePointer[Float32, MutAnyOrigin],
-    elem_faces:        UnsafePointer[Int32,   MutAnyOrigin],
-    elem_face_side:    UnsafePointer[Int32,   MutAnyOrigin],
-    elem_canon_to_ref: UnsafePointer[Int32,   MutAnyOrigin],
-    face_length:       UnsafePointer[Float32, MutAnyOrigin],
-    Lift_ref:          UnsafePointer[Float32, MutAnyOrigin],
-    q_a:               UnsafePointer[Float32, MutAnyOrigin],
-    q_b:               UnsafePointer[Float32, MutAnyOrigin],
-    num_elements:      Int,
-    g:                 Float32,
-    min_h:             Float32,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
-    q_out:             UnsafePointer[Float32, MutAnyOrigin],
+    q_in: UnsafePointer[Float32, MutAnyOrigin],
+    elem_invJ: UnsafePointer[Float32, MutAnyOrigin],
+    D_ref: UnsafePointer[Float32, MutAnyOrigin],
+    fstar: UnsafePointer[Float32, MutAnyOrigin],
+    elem_inv_2A: UnsafePointer[Float32, MutAnyOrigin],
+    elem_faces: UnsafePointer[Int32, MutAnyOrigin],
+    elem_face_side: UnsafePointer[Int32, MutAnyOrigin],
+    elem_canon_to_ref: UnsafePointer[Int32, MutAnyOrigin],
+    face_length: UnsafePointer[Float32, MutAnyOrigin],
+    Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
+    q_a: UnsafePointer[Float32, MutAnyOrigin],
+    q_b: UnsafePointer[Float32, MutAnyOrigin],
+    num_elements: Int,
+    g: Float32,
+    min_h: Float32,
+    a: Float32,
+    b: Float32,
+    cc: Float32,
+    dt: Float32,
+    q_out: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     var total = num_elements * NP
     comptime _kernel = sw_vol_lift_combine_rk_kernel_2d[NP, NFP]
     ctx.enqueue_function[_kernel, _kernel](
-        q_in, elem_invJ, D_ref, fstar,
-        elem_inv_2A, elem_faces, elem_face_side, elem_canon_to_ref,
-        face_length, Lift_ref, q_a, q_b,
-        num_elements, g, min_h, a, b, cc, dt, q_out,
+        q_in,
+        elem_invJ,
+        D_ref,
+        fstar,
+        elem_inv_2A,
+        elem_faces,
+        elem_face_side,
+        elem_canon_to_ref,
+        face_length,
+        Lift_ref,
+        q_a,
+        q_b,
+        num_elements,
+        g,
+        min_h,
+        a,
+        b,
+        cc,
+        dt,
+        q_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
@@ -149,26 +180,29 @@ def launch_sw_vol_lift_2d[NP: Int, NFP: Int](
 # is zero-gradient -- matches ShallowWater2D.boundary_flux on CPU.
 # ----------------------------------------------------------------------
 
-def sw_face_flux_kernel_2d[NP: Int, NFP: Int](
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    num_faces:      Int,
-    g:              Float32,
-    min_h:          Float32,
-    inflow_h:       Float32,
-    inflow_hu:      Float32,
-    inflow_hv:      Float32,
-    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+
+def sw_face_flux_kernel_2d[
+    NP: Int, NFP: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    num_faces: Int,
+    g: Float32,
+    min_h: Float32,
+    inflow_h: Float32,
+    inflow_hu: Float32,
+    inflow_hv: Float32,
+    fstar_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var tid = Int(global_idx.x)
     var total = num_faces * NFP
     if tid >= total:
         return
     var fid = tid // NFP
-    var m   = tid %  NFP
+    var m = tid % NFP
 
     var nx = face_normal[fid * 2 + 0]
     var ny = face_normal[fid * 2 + 1]
@@ -238,35 +272,48 @@ def sw_face_flux_kernel_2d[NP: Int, NFP: Int](
     var alpha: Float32 = speedL if speedL > speedR else speedR
     var half = Float32(0.5)
     var out = (fid * NFP + m) * 3
-    fstar_out[out + 0] = half * ((FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny) \
-                         - half * alpha * (qR0 - qL0)
-    fstar_out[out + 1] = half * ((FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny) \
-                         - half * alpha * (qR1 - qL1)
-    fstar_out[out + 2] = half * ((FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny) \
-                         - half * alpha * (qR2 - qL2)
+    fstar_out[out + 0] = half * (
+        (FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny
+    ) - half * alpha * (qR0 - qL0)
+    fstar_out[out + 1] = half * (
+        (FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny
+    ) - half * alpha * (qR1 - qL1)
+    fstar_out[out + 2] = half * (
+        (FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny
+    ) - half * alpha * (qR2 - qL2)
 
 
-def launch_sw_face_flux_2d[NP: Int, NFP: Int](
+def launch_sw_face_flux_2d[
+    NP: Int, NFP: Int
+](
     mut ctx: DeviceContext,
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    num_faces:      Int,
-    g:              Float32,
-    min_h:          Float32,
-    inflow_h:       Float32,
-    inflow_hu:      Float32,
-    inflow_hv:      Float32,
-    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    num_faces: Int,
+    g: Float32,
+    min_h: Float32,
+    inflow_h: Float32,
+    inflow_hu: Float32,
+    inflow_hv: Float32,
+    fstar_out: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = sw_face_flux_kernel_2d[NP, NFP]
     ctx.enqueue_function[_kernel, _kernel](
-        q, face_elem, face_elem_node, face_normal, face_bc_type,
+        q,
+        face_elem,
+        face_elem_node,
+        face_normal,
+        face_bc_type,
         num_faces,
-        g, min_h, inflow_h, inflow_hu, inflow_hv,
+        g,
+        min_h,
+        inflow_h,
+        inflow_hu,
+        inflow_hv,
         fstar_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
@@ -284,26 +331,29 @@ def launch_sw_face_flux_2d[NP: Int, NFP: Int](
 # the same as the Rusanov kernel -- only the interior flux differs.
 # ----------------------------------------------------------------------
 
-def sw_face_flux_hll_kernel_2d[NP: Int, NFP: Int](
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    num_faces:      Int,
-    g:              Float32,
-    min_h:          Float32,
-    inflow_h:       Float32,
-    inflow_hu:      Float32,
-    inflow_hv:      Float32,
-    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+
+def sw_face_flux_hll_kernel_2d[
+    NP: Int, NFP: Int
+](
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    num_faces: Int,
+    g: Float32,
+    min_h: Float32,
+    inflow_h: Float32,
+    inflow_hu: Float32,
+    inflow_hv: Float32,
+    fstar_out: UnsafePointer[Float32, MutAnyOrigin],
 ):
     var tid = Int(global_idx.x)
     var total = num_faces * NFP
     if tid >= total:
         return
     var fid = tid // NFP
-    var m   = tid %  NFP
+    var m = tid % NFP
 
     var nx = face_normal[fid * 2 + 0]
     var ny = face_normal[fid * 2 + 1]
@@ -341,9 +391,11 @@ def sw_face_flux_hll_kernel_2d[NP: Int, NFP: Int](
         qR2 = qL2
 
     var hL = qL0
-    if hL < min_h: hL = min_h
+    if hL < min_h:
+        hL = min_h
     var hR = qR0
-    if hR < min_h: hR = min_h
+    if hR < min_h:
+        hR = min_h
     var uL = qL1 / hL
     var vL = qL2 / hL
     var uR = qR1 / hR
@@ -358,10 +410,12 @@ def sw_face_flux_hll_kernel_2d[NP: Int, NFP: Int](
     # Davis wave speeds.
     var S_L = unL - cL
     var tmp = unR - cR
-    if tmp < S_L: S_L = tmp
+    if tmp < S_L:
+        S_L = tmp
     var S_R = unL + cL
     tmp = unR + cR
-    if tmp > S_R: S_R = tmp
+    if tmp > S_R:
+        S_R = tmp
 
     # Normal fluxes on each side.
     var FxL0 = qL1
@@ -394,50 +448,72 @@ def sw_face_flux_hll_kernel_2d[NP: Int, NFP: Int](
         fstar_out[out + 2] = FnR2
     else:
         var inv = Float32(1.0) / (S_R - S_L)
-        fstar_out[out + 0] = (S_R * FnL0 - S_L * FnR0 + S_L * S_R * (qR0 - qL0)) * inv
-        fstar_out[out + 1] = (S_R * FnL1 - S_L * FnR1 + S_L * S_R * (qR1 - qL1)) * inv
-        fstar_out[out + 2] = (S_R * FnL2 - S_L * FnR2 + S_L * S_R * (qR2 - qL2)) * inv
+        fstar_out[out + 0] = (
+            S_R * FnL0 - S_L * FnR0 + S_L * S_R * (qR0 - qL0)
+        ) * inv
+        fstar_out[out + 1] = (
+            S_R * FnL1 - S_L * FnR1 + S_L * S_R * (qR1 - qL1)
+        ) * inv
+        fstar_out[out + 2] = (
+            S_R * FnL2 - S_L * FnR2 + S_L * S_R * (qR2 - qL2)
+        ) * inv
 
 
-def launch_sw_face_flux_hll_2d[NP: Int, NFP: Int](
+def launch_sw_face_flux_hll_2d[
+    NP: Int, NFP: Int
+](
     mut ctx: DeviceContext,
-    q:              UnsafePointer[Float32, MutAnyOrigin],
-    face_elem:      UnsafePointer[Int32,   MutAnyOrigin],
-    face_elem_node: UnsafePointer[Int32,   MutAnyOrigin],
-    face_normal:    UnsafePointer[Float32, MutAnyOrigin],
-    face_bc_type:   UnsafePointer[Int32,   MutAnyOrigin],
-    num_faces:      Int,
-    g:              Float32,
-    min_h:          Float32,
-    inflow_h:       Float32,
-    inflow_hu:      Float32,
-    inflow_hv:      Float32,
-    fstar_out:      UnsafePointer[Float32, MutAnyOrigin],
+    q: UnsafePointer[Float32, MutAnyOrigin],
+    face_elem: UnsafePointer[Int32, MutAnyOrigin],
+    face_elem_node: UnsafePointer[Int32, MutAnyOrigin],
+    face_normal: UnsafePointer[Float32, MutAnyOrigin],
+    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
+    num_faces: Int,
+    g: Float32,
+    min_h: Float32,
+    inflow_h: Float32,
+    inflow_hu: Float32,
+    inflow_hv: Float32,
+    fstar_out: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = sw_face_flux_hll_kernel_2d[NP, NFP]
     ctx.enqueue_function[_kernel, _kernel](
-        q, face_elem, face_elem_node, face_normal, face_bc_type,
+        q,
+        face_elem,
+        face_elem_node,
+        face_normal,
+        face_bc_type,
         num_faces,
-        g, min_h, inflow_h, inflow_hu, inflow_hv,
+        g,
+        min_h,
+        inflow_h,
+        inflow_hu,
+        inflow_hv,
         fstar_out,
         grid_dim=ceildiv(total, 256),
         block_dim=256,
     )
 
 
-def sw_rk_stage_2d[P: Int](
+def sw_rk_stage_2d[
+    P: Int
+](
     mut ctx: DeviceContext,
     mesh: LocalMesh2DGpu[P],
     Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:    UnsafePointer[Float32, MutAnyOrigin],
-    q_in:     UnsafePointer[Float32, MutAnyOrigin],
-    q_a:      UnsafePointer[Float32, MutAnyOrigin],
-    q_b:      UnsafePointer[Float32, MutAnyOrigin],
-    q_out:    UnsafePointer[Float32, MutAnyOrigin],
+    D_ref: UnsafePointer[Float32, MutAnyOrigin],
+    q_in: UnsafePointer[Float32, MutAnyOrigin],
+    q_a: UnsafePointer[Float32, MutAnyOrigin],
+    q_b: UnsafePointer[Float32, MutAnyOrigin],
+    q_out: UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    g: Float32, min_h: Float32,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    g: Float32,
+    min_h: Float32,
+    a: Float32,
+    b: Float32,
+    cc: Float32,
+    dt: Float32,
     inflow_h: Float32 = Float32(0.0),
     inflow_hu: Float32 = Float32(0.0),
     inflow_hv: Float32 = Float32(0.0),
@@ -448,26 +524,42 @@ def sw_rk_stage_2d[P: Int](
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_sw_face_flux_2d[NP, NFP](
-        ctx, q_in,
+        ctx,
+        q_in,
         mesh.d_face_elem.unsafe_ptr(),
         mesh.d_face_elem_node.unsafe_ptr(),
         mesh.d_face_normal.unsafe_ptr(),
         mesh.d_face_bc_type.unsafe_ptr(),
         mesh.num_faces,
-        g, min_h, inflow_h, inflow_hu, inflow_hv,
+        g,
+        min_h,
+        inflow_h,
+        inflow_hu,
+        inflow_hv,
         fstar_scratch,
     )
     launch_sw_vol_lift_2d[NP, NFP](
-        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        ctx,
+        q_in,
+        mesh.d_elem_invJ.unsafe_ptr(),
+        D_ref,
         fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_elem_face_side.unsafe_ptr(),
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
-        Lift_ref, q_a, q_b,
-        mesh.num_elements, g, min_h,
-        a, b, cc, dt, q_out,
+        Lift_ref,
+        q_a,
+        q_b,
+        mesh.num_elements,
+        g,
+        min_h,
+        a,
+        b,
+        cc,
+        dt,
+        q_out,
     )
 
 
@@ -476,18 +568,25 @@ def sw_rk_stage_2d[P: Int](
 # numerical flux.  Drop-in replacement for sw_rk_stage_2d.
 # ----------------------------------------------------------------------
 
-def sw_rk_stage_hll_2d[P: Int](
+
+def sw_rk_stage_hll_2d[
+    P: Int
+](
     mut ctx: DeviceContext,
     mesh: LocalMesh2DGpu[P],
     Lift_ref: UnsafePointer[Float32, MutAnyOrigin],
-    D_ref:    UnsafePointer[Float32, MutAnyOrigin],
-    q_in:     UnsafePointer[Float32, MutAnyOrigin],
-    q_a:      UnsafePointer[Float32, MutAnyOrigin],
-    q_b:      UnsafePointer[Float32, MutAnyOrigin],
-    q_out:    UnsafePointer[Float32, MutAnyOrigin],
+    D_ref: UnsafePointer[Float32, MutAnyOrigin],
+    q_in: UnsafePointer[Float32, MutAnyOrigin],
+    q_a: UnsafePointer[Float32, MutAnyOrigin],
+    q_b: UnsafePointer[Float32, MutAnyOrigin],
+    q_out: UnsafePointer[Float32, MutAnyOrigin],
     fstar_scratch: UnsafePointer[Float32, MutAnyOrigin],
-    g: Float32, min_h: Float32,
-    a: Float32, b: Float32, cc: Float32, dt: Float32,
+    g: Float32,
+    min_h: Float32,
+    a: Float32,
+    b: Float32,
+    cc: Float32,
+    dt: Float32,
     inflow_h: Float32 = Float32(0.0),
     inflow_hu: Float32 = Float32(0.0),
     inflow_hv: Float32 = Float32(0.0),
@@ -498,24 +597,40 @@ def sw_rk_stage_hll_2d[P: Int](
     comptime NP = num_tri_nodes_2d(P)
     comptime NFP = num_edge_nodes(P)
     launch_sw_face_flux_hll_2d[NP, NFP](
-        ctx, q_in,
+        ctx,
+        q_in,
         mesh.d_face_elem.unsafe_ptr(),
         mesh.d_face_elem_node.unsafe_ptr(),
         mesh.d_face_normal.unsafe_ptr(),
         mesh.d_face_bc_type.unsafe_ptr(),
         mesh.num_faces,
-        g, min_h, inflow_h, inflow_hu, inflow_hv,
+        g,
+        min_h,
+        inflow_h,
+        inflow_hu,
+        inflow_hv,
         fstar_scratch,
     )
     launch_sw_vol_lift_2d[NP, NFP](
-        ctx, q_in, mesh.d_elem_invJ.unsafe_ptr(), D_ref,
+        ctx,
+        q_in,
+        mesh.d_elem_invJ.unsafe_ptr(),
+        D_ref,
         fstar_scratch,
         mesh.d_elem_inv_2A.unsafe_ptr(),
         mesh.d_elem_faces.unsafe_ptr(),
         mesh.d_elem_face_side.unsafe_ptr(),
         mesh.d_elem_canon_to_ref.unsafe_ptr(),
         mesh.d_face_length.unsafe_ptr(),
-        Lift_ref, q_a, q_b,
-        mesh.num_elements, g, min_h,
-        a, b, cc, dt, q_out,
+        Lift_ref,
+        q_a,
+        q_b,
+        mesh.num_elements,
+        g,
+        min_h,
+        a,
+        b,
+        cc,
+        dt,
+        q_out,
     )

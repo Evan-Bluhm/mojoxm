@@ -39,7 +39,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_sw import sw_rk_stage_hll_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -50,7 +52,7 @@ comptime LX = 1.0
 # LY sized per-run so cells stay square (LY = NY/NX * LX).
 
 comptime GRAVITY: Float64 = 1.0
-comptime H_REST:  Float64 = 1.0
+comptime H_REST: Float64 = 1.0
 comptime AMPLITUDE: Float64 = 0.01
 comptime H_MIN: Float64 = 1.0e-6
 comptime CFL: Float64 = 0.10
@@ -90,11 +92,14 @@ def _run(NX: Int) raises -> Float64:
         for nn in range(NP_p):
             var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var h = H_REST + AMPLITUDE * sin(k_wave * x)
-            host_q.append(Float32(h));    host_ic.append(Float32(h))
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))
+            host_q.append(Float32(h))
+            host_ic.append(Float32(h))
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -118,18 +123,28 @@ def _run(NX: Int) raises -> Float64:
     # BC_INFLOW ghosts (unused under periodic BCs but required by signature).
 
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for _ in range(num_steps):
         for stage in stage_plans:
             sw_rk_stage_hll_2d[P](
-                ctx, gpu_mesh,
+                ctx,
+                gpu_mesh,
                 gpu_re.d_Lift_ref.unsafe_ptr(),
                 gpu_re.d_D_ref.unsafe_ptr(),
-                stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                stage.q_in,
+                stage.q_a,
+                stage.q_b,
+                stage.q_out,
                 d_fstar.unsafe_ptr(),
-                g_f, h_min_f,
-                stage.a, stage.b, stage.c, dt,
+                g_f,
+                h_min_f,
+                stage.a,
+                stage.b,
+                stage.c,
+                dt,
             )
     ctx.synchronize()
 
@@ -157,13 +172,18 @@ def _run(NX: Int) raises -> Float64:
     var rel_l2 = l2 / l2_ic
 
     var dmass = mass_fin - mass_ic_local
-    if dmass < 0.0: dmass = -dmass
+    if dmass < 0.0:
+        dmass = -dmass
     var mass_rel = dmass / mass_ic_local
     if mass_rel > MASS_TOL_REL:
         raise Error(
             String("bench_shallow_water_wave_2d_p3 FAILED: mass drift ")
-            + String(mass_rel) + " > tol " + String(MASS_TOL_REL)
-            + " (at NX=" + String(NX) + ")"
+            + String(mass_rel)
+            + " > tol "
+            + String(MASS_TOL_REL)
+            + " (at NX="
+            + String(NX)
+            + ")"
         )
 
     return rel_l2
@@ -179,8 +199,15 @@ def main() raises:
         return
 
     print("bench_shallow_water_wave_2d_p3 (linear SW wave, 2D HLL, P=3)")
-    print("  P=", P, "  NP=", num_tri_nodes_2d(P),
-          "  sweep NX=16, 24, 32   (threshold", L2_MAX_REL, ")")
+    print(
+        "  P=",
+        P,
+        "  NP=",
+        num_tri_nodes_2d(P),
+        "  sweep NX=16, 24, 32   (threshold",
+        L2_MAX_REL,
+        ")",
+    )
 
     var err16 = _run(16)
     print("  NX=16  rel L2 =", err16)
@@ -192,17 +219,23 @@ def main() raises:
     if err16 > L2_MAX_REL:
         raise Error(
             "bench_shallow_water_wave_2d_p3 FAILED: NX=16 rel L2 "
-            + String(err16) + " exceeds " + String(L2_MAX_REL)
+            + String(err16)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
     if err24 > L2_MAX_REL:
         raise Error(
             "bench_shallow_water_wave_2d_p3 FAILED: NX=24 rel L2 "
-            + String(err24) + " exceeds " + String(L2_MAX_REL)
+            + String(err24)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
     if err32 > L2_MAX_REL:
         raise Error(
             "bench_shallow_water_wave_2d_p3 FAILED: NX=32 rel L2 "
-            + String(err32) + " exceeds " + String(L2_MAX_REL)
+            + String(err32)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
 
     print("=== bench_shallow_water_wave_2d_p3 PASSED ===")

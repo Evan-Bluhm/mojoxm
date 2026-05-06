@@ -50,29 +50,29 @@ comptime NX = 32
 comptime NY = 4
 comptime NZ = 4
 comptime LX = 1.0
-comptime LY = Float64(4.0 / 32.0)   # dx = dy = dz = 1 / NX
+comptime LY = Float64(4.0 / 32.0)  # dx = dy = dz = 1 / NX
 comptime LZ = Float64(4.0 / 32.0)
 
 # Alfven-wave parameters.  rho0 = B0 = 1 gives c_A = 1 and period = LX.
-comptime GAMMA:     Float32 = Float32(5.0 / 3.0)
-comptime RHO0:      Float32 = 1.0
-comptime B0:        Float32 = 1.0
-comptime P0:        Float32 = 0.1
+comptime GAMMA: Float32 = Float32(5.0 / 3.0)
+comptime RHO0: Float32 = 1.0
+comptime B0: Float32 = 1.0
+comptime P0: Float32 = 0.1
 comptime AMPLITUDE: Float32 = 0.1
-comptime PI_F:      Float32 = 3.14159265358979323846
+comptime PI_F: Float32 = 3.14159265358979323846
 
 # c_A = B0 / sqrt(rho0); wave period T = LX / c_A.
-comptime T_FINAL: Float32 = 1.0     # exactly one period (LX / c_A)
+comptime T_FINAL: Float32 = 1.0  # exactly one period (LX / c_A)
 comptime NUM_FRAMES = 20
 
 # GLM cleaning: c_h set a bit above the expected max fast speed; a
 # nonzero alpha_d damps any accumulated div(B) noise.  Both are
 # unneeded for this analytic test (div(B) stays at zero to roundoff)
 # but turning GLM on proves the full pipeline compiles and runs.
-comptime C_H:     Float32 = 1.5
+comptime C_H: Float32 = 1.5
 comptime ALPHA_D: Float32 = 0.5
 
-comptime MIN_DENSITY:  Float32 = 1.0e-6
+comptime MIN_DENSITY: Float32 = 1.0e-6
 comptime MIN_PRESSURE: Float32 = 1.0e-6
 
 comptime CFL = Float32(0.2)
@@ -82,10 +82,14 @@ comptime IC_BLOCK = 256
 def alfven_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
-    Lx: Float32, amp: Float32, B0_val: Float32,
-    rho0_val: Float32, p0_val: Float32, gamma: Float32,
+    Lx: Float32,
+    amp: Float32,
+    B0_val: Float32,
+    rho0_val: Float32,
+    p0_val: Float32,
+    gamma: Float32,
 ):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
@@ -98,12 +102,16 @@ def alfven_ic_kernel(
 
     var k = Float32(2.0) * PI_F / Lx
     var s = sin(k * px)
-    var uy = amp * s        # transverse velocity perturbation
-    var By = -amp * s       # locked to u via Alfven relation
+    var uy = amp * s  # transverse velocity perturbation
+    var By = -amp * s  # locked to u via Alfven relation
 
     var rho = rho0_val
-    var u = Float32(0.0); var v = uy; var w = Float32(0.0)
-    var bx = B0_val; var by = By; var bz = Float32(0.0)
+    var u = Float32(0.0)
+    var v = uy
+    var w = Float32(0.0)
+    var bx = B0_val
+    var by = By
+    var bz = Float32(0.0)
     var p_gas = p0_val
     var E = (
         p_gas / (gamma - Float32(1.0))
@@ -119,14 +127,14 @@ def alfven_ic_kernel(
     q[base + 5] = bx
     q[base + 6] = by
     q[base + 7] = bz
-    q[base + 8] = Float32(0.0)   # psi
+    q[base + 8] = Float32(0.0)  # psi
 
 
 def choose_dt() raises -> Float32:
     var h = Float32(LX) / Float32(NX)
     # Fast magnetosonic speed upper bound: sqrt(c_s^2 + c_a^2).
     var cs2 = GAMMA * P0 / RHO0
-    var ca2 = (B0 * B0 + AMPLITUDE * AMPLITUDE) / RHO0   # worst-case |B|
+    var ca2 = (B0 * B0 + AMPLITUDE * AMPLITUDE) / RHO0  # worst-case |B|
     var cf = sqrt(cs2 + ca2)
     var wave = max(cf, C_H)
     return CFL * h / (wave * Float32(5.0))
@@ -141,10 +149,20 @@ def main() raises:
     if rank == 0:
         print(
             "mhd_alfven: GPU DG ideal MHD + GLM, P2 tet, Rusanov,",
-            size, "rank(s)",
+            size,
+            "rank(s)",
         )
-        print("  global mesh: ", NX, "x", NY, "x", NZ,
-              " cells -> ", NX * NY * NZ * 6, "tets")
+        print(
+            "  global mesh: ",
+            NX,
+            "x",
+            NY,
+            "x",
+            NZ,
+            " cells -> ",
+            NX * NY * NZ * 6,
+            "tets",
+        )
         print("  c_h =", C_H, "  alpha_d =", ALPHA_D)
 
     var nvtx = NvtxContext()
@@ -153,17 +171,35 @@ def main() raises:
 
     var bcs = BoundaryConditions.periodic()
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        IdealMHD.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = IdealMHD(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D,
+        GAMMA,
+        MIN_DENSITY,
+        MIN_PRESSURE,
+        C_H,
+        ALPHA_D,
     )
     var solver = Solver[IdealMHD](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[alfven_ic_kernel, alfven_ic_kernel](
@@ -171,10 +207,13 @@ def main() raises:
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
-        Float32(LX), AMPLITUDE, B0, RHO0, P0, GAMMA,
-        grid_dim=ceildiv(
-            solver.num_owned_elements * N_P, IC_BLOCK
-        ),
+        Float32(LX),
+        AMPLITUDE,
+        B0,
+        RHO0,
+        P0,
+        GAMMA,
+        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
     solver.ctx.synchronize()
@@ -200,10 +239,10 @@ def main() raises:
     # components).  `max_abs_psi` tracks the GLM cleaner's progress --
     # for a divergence-free IC this stays at roundoff the whole run.
     var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass",         0))
-    diag_linear.append(NamedComponent("momentum_x",   1))
-    diag_linear.append(NamedComponent("momentum_y",   2))
-    diag_linear.append(NamedComponent("momentum_z",   3))
+    diag_linear.append(NamedComponent("mass", 0))
+    diag_linear.append(NamedComponent("momentum_x", 1))
+    diag_linear.append(NamedComponent("momentum_y", 2))
+    diag_linear.append(NamedComponent("momentum_z", 3))
     diag_linear.append(NamedComponent("total_energy", 4))
     var diag_squared = List[NamedComponent]()
     diag_squared.append(NamedComponent("Bx_sq", 5))
@@ -212,9 +251,14 @@ def main() raises:
     var diag_maxabs = List[NamedComponent]()
     diag_maxabs.append(NamedComponent("max_abs_psi", 8))
     var diag = DiagnosticsWriter[IdealMHD](
-        solver, "output/diagnostics.csv",
-        diag_linear, diag_squared, diag_maxabs,
-        LX, LY, LZ,
+        solver,
+        "output/diagnostics.csv",
+        diag_linear,
+        diag_squared,
+        diag_maxabs,
+        LX,
+        LY,
+        LZ,
     )
 
     var dt = choose_dt()
@@ -222,7 +266,13 @@ def main() raises:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
     var result = run_ssprk3_loop_with_diagnostics[IdealMHD](
-        solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx,
+        solver,
+        writer,
+        diag,
+        dt,
+        T_FINAL,
+        NUM_FRAMES,
+        nvtx,
     )
 
     writer.finalize("output/solution.pvd", nvtx)
@@ -237,28 +287,28 @@ def main() raises:
     var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
     if nprocs == 1:
         var n_owned_dof = solver.num_owned_elements * N_P
-        var snap_bx  = List[Float32]()
-        var snap_by  = List[Float32]()
-        var snap_bz  = List[Float32]()
+        var snap_bx = List[Float32]()
+        var snap_by = List[Float32]()
+        var snap_bz = List[Float32]()
         var snap_psi = List[Float32]()
         for _ in range(n_owned_dof):
             snap_bx.append(Float32(0.0))
             snap_by.append(Float32(0.0))
             snap_bz.append(Float32(0.0))
             snap_psi.append(Float32(0.0))
-        solver.download_owned_component(5, snap_bx,  nvtx)
-        solver.download_owned_component(6, snap_by,  nvtx)
-        solver.download_owned_component(7, snap_bz,  nvtx)
+        solver.download_owned_component(5, snap_bx, nvtx)
+        solver.download_owned_component(6, snap_by, nvtx)
+        solver.download_owned_component(7, snap_bz, nvtx)
         solver.download_owned_component(8, snap_psi, nvtx)
-        var f_by   = List[Float64]()
+        var f_by = List[Float64]()
         var f_bmag = List[Float64]()
-        var f_psi  = List[Float64]()
+        var f_psi = List[Float64]()
         for k in range(n_owned_dof):
             var bx = snap_bx[k]
             var by = snap_by[k]
             var bz = snap_bz[k]
             f_by.append(Float64(by))
-            f_bmag.append(Float64(sqrt(bx*bx + by*by + bz*bz)))
+            f_bmag.append(Float64(sqrt(bx * bx + by * by + bz * bz)))
             f_psi.append(Float64(snap_psi[k]))
         var fields = List[List[Float64]]()
         fields.append(f_by^)
@@ -269,11 +319,18 @@ def main() raises:
         names.append(String("|B|"))
         names.append(String("psi"))
         write_snapshot_3d_multi(
-            solver=solver, field_names=names, field_data=fields,
-            path=String("output/snapshot_t_final.vtu"), nvtx=nvtx,
+            solver=solver,
+            field_names=names,
+            field_data=fields,
+            path=String("output/snapshot_t_final.vtu"),
+            nvtx=nvtx,
         )
         if rank == 0:
-            print("  wrote output/snapshot_t_final.vtu (By + |B| + psi, t=", T_FINAL, ")")
+            print(
+                "  wrote output/snapshot_t_final.vtu (By + |B| + psi, t=",
+                T_FINAL,
+                ")",
+            )
 
     # The round-trip L2 and max-|psi| diagnostics below sum over this
     # rank's owned elements only; at np>1 the globally-correct numbers
@@ -301,12 +358,18 @@ def main() raises:
         var max_psi: Float32 = 0.0
         for i in range(len(psi_fin)):
             var p = psi_fin[i] if psi_fin[i] >= Float32(0.0) else -psi_fin[i]
-            if p > max_psi: max_psi = p
+            if p > max_psi:
+                max_psi = p
         print("  max |psi| (GLM monopole tracer) :", max_psi)
 
     if rank == 0:
-        print("  total steps:", result.total_steps,
-              " wall time:", result.wall_sec, "s")
+        print(
+            "  total steps:",
+            result.total_steps,
+            " wall time:",
+            result.wall_sec,
+            "s",
+        )
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
     var tput = solver.bench_step_loop(dt, nvtx)

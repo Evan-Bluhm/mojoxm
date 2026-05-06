@@ -50,20 +50,20 @@ comptime IC_BLOCK = 256
 
 comptime GAMMA_E: Float32 = Float32(5.0 / 3.0)
 comptime GAMMA_I: Float32 = Float32(5.0 / 3.0)
-comptime Q_E:     Float32 = -1.0
-comptime M_E:     Float32 =  1.0
-comptime Q_I:     Float32 =  1.0
-comptime M_I:     Float32 = 25.0
-comptime EPS0:    Float32 =  1.0
+comptime Q_E: Float32 = -1.0
+comptime M_E: Float32 = 1.0
+comptime Q_I: Float32 = 1.0
+comptime M_I: Float32 = 25.0
+comptime EPS0: Float32 = 1.0
 comptime C_LIGHT: Float32 = 10.0
-comptime C_H:     Float32 = Float32(0.0)
+comptime C_H: Float32 = Float32(0.0)
 comptime ALPHA_D: Float32 = Float32(0.0)
-comptime MIN_DENSITY:  Float32 = Float32(1.0e-6)
+comptime MIN_DENSITY: Float32 = Float32(1.0e-6)
 comptime MIN_PRESSURE: Float32 = Float32(1.0e-6)
 
-comptime N0:    Float32 = 1.0
-comptime P_E0:  Float32 = 0.01
-comptime P_I0:  Float32 = 0.01
+comptime N0: Float32 = 1.0
+comptime P_E0: Float32 = 0.01
+comptime P_I0: Float32 = 0.01
 
 comptime CFL: Float32 = Float32(0.1)
 comptime T_FINAL: Float32 = 0.5
@@ -127,27 +127,50 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions(
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_OUTFLOW, BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
     )
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, FiveMomentTwoFluid.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        FiveMomentTwoFluid.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = FiveMomentTwoFluid(
-        GAMMA_E, GAMMA_I,
-        Q_E, M_E, Q_I, M_I,
-        EPS0, C_LIGHT,
-        C_H, ALPHA_D,
-        MIN_DENSITY, MIN_PRESSURE,
+        GAMMA_E,
+        GAMMA_I,
+        Q_E,
+        M_E,
+        Q_I,
+        M_I,
+        EPS0,
+        C_LIGHT,
+        C_H,
+        ALPHA_D,
+        MIN_DENSITY,
+        MIN_PRESSURE,
     )
     var solver = Solver[FiveMomentTwoFluid](
-        ctx^, mesh^, halo^, physics^,
-        refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[fill_constant_kernel, fill_constant_kernel](
@@ -182,7 +205,9 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
     )
@@ -195,14 +220,18 @@ def main() raises:
         if isnan(v) or isinf(v):
             raise Error("bench_two_fluid_outflow_3d: non-finite output")
         var d = Float64(v - host_ic[k])
-        if d < 0.0: d = -d
-        if d > max_drift: max_drift = d
+        if d < 0.0:
+            d = -d
+        if d > max_drift:
+            max_drift = d
 
     print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
     if max_drift > DRIFT_TOL:
         raise Error(
             "bench_two_fluid_outflow_3d FAILED: drift "
-            + String(max_drift) + " > " + String(DRIFT_TOL)
+            + String(max_drift)
+            + " > "
+            + String(DRIFT_TOL)
         )
 
     print("=== bench_two_fluid_outflow_3d PASSED ===")

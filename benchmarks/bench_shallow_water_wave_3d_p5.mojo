@@ -29,7 +29,9 @@ from std.math import sqrt, ceildiv, sin, isnan, isinf
 from src import mpi
 from src.partition import build_partition
 from src.reference import (
-    ReferenceElement, to_float32, num_tet_nodes,
+    ReferenceElement,
+    to_float32,
+    num_tet_nodes,
 )
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions
@@ -40,14 +42,14 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 5
-comptime NP = num_tet_nodes(P)   # 56 at P=5
-comptime NC = 3                  # ShallowWater.NUM_COMPONENTS
+comptime NP = num_tet_nodes(P)  # 56 at P=5
+comptime NC = 3  # ShallowWater.NUM_COMPONENTS
 
 comptime LX = 1.0
 comptime LY = 1.0
 comptime LZ = 0.1
 comptime GRAVITY: Float32 = 1.0
-comptime H_REST:  Float32 = 1.0
+comptime H_REST: Float32 = 1.0
 comptime AMPLITUDE: Float32 = 0.01
 comptime H_MIN: Float32 = 1.0e-6
 comptime CFL = Float32(0.08)
@@ -63,7 +65,7 @@ comptime MASS_TOL_REL: Float64 = 1.0e-4
 def wave_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -78,8 +80,8 @@ def wave_ic_kernel(
     var h = H_REST + AMPLITUDE * sin(k * px)
     var base = (e * NP + nn) * NC
     q[base + 0] = h
-    q[base + 1] = Float32(0.0)    # hu
-    q[base + 2] = Float32(0.0)    # hv
+    q[base + 1] = Float32(0.0)  # hu
+    q[base + 2] = Float32(0.0)  # hv
 
 
 @fieldwise_init
@@ -101,17 +103,28 @@ def _run(N: Int) raises -> RunResult:
 
     var NZ = 2
     var mesh = Mesh[P](
-        ctx, build_partition(rank, size, N, N, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(rank, size, N, N, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, ShallowWater.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        ShallowWater.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = ShallowWater(GRAVITY, H_MIN)
     var solver = Solver[ShallowWater, P](
-        ctx^, mesh^, halo^, physics^,
-        D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     solver.ctx.enqueue_function[wave_ic_kernel, wave_ic_kernel](
@@ -180,7 +193,8 @@ def _run(N: Int) raises -> RunResult:
         mass_ic += Float64(host_ic[i * NC + 0])
         mass_fin += Float64(q_ptr[i * NC + 0])
     var dmass = mass_fin - mass_ic
-    if dmass < 0.0: dmass = -dmass
+    if dmass < 0.0:
+        dmass = -dmass
     var mass_rel = dmass / mass_ic
 
     return RunResult(rel_l2, mass_rel)
@@ -190,8 +204,7 @@ def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
     mpi.init()
     print("bench_shallow_water_wave_3d_p5 (linear SW wave, P=5)")
-    print("  P=", P, "  NP=", NP, "  T=", T_FINAL,
-          "  A/H=", AMPLITUDE / H_REST)
+    print("  P=", P, "  NP=", NP, "  T=", T_FINAL, "  A/H=", AMPLITUDE / H_REST)
 
     var Ns = List[Int]()
     Ns.append(4)

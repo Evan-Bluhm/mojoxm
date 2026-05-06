@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# Pixi-managed env
+.pixi/
+
 # nsys/ncu traces
 *.nsys-rep
 *.sqlite

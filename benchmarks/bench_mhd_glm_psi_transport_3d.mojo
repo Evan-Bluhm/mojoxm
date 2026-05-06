@@ -45,15 +45,15 @@ comptime LX = 1.0
 comptime LY = Float64(NY) / Float64(NX) * LX
 comptime LZ = Float64(NZ) / Float64(NX) * LX
 
-comptime GAMMA     = Float32(5.0 / 3.0)
-comptime RHO0      = Float32(1.0)
-comptime P0_GAS    = Float32(1.0)
+comptime GAMMA = Float32(5.0 / 3.0)
+comptime RHO0 = Float32(1.0)
+comptime P0_GAS = Float32(1.0)
 comptime AMPLITUDE = Float32(0.01)
-comptime C_H       = Float32(1.0)
-comptime ALPHA_D   = Float32(0.0)         # transport-only; no damping
-comptime MIN_DENSITY  = Float32(1.0e-6)
+comptime C_H = Float32(1.0)
+comptime ALPHA_D = Float32(0.0)  # transport-only; no damping
+comptime MIN_DENSITY = Float32(1.0e-6)
 comptime MIN_PRESSURE = Float32(1.0e-6)
-comptime T_FINAL: Float32 = 1.0           # one period: T = LX / c_h
+comptime T_FINAL: Float32 = 1.0  # one period: T = LX / c_h
 comptime CFL = Float32(0.10)
 comptime IC_BLOCK = 256
 comptime PI_F = Float32(3.14159265358979323846)
@@ -64,7 +64,7 @@ comptime L2_MAX_REL: Float64 = 5.0e-4
 def transport_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -88,9 +88,9 @@ def transport_ic_kernel(
     q[base + 2] = Float32(0.0)
     q[base + 3] = Float32(0.0)
     q[base + 4] = E
-    q[base + 5] = Float32(0.0)    # Bx
-    q[base + 6] = Float32(0.0)    # By
-    q[base + 7] = Float32(0.0)    # Bz
+    q[base + 5] = Float32(0.0)  # Bx
+    q[base + 6] = Float32(0.0)  # By
+    q[base + 7] = Float32(0.0)  # Bz
     q[base + 8] = psi
 
 
@@ -104,8 +104,20 @@ def main() raises:
         return
 
     print("bench_mhd_glm_psi_transport_3d (3D GLM linear psi/Bx wave)")
-    print("  P= 2   mesh=", NX, "x", NY, "x", NZ,
-          "   c_h=", C_H, "   T=", T_FINAL, "   amplitude=", AMPLITUDE)
+    print(
+        "  P= 2   mesh=",
+        NX,
+        "x",
+        NY,
+        "x",
+        NZ,
+        "   c_h=",
+        C_H,
+        "   T=",
+        T_FINAL,
+        "   amplitude=",
+        AMPLITUDE,
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -114,18 +126,35 @@ def main() raises:
 
     var bcs = BoundaryConditions.periodic()
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        IdealMHD.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = IdealMHD(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D,
+        GAMMA,
+        MIN_DENSITY,
+        MIN_PRESSURE,
+        C_H,
+        ALPHA_D,
     )
     var solver = Solver[IdealMHD](
-        ctx^, mesh^, halo^, physics^,
-        refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[transport_ic_kernel, transport_ic_kernel](
@@ -161,7 +190,9 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
     )
@@ -183,27 +214,31 @@ def main() raises:
     for i in range(n_owned_nodes):
         var p = q_ptr[i * 9 + 8]
         var a = p
-        if a < Float32(0.0): a = -a
-        if a > psi_max: psi_max = a
+        if a < Float32(0.0):
+            a = -a
+        if a > psi_max:
+            psi_max = a
 
     var amp_bound = AMPLITUDE * Float32(1.1)
     if psi_max > amp_bound:
         raise Error(
             String("bench_mhd_glm_psi_transport_3d FAILED: psi_max ")
-            + String(psi_max) + " exceeds 1.1 * AMPLITUDE "
+            + String(psi_max)
+            + " exceeds 1.1 * AMPLITUDE "
             + String(amp_bound)
         )
 
     var l2 = sqrt(sum_sq / Float64(n_owned_dof))
     var l2_ic = sqrt(sum_ic / Float64(n_owned_dof))
     var rel_l2 = l2 / l2_ic
-    print("  rel L2(state) =", rel_l2,
-          "  (threshold", L2_MAX_REL, ")")
+    print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
 
     if rel_l2 > L2_MAX_REL:
         raise Error(
             "bench_mhd_glm_psi_transport_3d FAILED: rel L2 "
-            + String(rel_l2) + " > " + String(L2_MAX_REL)
+            + String(rel_l2)
+            + " > "
+            + String(L2_MAX_REL)
         )
 
     print("=== bench_mhd_glm_psi_transport_3d PASSED ===")

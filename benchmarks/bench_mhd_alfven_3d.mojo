@@ -41,20 +41,20 @@ comptime LX = 1.0
 comptime LY = Float64(4.0 / 32.0)
 comptime LZ = Float64(4.0 / 32.0)
 
-comptime GAMMA     = Float32(5.0 / 3.0)
-comptime RHO0      = Float32(1.0)
-comptime B0        = Float32(1.0)
-comptime P0        = Float32(0.1)
+comptime GAMMA = Float32(5.0 / 3.0)
+comptime RHO0 = Float32(1.0)
+comptime B0 = Float32(1.0)
+comptime P0 = Float32(0.1)
 comptime AMPLITUDE = Float32(0.1)
-comptime C_H       = Float32(1.5)
-comptime ALPHA_D   = Float32(0.5)
-comptime MIN_DENSITY  = Float32(1.0e-6)
+comptime C_H = Float32(1.5)
+comptime ALPHA_D = Float32(0.5)
+comptime MIN_DENSITY = Float32(1.0e-6)
 comptime MIN_PRESSURE = Float32(1.0e-6)
 
-comptime T_FINAL = Float32(1.0)   # one period (LX / c_A = 1)
-comptime CFL     = Float32(0.2)
+comptime T_FINAL = Float32(1.0)  # one period (LX / c_A = 1)
+comptime CFL = Float32(0.2)
 comptime IC_BLOCK = 256
-comptime PI_F    = Float32(3.14159265358979323846)
+comptime PI_F = Float32(3.14159265358979323846)
 
 # Measured ~3.6e-3; same nonlinear-floor framing as the 2D version.
 comptime L2_MAX_REL: Float64 = 5.0e-3
@@ -63,7 +63,7 @@ comptime L2_MAX_REL: Float64 = 5.0e-3
 def alfven_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -81,8 +81,12 @@ def alfven_ic_kernel(
     var By = -AMPLITUDE * s
 
     var rho = RHO0
-    var u = Float32(0.0); var v = uy; var w = Float32(0.0)
-    var bx = B0; var by = By; var bz = Float32(0.0)
+    var u = Float32(0.0)
+    var v = uy
+    var w = Float32(0.0)
+    var bx = B0
+    var by = By
+    var bz = Float32(0.0)
     var p_gas = P0
     var E = (
         p_gas / (GAMMA - Float32(1.0))
@@ -111,8 +115,17 @@ def main() raises:
         return
 
     print("bench_mhd_alfven_3d (3D Alfven wave, one period)")
-    print("  P=", P, "  mesh=", NX, "x", NY, "x", NZ,
-          "  (c_A = B0 / sqrt(rho0) = 1, T = LX / c_A = 1)")
+    print(
+        "  P=",
+        P,
+        "  mesh=",
+        NX,
+        "x",
+        NY,
+        "x",
+        NZ,
+        "  (c_A = B0 / sqrt(rho0) = 1, T = LX / c_A = 1)",
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -121,17 +134,35 @@ def main() raises:
 
     var bcs = BoundaryConditions.periodic()
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        IdealMHD.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = IdealMHD(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D,
+        GAMMA,
+        MIN_DENSITY,
+        MIN_PRESSURE,
+        C_H,
+        ALPHA_D,
     )
     var solver = Solver[IdealMHD](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[alfven_ic_kernel, alfven_ic_kernel](
@@ -146,7 +177,9 @@ def main() raises:
 
     # Snapshot the IC for comparison at t=T.
     var n_owned_dof = solver.num_owned_elements * N_P * IdealMHD.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
     )
@@ -170,7 +203,9 @@ def main() raises:
         solver.step_ssprk3(dt_used, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
     )
@@ -182,8 +217,9 @@ def main() raises:
     for k in range(n_owned_dof):
         var v_now = q_ptr[k]
         if isnan(v_now) or isinf(v_now):
-            raise Error("bench_mhd_alfven_3d: non-finite output at index "
-                        + String(k))
+            raise Error(
+                "bench_mhd_alfven_3d: non-finite output at index " + String(k)
+            )
         var err = Float64(v_now - host_ic[k])
         sum_sq += err * err
         var ic = Float64(host_ic[k])
@@ -191,8 +227,7 @@ def main() raises:
     var l2 = sqrt(sum_sq / Float64(n_owned_dof))
     var l2_ic = sqrt(sum_ic / Float64(n_owned_dof))
     var rel_l2 = l2 / l2_ic
-    print("  rel L2(state) =", rel_l2,
-          "  (threshold", L2_MAX_REL, ")")
+    print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
 
     if rel_l2 > L2_MAX_REL:
         raise Error(

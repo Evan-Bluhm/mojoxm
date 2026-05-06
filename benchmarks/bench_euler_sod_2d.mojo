@@ -41,7 +41,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_hllc_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL, BC_OUTFLOW
@@ -55,15 +57,15 @@ comptime LX = 1.0
 comptime LY = 0.0625
 comptime GAMMA = 1.4
 comptime RHO_L = 1.0
-comptime P_L   = 1.0
+comptime P_L = 1.0
 comptime RHO_R = 0.125
-comptime P_R   = 0.1
+comptime P_R = 0.1
 comptime T_FINAL = 0.20
 comptime CFL = 0.15
 
 # Tolerances on the analytic comparisons.
 comptime PLATEAU_TOL_REL: Float64 = 0.02
-comptime STAR_TOL_REL:    Float64 = 0.05
+comptime STAR_TOL_REL: Float64 = 0.05
 comptime SHOCK_TOL_CELLS: Float64 = 2.0
 
 
@@ -77,8 +79,7 @@ def main() raises:
         return
 
     print("bench_euler_sod_2d (Sod shock tube vs exact Riemann)")
-    print("  P=", P, "  mesh=", NX, "x", NY,
-          "  HLLC (no limiter), T=", T_FINAL)
+    print("  P=", P, "  mesh=", NX, "x", NY, "  HLLC (no limiter), T=", T_FINAL)
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -86,8 +87,10 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions2D(
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_WALL,    BC_WALL,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_WALL,
+        BC_WALL,
     )
     var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var host_re = ReferenceElement2D[P]()
@@ -109,14 +112,14 @@ def main() raises:
             var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var s = 0.5 * (tanh((x - 0.5 * LX) / smooth_width) + 1.0)
             var rho = RHO_L + s * (RHO_R - RHO_L)
-            var p   = P_L   + s * (P_R   - P_L)
+            var p = P_L + s * (P_R - P_L)
             var E = p / (GAMMA - 1.0)
             host_q.append(Float32(rho))
             host_q.append(Float32(0.0))
             host_q.append(Float32(0.0))
             host_q.append(Float32(E))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -137,7 +140,7 @@ def main() raises:
 
     var gamma = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
-    var min_p   = Float32(1.0e-6)
+    var min_p = Float32(1.0e-6)
 
     var stage_plans = ssprk3_stage_plans(
         d_q=d_q.unsafe_ptr(),
@@ -160,14 +163,26 @@ def main() raises:
                 gamma=gamma,
                 min_density=min_rho,
                 min_pressure=min_p,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
     var t1 = perf_counter_ns()
     var wall_sec = Float64(t1 - t0) * 1.0e-9
-    print("  steps=", num_steps, "  dt=", dt,
-          "  wall=", wall_sec, "s",
-          "  throughput=", Float64(num_steps) / wall_sec, "steps/s")
+    print(
+        "  steps=",
+        num_steps,
+        "  dt=",
+        dt,
+        "  wall=",
+        wall_sec,
+        "s",
+        "  throughput=",
+        Float64(num_steps) / wall_sec,
+        "steps/s",
+    )
 
     ctx.enqueue_copy(hbuf_q, d_q)
     ctx.synchronize()
@@ -193,13 +208,17 @@ def main() raises:
                 break
             var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var y = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
-            if y < y_lo or y > y_hi: continue
+            if y < y_lo or y > y_hi:
+                continue
             var ix = Int((x / LX) * Float64(NX))
-            if ix < 0: ix = 0
-            if ix >= NX: ix = NX - 1
+            if ix < 0:
+                ix = 0
+            if ix >= NX:
+                ix = NX - 1
             bins[ix] += Float64(v)
             counts[ix] += 1
-        if not finite: break
+        if not finite:
+            break
     if not finite:
         raise Error("bench_euler_sod_2d: non-finite output")
     var profile = List[Float64]()
@@ -210,47 +229,64 @@ def main() raises:
             profile.append(0.0)
 
     # Analytic reference at T_FINAL.
-    var rho_ref_L    = sod_exact_rho(0.10, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
-    var rho_ref_R    = sod_exact_rho(0.95, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
-    var rho_ref_star = sod_exact_rho(0.60, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
+    var rho_ref_L = sod_exact_rho(0.10, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
+    var rho_ref_R = sod_exact_rho(0.95, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
+    var rho_ref_star = sod_exact_rho(
+        0.60, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R
+    )
 
     # Bin helper inlined (no nested def -- Mojo nested defs can't
     # capture the NX/LX comptime constants).
-    var ix_L    = Int((0.10 / LX) * Float64(NX))
-    var ix_R    = Int((0.95 / LX) * Float64(NX))
+    var ix_L = Int((0.10 / LX) * Float64(NX))
+    var ix_R = Int((0.95 / LX) * Float64(NX))
     var ix_star = Int((0.60 / LX) * Float64(NX))
 
-    var meas_L    = profile[ix_L]
-    var meas_R    = profile[ix_R]
+    var meas_L = profile[ix_L]
+    var meas_R = profile[ix_R]
     var meas_star = profile[ix_star]
 
-    print("  exact rho_L plateau   =", rho_ref_L,
-          "  measured (x=0.10) =", meas_L)
-    print("  exact rho_R plateau   =", rho_ref_R,
-          "  measured (x=0.95) =", meas_R)
-    print("  exact rho_star (left) =", rho_ref_star,
-          "  measured (x=0.60) =", meas_star)
+    print(
+        "  exact rho_L plateau   =", rho_ref_L, "  measured (x=0.10) =", meas_L
+    )
+    print(
+        "  exact rho_R plateau   =", rho_ref_R, "  measured (x=0.95) =", meas_R
+    )
+    print(
+        "  exact rho_star (left) =",
+        rho_ref_star,
+        "  measured (x=0.60) =",
+        meas_star,
+    )
 
     var err_L = (meas_L - rho_ref_L) / rho_ref_L
-    if err_L < 0.0: err_L = -err_L
+    if err_L < 0.0:
+        err_L = -err_L
     if err_L > PLATEAU_TOL_REL:
         raise Error(
             String("bench_euler_sod_2d FAILED: left plateau rel err ")
-            + String(err_L) + " exceeds " + String(PLATEAU_TOL_REL)
+            + String(err_L)
+            + " exceeds "
+            + String(PLATEAU_TOL_REL)
         )
     var err_R = (meas_R - rho_ref_R) / rho_ref_R
-    if err_R < 0.0: err_R = -err_R
+    if err_R < 0.0:
+        err_R = -err_R
     if err_R > PLATEAU_TOL_REL:
         raise Error(
             String("bench_euler_sod_2d FAILED: right plateau rel err ")
-            + String(err_R) + " exceeds " + String(PLATEAU_TOL_REL)
+            + String(err_R)
+            + " exceeds "
+            + String(PLATEAU_TOL_REL)
         )
     var err_star = (meas_star - rho_ref_star) / rho_ref_star
-    if err_star < 0.0: err_star = -err_star
+    if err_star < 0.0:
+        err_star = -err_star
     if err_star > STAR_TOL_REL:
         raise Error(
             String("bench_euler_sod_2d FAILED: star-left plateau rel err ")
-            + String(err_star) + " exceeds " + String(STAR_TOL_REL)
+            + String(err_star)
+            + " exceeds "
+            + String(STAR_TOL_REL)
         )
 
     # Shock position: locate the largest |drho/dx| in the right half
@@ -275,17 +311,29 @@ def main() raises:
     var S_R = shock_speed_S_R(RHO_L, P_L, RHO_R, P_R, GAMMA)
     var x_shock_exact = 0.5 + T_FINAL * S_R
     var shock_err_cells = (x_shock_meas - x_shock_exact) / dx_cell
-    var a_shock_err_cells = shock_err_cells if shock_err_cells >= 0.0 else -shock_err_cells
-    print("  exact shock x =", x_shock_exact,
-          "  measured =", x_shock_meas,
-          "  err =", a_shock_err_cells, "cells",
-          "  (threshold", SHOCK_TOL_CELLS, ")")
+    var a_shock_err_cells = (
+        shock_err_cells if shock_err_cells >= 0.0 else -shock_err_cells
+    )
+    print(
+        "  exact shock x =",
+        x_shock_exact,
+        "  measured =",
+        x_shock_meas,
+        "  err =",
+        a_shock_err_cells,
+        "cells",
+        "  (threshold",
+        SHOCK_TOL_CELLS,
+        ")",
+    )
 
     if a_shock_err_cells > SHOCK_TOL_CELLS:
         raise Error(
             String("bench_euler_sod_2d FAILED: shock position off by ")
             + String(a_shock_err_cells)
-            + " cells (tol " + String(SHOCK_TOL_CELLS) + ")"
+            + " cells (tol "
+            + String(SHOCK_TOL_CELLS)
+            + ")"
         )
 
     print("=== bench_euler_sod_2d PASSED ===")

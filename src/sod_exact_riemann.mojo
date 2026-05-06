@@ -26,7 +26,11 @@ from std.math import sqrt, pow
 
 
 def f_K(
-    p: Float64, rho_K: Float64, p_K: Float64, a_K: Float64, gamma: Float64,
+    p: Float64,
+    rho_K: Float64,
+    p_K: Float64,
+    a_K: Float64,
+    gamma: Float64,
 ) -> Float64:
     """Toro's f_K: pressure response for the wave on side K.
     Shock branch when p > p_K, rarefaction otherwise."""
@@ -40,8 +44,14 @@ def f_K(
 
 
 def solve_star(
-    rho_L: Float64, u_L: Float64, p_L: Float64, a_L: Float64,
-    rho_R: Float64, u_R: Float64, p_R: Float64, a_R: Float64,
+    rho_L: Float64,
+    u_L: Float64,
+    p_L: Float64,
+    a_L: Float64,
+    rho_R: Float64,
+    u_R: Float64,
+    p_R: Float64,
+    a_R: Float64,
     gamma: Float64,
 ) raises -> Float64:
     """Newton solve for p_star on f_L(p) + f_R(p) + (u_R - u_L) = 0.
@@ -68,14 +78,18 @@ def solve_star(
             var sL = sqrt(A_L / (p + B_L))
             dfL = sL * (1.0 - 0.5 * (p - p_L) / (p + B_L))
         else:
-            dfL = (1.0 / (rho_L * a_L)) * pow(p / p_L, -(gamma + 1.0) / (2.0 * gamma))
+            dfL = (1.0 / (rho_L * a_L)) * pow(
+                p / p_L, -(gamma + 1.0) / (2.0 * gamma)
+            )
         if p > p_R:
             var A_R = 2.0 / ((gamma + 1.0) * rho_R)
             var B_R = (gamma - 1.0) / (gamma + 1.0) * p_R
             var sR = sqrt(A_R / (p + B_R))
             dfR = sR * (1.0 - 0.5 * (p - p_R) / (p + B_R))
         else:
-            dfR = (1.0 / (rho_R * a_R)) * pow(p / p_R, -(gamma + 1.0) / (2.0 * gamma))
+            dfR = (1.0 / (rho_R * a_R)) * pow(
+                p / p_R, -(gamma + 1.0) / (2.0 * gamma)
+            )
         var resid = fL + fR + (u_R - u_L)
         var dp = -resid / (dfL + dfR)
         var p_new = p + dp
@@ -90,22 +104,31 @@ def solve_star(
 
 
 def sod_exact_rho(
-    x: Float64, t: Float64,
+    x: Float64,
+    t: Float64,
     gamma: Float64,
-    rho_L: Float64, p_L: Float64,
-    rho_R: Float64, p_R: Float64,
+    rho_L: Float64,
+    p_L: Float64,
+    rho_R: Float64,
+    p_R: Float64,
 ) raises -> Float64:
     """Returns rho at (x, t) for the canonical Sod shock tube
     (u_L = u_R = 0, discontinuity at x = 0.5).  Composes the
     rarefaction fan + contact + shock from the standard Riemann
     structure.  Generalised over (gamma, rho_L, p_L, rho_R, p_R)
     so the same helper works for any L/R state with u_L = u_R = 0."""
-    var xi = (x - 0.5) / t       # self-similar variable
+    var xi = (x - 0.5) / t  # self-similar variable
     var a_L = sqrt(gamma * p_L / rho_L)
     var a_R = sqrt(gamma * p_R / rho_R)
     var p_star = solve_star(
-        rho_L, 0.0, p_L, a_L,
-        rho_R, 0.0, p_R, a_R,
+        rho_L,
+        0.0,
+        p_L,
+        a_L,
+        rho_R,
+        0.0,
+        p_R,
+        a_R,
         gamma,
     )
     var u_star = 0.5 * (
@@ -116,7 +139,7 @@ def sod_exact_rho(
     # Left wave: rarefaction (since p_star < p_L for the canonical IC).
     var rho_star_L = rho_L * pow(p_star / p_L, 1.0 / gamma)
     var a_star_L = a_L * pow(p_star / p_L, (gamma - 1.0) / (2.0 * gamma))
-    var xi_head_L = -a_L                # u_L - a_L, u_L = 0
+    var xi_head_L = -a_L  # u_L - a_L, u_L = 0
     var xi_tail_L = u_star - a_star_L
 
     # Right wave: shock (since p_star > p_R for the canonical IC).
@@ -127,7 +150,7 @@ def sod_exact_rho(
     var S_R = a_R * sqrt(
         (gamma + 1.0) / (2.0 * gamma) * p_star / p_R
         + (gamma - 1.0) / (2.0 * gamma)
-    )   # u_R = 0
+    )  # u_R = 0
 
     if xi < xi_head_L:
         return rho_L
@@ -144,8 +167,10 @@ def sod_exact_rho(
 
 
 def shock_speed_S_R(
-    rho_L: Float64, p_L: Float64,
-    rho_R: Float64, p_R: Float64,
+    rho_L: Float64,
+    p_L: Float64,
+    rho_R: Float64,
+    p_R: Float64,
     gamma: Float64,
 ) raises -> Float64:
     """Returns the right-going shock speed S_R for the canonical Sod
@@ -156,8 +181,14 @@ def shock_speed_S_R(
     var a_L = sqrt(gamma * p_L / rho_L)
     var a_R = sqrt(gamma * p_R / rho_R)
     var p_star = solve_star(
-        rho_L, 0.0, p_L, a_L,
-        rho_R, 0.0, p_R, a_R,
+        rho_L,
+        0.0,
+        p_L,
+        a_L,
+        rho_R,
+        0.0,
+        p_R,
+        a_R,
         gamma,
     )
     return a_R * sqrt(

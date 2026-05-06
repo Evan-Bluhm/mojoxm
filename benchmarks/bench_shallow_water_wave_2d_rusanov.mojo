@@ -32,7 +32,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_sw import sw_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
@@ -42,12 +44,12 @@ comptime NY = 4
 comptime LX = 1.0
 
 comptime GRAVITY: Float64 = 1.0
-comptime H_REST:  Float64 = 1.0
+comptime H_REST: Float64 = 1.0
 comptime AMPLITUDE: Float64 = 0.01
 comptime H_MIN: Float64 = 1.0e-6
 comptime CFL: Float64 = 0.15
 
-comptime T_FINAL: Float64 = LX / 1.0   # one wave period
+comptime T_FINAL: Float64 = LX / 1.0  # one wave period
 
 # Rusanov is more dissipative than HLL but at A/H=0.01 both are
 # dominated by the nonlinear O((A/H)^2) floor (~1.7e-4 measured
@@ -80,11 +82,14 @@ def _run(NX: Int) raises -> Float64:
         for nn in range(NP_p):
             var x = mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
             var h = H_REST + AMPLITUDE * sin(k_wave * x)
-            host_q.append(Float32(h));    host_ic.append(Float32(h))
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))
-            host_q.append(Float32(0.0));  host_ic.append(Float32(0.0))
+            host_q.append(Float32(h))
+            host_ic.append(Float32(h))
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))
+            host_q.append(Float32(0.0))
+            host_ic.append(Float32(0.0))
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -123,8 +128,12 @@ def _run(NX: Int) raises -> Float64:
                 q_b=stage.q_b,
                 q_out=stage.q_out,
                 fstar_scratch=d_fstar.unsafe_ptr(),
-                g=g_f, min_h=h_min_f,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                g=g_f,
+                min_h=h_min_f,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
 
@@ -152,14 +161,19 @@ def _run(NX: Int) raises -> Float64:
     var rel_l2 = l2 / l2_ic
 
     var dmass = mass_fin - mass_ic_local
-    if dmass < 0.0: dmass = -dmass
+    if dmass < 0.0:
+        dmass = -dmass
     var mass_rel = dmass / mass_ic_local
     if mass_rel > MASS_TOL_REL:
         raise Error(
             String("bench_shallow_water_wave_2d_rusanov FAILED: ")
-            + "mass drift " + String(mass_rel)
-            + " > tol " + String(MASS_TOL_REL)
-            + " (at NX=" + String(NX) + ")"
+            + "mass drift "
+            + String(mass_rel)
+            + " > tol "
+            + String(MASS_TOL_REL)
+            + " (at NX="
+            + String(NX)
+            + ")"
         )
 
     return rel_l2
@@ -187,17 +201,23 @@ def main() raises:
     if err32 > L2_MAX_REL:
         raise Error(
             "bench_shallow_water_wave_2d_rusanov FAILED: NX=32 rel L2 "
-            + String(err32) + " exceeds " + String(L2_MAX_REL)
+            + String(err32)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
     if err48 > L2_MAX_REL:
         raise Error(
             "bench_shallow_water_wave_2d_rusanov FAILED: NX=48 rel L2 "
-            + String(err48) + " exceeds " + String(L2_MAX_REL)
+            + String(err48)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
     if err64 > L2_MAX_REL:
         raise Error(
             "bench_shallow_water_wave_2d_rusanov FAILED: NX=64 rel L2 "
-            + String(err64) + " exceeds " + String(L2_MAX_REL)
+            + String(err64)
+            + " exceeds "
+            + String(L2_MAX_REL)
         )
 
     print("=== bench_shallow_water_wave_2d_rusanov PASSED ===")

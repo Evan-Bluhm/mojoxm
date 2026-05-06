@@ -27,7 +27,9 @@ from std.math import sqrt, ceildiv, exp, log, isnan, isinf
 from src import mpi
 from src.partition import build_partition
 from src.reference import (
-    ReferenceElement, to_float32, num_tet_nodes,
+    ReferenceElement,
+    to_float32,
+    num_tet_nodes,
 )
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions
@@ -38,7 +40,7 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 5
-comptime NP = num_tet_nodes(P)   # 56 at P=5
+comptime NP = num_tet_nodes(P)  # 56 at P=5
 
 comptime LX = 1.0
 comptime LY = 1.0
@@ -60,9 +62,11 @@ comptime RATE_MIN: Float64 = 2.5
 def gaussian_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
-    cx: Float32, cy: Float32, cz: Float32,
+    cx: Float32,
+    cy: Float32,
+    cz: Float32,
     inv_two_sigma2: Float32,
 ):
     var idx = Int(global_idx.x)
@@ -76,17 +80,21 @@ def gaussian_ic_kernel(
     var py = elem_node_xyz[(e * NP + nn) * 3 + 1]
     var pz = elem_node_xyz[(e * NP + nn) * 3 + 2]
     var dx = px - cx
-    if dx >  Float32(LX * 0.5): dx -= Float32(LX)
-    if dx < -Float32(LX * 0.5): dx += Float32(LX)
+    if dx > Float32(LX * 0.5):
+        dx -= Float32(LX)
+    if dx < -Float32(LX * 0.5):
+        dx += Float32(LX)
     var dy = py - cy
-    if dy >  Float32(LY * 0.5): dy -= Float32(LY)
-    if dy < -Float32(LY * 0.5): dy += Float32(LY)
+    if dy > Float32(LY * 0.5):
+        dy -= Float32(LY)
+    if dy < -Float32(LY * 0.5):
+        dy += Float32(LY)
     var dz = pz - cz
-    if dz >  Float32(LZ * 0.5): dz -= Float32(LZ)
-    if dz < -Float32(LZ * 0.5): dz += Float32(LZ)
-    q[e * NP + nn] = exp(
-        -(dx * dx + dy * dy + dz * dz) * inv_two_sigma2
-    )
+    if dz > Float32(LZ * 0.5):
+        dz -= Float32(LZ)
+    if dz < -Float32(LZ * 0.5):
+        dz += Float32(LZ)
+    q[e * NP + nn] = exp(-(dx * dx + dy * dy + dz * dz) * inv_two_sigma2)
 
 
 def _run(N: Int) raises -> Float64:
@@ -105,16 +113,28 @@ def _run(N: Int) raises -> Float64:
     var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh[P](
-        ctx, build_partition(rank, size, N, N, N), LX, LY, LZ,
+        ctx,
+        build_partition(rank, size, N, N, N),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Advection.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        Advection.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = Advection(VX, VY, VZ)
     var solver = Solver[Advection, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     var inv_two_sigma2 = Float32(1.0) / (
@@ -125,7 +145,9 @@ def _run(N: Int) raises -> Float64:
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
         solver.num_owned_elements,
-        Float32(0.5), Float32(0.5), Float32(0.5),
+        Float32(0.5),
+        Float32(0.5),
+        Float32(0.5),
         inv_two_sigma2,
         grid_dim=ceildiv(solver.num_owned_elements * NP, IC_BLOCK),
         block_dim=IC_BLOCK,
@@ -204,26 +226,43 @@ def main() raises:
     if err12 > L2_MAX_REL_AT_12:
         raise Error(
             "bench_advection_3d_p5 FAILED: rel L2 at N=12 "
-            + String(err12) + " exceeds " + String(L2_MAX_REL_AT_12)
+            + String(err12)
+            + " exceeds "
+            + String(L2_MAX_REL_AT_12)
         )
     if not (err6 > err8 and err8 > err12):
         raise Error(
             "bench_advection_3d_p5 FAILED: rel L2 did not decrease "
-            + "monotonically (6: " + String(err6)
-            + ", 8: " + String(err8)
-            + ", 12: " + String(err12) + ")"
+            + "monotonically (6: "
+            + String(err6)
+            + ", 8: "
+            + String(err8)
+            + ", 12: "
+            + String(err12)
+            + ")"
         )
 
-    var rate_68  = log(err6 / err8)  / log(8.0 / 6.0)
+    var rate_68 = log(err6 / err8) / log(8.0 / 6.0)
     var rate_812 = log(err8 / err12) / log(12.0 / 8.0)
-    print("  observed rates: log_(4/3)(e6/e8) =", rate_68,
-          "  log_(3/2)(e8/e12) =", rate_812,
-          "  (P+1 =", P + 1, ", floor", RATE_MIN, ")")
+    print(
+        "  observed rates: log_(4/3)(e6/e8) =",
+        rate_68,
+        "  log_(3/2)(e8/e12) =",
+        rate_812,
+        "  (P+1 =",
+        P + 1,
+        ", floor",
+        RATE_MIN,
+        ")",
+    )
     if rate_68 < RATE_MIN and rate_812 < RATE_MIN:
         raise Error(
             "bench_advection_3d_p5 FAILED: observed rates "
-            + String(rate_68) + " and " + String(rate_812)
-            + " both below " + String(RATE_MIN)
+            + String(rate_68)
+            + " and "
+            + String(rate_812)
+            + " both below "
+            + String(RATE_MIN)
         )
 
     print("=== bench_advection_3d_p5 PASSED ===")

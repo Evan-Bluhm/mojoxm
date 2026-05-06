@@ -29,10 +29,17 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_advection import advection_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
-from src.boundary import BoundaryConditions2D, BC_INFLOW, BC_OUTFLOW, BC_INTERIOR
+from src.boundary import (
+    BoundaryConditions2D,
+    BC_INFLOW,
+    BC_OUTFLOW,
+    BC_INTERIOR,
+)
 
 
 comptime P = 2
@@ -42,10 +49,10 @@ comptime LX = 1.0
 comptime LY = Float64(NY) / Float64(NX) * LX
 
 comptime VX: Float32 = 1.0
-comptime VY: Float32 = 0.0       # purely +x advection
-comptime INFLOW_Q: Float32 = 0.7 # non-trivial value -- a sign bug
-                                 # would flip this to -0.7 and trip
-                                 # the gate by orders of magnitude
+comptime VY: Float32 = 0.0  # purely +x advection
+comptime INFLOW_Q: Float32 = 0.7  # non-trivial value -- a sign bug
+# would flip this to -0.7 and trip
+# the gate by orders of magnitude
 comptime CFL: Float32 = 0.3
 comptime T_FINAL: Float32 = 1.0  # one transit time (LX / VX)
 
@@ -66,8 +73,22 @@ def main() raises:
         return
 
     print("bench_advection_inflow_2d (2D advection BC_INFLOW preservation)")
-    print("  P=", P, "  mesh=", NX, "x", NY,
-          "  v=(", VX, ",", VY, ")  inflow_q=", INFLOW_Q, "  T=", T_FINAL)
+    print(
+        "  P=",
+        P,
+        "  mesh=",
+        NX,
+        "x",
+        NY,
+        "  v=(",
+        VX,
+        ",",
+        VY,
+        ")  inflow_q=",
+        INFLOW_Q,
+        "  T=",
+        T_FINAL,
+    )
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -76,8 +97,10 @@ def main() raises:
 
     # BC_INFLOW on -x (incoming), BC_OUTFLOW on +x (outgoing), periodic in y.
     var bcs = BoundaryConditions2D(
-        BC_INFLOW, BC_OUTFLOW,         # -x, +x
-        BC_INTERIOR, BC_INTERIOR,      # -y, +y (periodic)
+        BC_INFLOW,
+        BC_OUTFLOW,  # -x, +x
+        BC_INTERIOR,
+        BC_INTERIOR,  # -y, +y (periodic)
     )
     var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var host_re = ReferenceElement2D[P]()
@@ -90,7 +113,7 @@ def main() raises:
     for _ in range(n_q):
         host_q.append(INFLOW_Q)
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -127,8 +150,12 @@ def main() raises:
                 q_b=stage.q_b,
                 q_out=stage.q_out,
                 fstar_scratch=d_fstar.unsafe_ptr(),
-                vx=VX, vy=VY,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                vx=VX,
+                vy=VY,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
                 inflow_q=INFLOW_Q,
             )
     ctx.synchronize()
@@ -141,15 +168,18 @@ def main() raises:
         if isnan(v) or isinf(v):
             raise Error("bench_advection_inflow_2d: non-finite output")
         var d = Float64(v - INFLOW_Q)
-        if d < 0.0: d = -d
-        if d > max_drift: max_drift = d
+        if d < 0.0:
+            d = -d
+        if d > max_drift:
+            max_drift = d
 
-    print("  max |q - inflow_q| =", max_drift,
-          "  (threshold", DRIFT_TOL, ")")
+    print("  max |q - inflow_q| =", max_drift, "  (threshold", DRIFT_TOL, ")")
     if max_drift > DRIFT_TOL:
         raise Error(
             "bench_advection_inflow_2d FAILED: drift "
-            + String(max_drift) + " > " + String(DRIFT_TOL)
+            + String(max_drift)
+            + " > "
+            + String(DRIFT_TOL)
         )
 
     print("=== bench_advection_inflow_2d PASSED ===")

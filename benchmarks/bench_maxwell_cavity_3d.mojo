@@ -52,7 +52,7 @@ comptime LY = 1.0
 comptime LZ = Float64(2.0 / 32.0)
 
 comptime C_LIGHT: Float32 = 1.0
-comptime T_FINAL: Float32 = 2.0       # one period: 2 L / c
+comptime T_FINAL: Float32 = 2.0  # one period: 2 L / c
 comptime CFL = Float32(0.2)
 comptime IC_BLOCK = 256
 comptime PI_F: Float32 = 3.14159265358979323846
@@ -66,7 +66,7 @@ comptime L2_MAX_REL: Float64 = 1.0e-4
 def cavity_ic_kernel(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
     Ly: Float32,
 ):
@@ -97,8 +97,17 @@ def main() raises:
         return
 
     print("bench_maxwell_cavity_3d (Maxwell cavity standing wave, one period)")
-    print("  P= 2   mesh=", NX, "x", NY, "x", NZ,
-          "   T=", T_FINAL, " (one period)")
+    print(
+        "  P= 2   mesh=",
+        NX,
+        "x",
+        NY,
+        "x",
+        NZ,
+        "   T=",
+        T_FINAL,
+        " (one period)",
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -106,24 +115,45 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions(
-        BC_INTERIOR, BC_INTERIOR,
-        BC_WALL,     BC_WALL,
-        BC_INTERIOR, BC_INTERIOR,
+        BC_INTERIOR,
+        BC_INTERIOR,
+        BC_WALL,
+        BC_WALL,
+        BC_INTERIOR,
+        BC_INTERIOR,
     )
     var mesh = Mesh(
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Maxwell.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        Maxwell.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = Maxwell(
         C_LIGHT,
-        Float32(0.0), Float32(0.0), Float32(0.0),
-        Float32(0.0), Float32(0.0), Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
     )
     var solver = Solver[Maxwell](
-        ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        refs.D_ref^,
+        refs.Lift_ref^,
+        refs.node_weights^,
     )
 
     solver.ctx.enqueue_function[cavity_ic_kernel, cavity_ic_kernel](
@@ -138,7 +168,9 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * Maxwell.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_ic,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -159,7 +191,9 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -180,8 +214,7 @@ def main() raises:
     var l2 = sqrt(sum_sq / Float64(n_owned_dof))
     var l2_ic = sqrt(sum_ic / Float64(n_owned_dof))
     var rel_l2 = l2 / l2_ic
-    print("  rel L2(state) =", rel_l2,
-          "  (threshold", L2_MAX_REL, ")")
+    print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
 
     if rel_l2 > L2_MAX_REL:
         raise Error(

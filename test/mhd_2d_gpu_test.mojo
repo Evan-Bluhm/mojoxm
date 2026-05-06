@@ -15,7 +15,11 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd import mhd_rk_stage_2d
-from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
+from src.reference_2d import (
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
+)
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -48,21 +52,21 @@ def main() raises:
 
     var gamma = Float32(5.0 / 3.0)
     var min_rho = Float32(1.0e-8)
-    var min_p   = Float32(1.0e-8)
+    var min_p = Float32(1.0e-8)
     var rho0 = Float32(1.0)
-    var u0   = Float32(0.2)
-    var v0   = Float32(0.1)
-    var Bx0  = Float32(0.3)
-    var By0  = Float32(0.15)
-    var p0   = Float32(0.5)
+    var u0 = Float32(0.2)
+    var v0 = Float32(0.1)
+    var Bx0 = Float32(0.3)
+    var By0 = Float32(0.15)
+    var p0 = Float32(0.5)
     var mx0 = rho0 * u0
     var my0 = rho0 * v0
-    var ke  = Float32(0.5) * rho0 * (u0 * u0 + v0 * v0)
-    var mp  = Float32(0.5) * (Bx0 * Bx0 + By0 * By0)
-    var E0  = p0 / (gamma - Float32(1.0)) + ke + mp
+    var ke = Float32(0.5) * rho0 * (u0 * u0 + v0 * v0)
+    var mp = Float32(0.5) * (Bx0 * Bx0 + By0 * By0)
+    var E0 = p0 / (gamma - Float32(1.0)) + ke + mp
 
     var n_q = gpu.num_elements * NP_p * NC
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -83,35 +87,58 @@ def main() raises:
 
     var dt = Float32(2.0e-4)
     mhd_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q.unsafe_ptr(),
         d_q1.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(1.0), Float32(0.0), Float32(1.0), dt,
+        gamma,
+        min_rho,
+        min_p,
+        Float32(1.0),
+        Float32(0.0),
+        Float32(1.0),
+        dt,
     )
     mhd_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q1.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
         d_q2.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(0.75), Float32(0.25), Float32(0.25), dt,
+        gamma,
+        min_rho,
+        min_p,
+        Float32(0.75),
+        Float32(0.25),
+        Float32(0.25),
+        dt,
     )
     mhd_rk_stage_2d[P](
-        ctx, gpu,
-        re_gpu.d_Lift_ref.unsafe_ptr(), re_gpu.d_D_ref.unsafe_ptr(),
+        ctx,
+        gpu,
+        re_gpu.d_Lift_ref.unsafe_ptr(),
+        re_gpu.d_D_ref.unsafe_ptr(),
         d_q2.unsafe_ptr(),
-        d_q.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
         d_q.unsafe_ptr(),
         d_fstar.unsafe_ptr(),
-        gamma, min_rho, min_p,
-        Float32(1.0 / 3.0), Float32(2.0 / 3.0),
-        Float32(2.0 / 3.0), dt,
+        gamma,
+        min_rho,
+        min_p,
+        Float32(1.0 / 3.0),
+        Float32(2.0 / 3.0),
+        Float32(2.0 / 3.0),
+        dt,
     )
     ctx.enqueue_copy(hbuf, d_q)
     ctx.synchronize()
@@ -128,18 +155,24 @@ def main() raises:
         var err4 = _abs32(hptr[base + 4] - By0)
         var err5 = _abs32(hptr[base + 5] - E0)
         var local_max = err0
-        if err1 > local_max: local_max = err1
-        if err2 > local_max: local_max = err2
-        if err3 > local_max: local_max = err3
-        if err4 > local_max: local_max = err4
-        if err5 > local_max: local_max = err5
+        if err1 > local_max:
+            local_max = err1
+        if err2 > local_max:
+            local_max = err2
+        if err3 > local_max:
+            local_max = err3
+        if err4 > local_max:
+            local_max = err4
+        if err5 > local_max:
+            local_max = err5
         if local_max > max_err:
             max_err = local_max
     print("  MHD Rusanov max |q - q_IC| =", max_err)
     if max_err > Float32(1.0e-4):
         raise Error(
             "MHD: constant state not preserved (max err "
-            + String(max_err) + ")"
+            + String(max_err)
+            + ")"
         )
 
     print("=== mhd_2d_gpu_test PASSED ===")

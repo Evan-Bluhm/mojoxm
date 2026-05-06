@@ -34,12 +34,12 @@
 
 @fieldwise_init
 struct MemoryReport(Movable):
-    var rk_stage_bytes:        Int
-    var dg_operators_bytes:    Int
-    var limiter_bytes:         Int
+    var rk_stage_bytes: Int
+    var dg_operators_bytes: Int
+    var limiter_bytes: Int
     var mesh_connectivity_bytes: Int
-    var halo_device_bytes:     Int
-    var halo_pinned_bytes:     Int
+    var halo_device_bytes: Int
+    var halo_pinned_bytes: Int
 
     def total_device_bytes(self) -> Int:
         # Pinned host buffers don't consume device memory.
@@ -94,7 +94,8 @@ def _round1(x: Float64) raises -> String:
     var sign: String = ""
     var v = x
     if v < 0.0:
-        sign = "-"; v = -v
+        sign = "-"
+        v = -v
     var ten_v = v * 10.0
     var int10 = Int(ten_v + 0.5)
     var whole = int10 // 10
@@ -142,7 +143,7 @@ def _print_row(label: String, n: Int) raises:
 
 @fieldwise_init
 struct ThroughputReport(Movable):
-    var num_steps:    Int
+    var num_steps: Int
     # IMPORTANT: must be a `ctx.synchronize()`-flushed wall time, not
     # an enqueue-only measurement.  `Solver.step_ssprk3` is async; if
     # `wall_seconds` is timed without a trailing synchronize the
@@ -151,7 +152,7 @@ struct ThroughputReport(Movable):
     # callers should prefer it over hand-rolling a step loop unless
     # they have a specific reason.
     var wall_seconds: Float64
-    var dof_count:    Int
+    var dof_count: Int
     # Bytes that MUST move between rk_stage_kernel launches per
     # SSPRK3 step.  The exact compute-kernel byte traffic is higher
     # (face-flux indirection, operator reads, mesh connectivity),
@@ -168,7 +169,11 @@ struct ThroughputReport(Movable):
     def dof_per_second(self) -> Float64:
         if self.wall_seconds <= 0.0:
             return 0.0
-        return Float64(self.dof_count) * Float64(self.num_steps) / self.wall_seconds
+        return (
+            Float64(self.dof_count)
+            * Float64(self.num_steps)
+            / self.wall_seconds
+        )
 
     def state_bandwidth_bytes_per_second(self) -> Float64:
         """Lower-bound estimate of the achieved DRAM bandwidth: bytes
@@ -180,7 +185,9 @@ struct ThroughputReport(Movable):
         bandwidth."""
         if self.wall_seconds <= 0.0 or self.state_bytes_per_step == 0:
             return 0.0
-        var total_bytes = Float64(self.state_bytes_per_step) * Float64(self.num_steps)
+        var total_bytes = Float64(self.state_bytes_per_step) * Float64(
+            self.num_steps
+        )
         return total_bytes / self.wall_seconds
 
     def print(self) raises:
@@ -188,17 +195,24 @@ struct ThroughputReport(Movable):
         print("  steps:                " + String(self.num_steps))
         print("  DOF / step:           " + String(self.dof_count))
         print("  wall time:            " + _format_seconds(self.wall_seconds))
-        print("  per-step wall:        "
-              + _format_seconds(self.per_step_seconds()))
-        print("  throughput:           "
-              + _format_dof_per_s(self.dof_per_second()))
+        print(
+            "  per-step wall:        "
+            + _format_seconds(self.per_step_seconds())
+        )
+        print(
+            "  throughput:           "
+            + _format_dof_per_s(self.dof_per_second())
+        )
         if self.state_bytes_per_step > 0:
-            print("  state bytes / step:   "
-                  + _format_bytes(self.state_bytes_per_step))
-            print("  state bandwidth:      "
-                  + _format_bytes_per_s(
-                      self.state_bandwidth_bytes_per_second()
-                  ) + "  (lower bound; excludes operator + mesh reads)")
+            print(
+                "  state bytes / step:   "
+                + _format_bytes(self.state_bytes_per_step)
+            )
+            print(
+                "  state bandwidth:      "
+                + _format_bytes_per_s(self.state_bandwidth_bytes_per_second())
+                + "  (lower bound; excludes operator + mesh reads)"
+            )
         print("============================")
 
 
@@ -237,5 +251,3 @@ def _format_bytes_per_s(bps: Float64) raises -> String:
         return _round1(mbs) + " MB/s"
     var gbs = mbs / k
     return _round1(gbs) + " GB/s"
-
-

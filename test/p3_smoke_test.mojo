@@ -36,7 +36,7 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 3
-comptime NP = num_tet_nodes(P)       # 20 at P=3
+comptime NP = num_tet_nodes(P)  # 20 at P=3
 
 comptime NX = 4
 comptime NY = 4
@@ -73,8 +73,14 @@ def main() raises:
         print("p3_smoke_test: runs at np=1 only")
         return
 
-    print("p3_smoke_test: building Mesh[", P, "] / Solver[Advection, ",
-          P, "] at NP =", NP)
+    print(
+        "p3_smoke_test: building Mesh[",
+        P,
+        "] / Solver[Advection, ",
+        P,
+        "] at NP =",
+        NP,
+    )
 
     var nvtx = NvtxContext()
     var ctx = DeviceContext()
@@ -85,33 +91,52 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh[P](
-        ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(0, 1, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, Advection.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        Advection.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = Advection(Float32(0.0), Float32(0.0), Float32(0.0))
     var solver = Solver[Advection, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     # Fill q with FILL_VALUE on every owned (element, node).
     var num_owned = solver.num_owned_elements
-    print("  num_owned_elements:", num_owned,
-          "  expected total_owned_dof:", num_owned * NP)
+    print(
+        "  num_owned_elements:",
+        num_owned,
+        "  expected total_owned_dof:",
+        num_owned * NP,
+    )
     print("  solver.total_owned_dof:", solver.total_owned_dof)
     if solver.total_owned_dof != num_owned * NP:
-        raise Error("total_owned_dof mismatch: Solver reports "
-                    + String(solver.total_owned_dof)
-                    + " but num_owned_elements * NP = "
-                    + String(num_owned * NP))
+        raise Error(
+            "total_owned_dof mismatch: Solver reports "
+            + String(solver.total_owned_dof)
+            + " but num_owned_elements * NP = "
+            + String(num_owned * NP)
+        )
 
     solver.ctx.enqueue_function[fill_constant_kernel, fill_constant_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        num_owned, FILL_VALUE,
+        num_owned,
+        FILL_VALUE,
         grid_dim=ceildiv(num_owned * NP, IC_BLOCK),
         block_dim=IC_BLOCK,
     )

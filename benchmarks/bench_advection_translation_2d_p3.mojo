@@ -27,7 +27,9 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_advection import advection_rk_stage_2d
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.ssprk3 import ssprk3_stage_plans
@@ -45,16 +47,20 @@ comptime CX: Float32 = 0.5
 comptime CY: Float32 = 0.5
 
 comptime L2_MAX_REL_AT_16: Float64 = 5.0e-4
-comptime RATE_MIN:         Float64 = 2.5
+comptime RATE_MIN: Float64 = 2.5
 
 
 def _gauss(x: Float32, y: Float32) -> Float32:
     var dx = x - CX
-    if dx >  LX * Float32(0.5): dx -= LX
-    if dx < -LX * Float32(0.5): dx += LX
+    if dx > LX * Float32(0.5):
+        dx -= LX
+    if dx < -LX * Float32(0.5):
+        dx += LX
     var dy = y - CY
-    if dy >  LY * Float32(0.5): dy -= LY
-    if dy < -LY * Float32(0.5): dy += LY
+    if dy > LY * Float32(0.5):
+        dy -= LY
+    if dy < -LY * Float32(0.5):
+        dy += LY
     var s2 = SIGMA * SIGMA
     return exp(-(dx * dx + dy * dy) / (Float32(2.0) * s2))
 
@@ -75,13 +81,17 @@ def _run(N: Int) raises -> Float64:
     var host_ic = List[Float32]()
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            var x = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0])
-            var y = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1])
+            var x = Float32(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
+            )
+            var y = Float32(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
+            )
             var v = _gauss(x, y)
             host_q.append(v)
             host_ic.append(v)
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -101,18 +111,28 @@ def _run(N: Int) raises -> Float64:
     var dt = T_FINAL / Float32(num_steps)
 
     var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr(),
+        d_q.unsafe_ptr(),
+        d_q1.unsafe_ptr(),
+        d_q2.unsafe_ptr(),
     )
     for _ in range(num_steps):
         for stage in stage_plans:
             advection_rk_stage_2d[P](
-                ctx, gpu_mesh,
+                ctx,
+                gpu_mesh,
                 gpu_re.d_Lift_ref.unsafe_ptr(),
                 gpu_re.d_D_ref.unsafe_ptr(),
-                stage.q_in, stage.q_a, stage.q_b, stage.q_out,
+                stage.q_in,
+                stage.q_a,
+                stage.q_b,
+                stage.q_out,
                 d_fstar.unsafe_ptr(),
-                VX, VY,
-                stage.a, stage.b, stage.c, dt,
+                VX,
+                VY,
+                stage.a,
+                stage.b,
+                stage.c,
+                dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -143,10 +163,15 @@ def main() raises:
         return
 
     print("bench_advection_translation_2d_p3 (P=3 Gaussian advection)")
-    print("  P=", P, "  NP=", num_tri_nodes_2d(P),
-          "  refinement sweep N=8, 12, 16")
+    print(
+        "  P=",
+        P,
+        "  NP=",
+        num_tri_nodes_2d(P),
+        "  refinement sweep N=8, 12, 16",
+    )
 
-    var err8  = _run(8)
+    var err8 = _run(8)
     print("  N=8   rel L2 =", err8)
     var err12 = _run(12)
     print("  N=12  rel L2 =", err12)
@@ -156,25 +181,43 @@ def main() raises:
     if err16 > L2_MAX_REL_AT_16:
         raise Error(
             "bench_advection_translation_2d_p3 FAILED: rel L2 at N=16 "
-            + String(err16) + " exceeds " + String(L2_MAX_REL_AT_16)
+            + String(err16)
+            + " exceeds "
+            + String(L2_MAX_REL_AT_16)
         )
     if not (err8 > err12 and err12 > err16):
         raise Error(
             "bench_advection_translation_2d_p3 FAILED: L2 not monotone"
-            + " (8: " + String(err8) + ", 12: " + String(err12)
-            + ", 16: " + String(err16) + ")"
+            + " (8: "
+            + String(err8)
+            + ", 12: "
+            + String(err12)
+            + ", 16: "
+            + String(err16)
+            + ")"
         )
 
-    var rate_812  = log(err8 / err12)  / log(12.0 / 8.0)
+    var rate_812 = log(err8 / err12) / log(12.0 / 8.0)
     var rate_1216 = log(err12 / err16) / log(16.0 / 12.0)
-    print("  observed rates: log_(3/2)(e8/e12) =", rate_812,
-          "  log_(4/3)(e12/e16) =", rate_1216,
-          "  (P+1 =", P + 1, ", floor", RATE_MIN, ")")
+    print(
+        "  observed rates: log_(3/2)(e8/e12) =",
+        rate_812,
+        "  log_(4/3)(e12/e16) =",
+        rate_1216,
+        "  (P+1 =",
+        P + 1,
+        ", floor",
+        RATE_MIN,
+        ")",
+    )
     if rate_812 < RATE_MIN and rate_1216 < RATE_MIN:
         raise Error(
             String("bench_advection_translation_2d_p3 FAILED: rates ")
-            + String(rate_812) + " and " + String(rate_1216)
-            + " both below " + String(RATE_MIN)
+            + String(rate_812)
+            + " and "
+            + String(rate_1216)
+            + " both below "
+            + String(RATE_MIN)
         )
 
     print("=== bench_advection_translation_2d_p3 PASSED ===")

@@ -42,11 +42,16 @@ from std.math import sqrt, ceildiv, tanh, isnan, isinf
 from src import mpi
 from src.partition import build_partition
 from src.reference import (
-    ReferenceElement, to_float32, num_tet_nodes,
+    ReferenceElement,
+    to_float32,
+    num_tet_nodes,
 )
 from src.mesh import Mesh
 from src.boundary import (
-    BoundaryConditions, BC_INTERIOR, BC_WALL, BC_OUTFLOW,
+    BoundaryConditions,
+    BC_INTERIOR,
+    BC_WALL,
+    BC_OUTFLOW,
 )
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
@@ -55,7 +60,7 @@ from src.nvtx import NvtxContext
 
 
 comptime P = 3
-comptime NP = num_tet_nodes(P)   # 20 at P=3
+comptime NP = num_tet_nodes(P)  # 20 at P=3
 comptime NX = 120
 comptime NY = 4
 comptime NZ = 4
@@ -65,24 +70,24 @@ comptime LZ = Float64(4.0 / 120.0)
 
 comptime GAMMA: Float32 = 2.0
 comptime RHO_L: Float32 = 1.0
-comptime P_L:   Float32 = 1.0
-comptime BX:    Float32 = 0.75
-comptime BY_L:  Float32 = 1.0
+comptime P_L: Float32 = 1.0
+comptime BX: Float32 = 0.75
+comptime BY_L: Float32 = 1.0
 comptime RHO_R: Float32 = 0.125
-comptime P_R:   Float32 = 0.1
-comptime BY_R:  Float32 = -1.0
+comptime P_R: Float32 = 0.1
+comptime BY_R: Float32 = -1.0
 
 comptime T_FINAL: Float32 = 0.08
 comptime CFL = Float32(0.10)
 comptime IC_BLOCK = 256
 comptime SMOOTH_WIDTH: Float32 = Float32(8.0 * (LX / NX))
-comptime MIN_DENSITY:  Float32 = 1.0e-6
+comptime MIN_DENSITY: Float32 = 1.0e-6
 comptime MIN_PRESSURE: Float32 = 1.0e-6
-comptime C_H:     Float32 = 3.0
+comptime C_H: Float32 = 3.0
 comptime ALPHA_D: Float32 = 0.1
 
-comptime BX_TOL: Float32   = Float32(0.6)
-comptime PSI_TOL: Float32  = Float32(2.5)
+comptime BX_TOL: Float32 = Float32(0.6)
+comptime PSI_TOL: Float32 = Float32(2.5)
 comptime RHO_MIN_OK: Float32 = Float32(0.03)
 comptime RHO_MAX_OK: Float32 = Float32(1.6)
 comptime MASS_TOL_REL: Float64 = 2.5e-2
@@ -91,7 +96,7 @@ comptime MASS_TOL_REL: Float64 = 2.5e-2
 def brio_wu_ic_kernel_p3(
     q: UnsafePointer[Float32, MutAnyOrigin],
     owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz:  UnsafePointer[Float32, MutAnyOrigin],
+    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
     num_owned: Int,
 ):
     var idx = Int(global_idx.x)
@@ -102,16 +107,16 @@ def brio_wu_ic_kernel_p3(
     var nn = idx % NP
     var e = Int(owned_elem_ids[i])
     var px = elem_node_xyz[(e * NP + nn) * 3 + 0]
-    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) \
-            * Float32(0.5)
+    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(
+        0.5
+    )
     var rho = RHO_L + s * (RHO_R - RHO_L)
-    var p   = P_L   + s * (P_R - P_L)
-    var by  = BY_L  + s * (BY_R - BY_L)
-    var bx  = BX
-    var bz  = Float32(0.0)
-    var E = (
-        p / (GAMMA - Float32(1.0))
-        + Float32(0.5) * (bx * bx + by * by + bz * bz)
+    var p = P_L + s * (P_R - P_L)
+    var by = BY_L + s * (BY_R - BY_L)
+    var bx = BX
+    var bz = Float32(0.0)
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (
+        bx * bx + by * by + bz * bz
     )
     var base = (e * NP + nn) * 9
     q[base + 0] = rho
@@ -135,8 +140,9 @@ def main() raises:
         return
 
     print("bench_mhd_brio_wu_3d_p3 (3D Brio-Wu MHD at P=3)")
-    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ,
-          "  T=", T_FINAL)
+    print(
+        "  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -148,29 +154,47 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var bcs = BoundaryConditions(
-        BC_OUTFLOW, BC_OUTFLOW,
-        BC_WALL,    BC_WALL,
-        BC_WALL,    BC_WALL,
+        BC_OUTFLOW,
+        BC_OUTFLOW,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
+        BC_WALL,
     )
     var mesh = Mesh[P](
-        ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs,
+        ctx,
+        build_partition(rank, size, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
+        bcs,
     )
     var halo = HaloExchange(
-        ctx, mesh.part, IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(), bcs,
+        ctx,
+        mesh.part,
+        IdealMHD.NUM_COMPONENTS,
+        mesh.d_perm.unsafe_ptr(),
+        bcs,
     )
     var physics = IdealMHD(
-        GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D,
+        GAMMA,
+        MIN_DENSITY,
+        MIN_PRESSURE,
+        C_H,
+        ALPHA_D,
     )
     var solver = Solver[IdealMHD, P](
-        ctx^, mesh^, halo^, physics^,
-        D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
     solver.enable_cell_limiter(True, Float32(0.1))
 
-    solver.ctx.enqueue_function[
-        brio_wu_ic_kernel_p3, brio_wu_ic_kernel_p3
-    ](
+    solver.ctx.enqueue_function[brio_wu_ic_kernel_p3, brio_wu_ic_kernel_p3](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -212,8 +236,10 @@ def main() raises:
         if isnan(v) or isinf(v):
             raise Error("bench_mhd_brio_wu_3d_p3: Bx non-finite")
         var d = v - BX
-        if d < 0.0: d = -d
-        if d > bx_max_err: bx_max_err = d
+        if d < 0.0:
+            d = -d
+        if d > bx_max_err:
+            bx_max_err = d
 
     solver.download_owned_component(8, scratch, nvtx)
     var psi_max: Float32 = 0.0
@@ -222,55 +248,69 @@ def main() raises:
         if isnan(v) or isinf(v):
             raise Error("bench_mhd_brio_wu_3d_p3: psi non-finite")
         var a = v if v >= Float32(0.0) else -v
-        if a > psi_max: psi_max = a
+        if a > psi_max:
+            psi_max = a
 
     solver.download_owned_component(0, scratch, nvtx)
     var rho_max: Float32 = Float32(-1.0e30)
-    var rho_min: Float32 = Float32( 1.0e30)
+    var rho_min: Float32 = Float32(1.0e30)
     var mass_fin: Float64 = 0.0
     for i in range(n_dof):
         var v = scratch[i]
         if isnan(v) or isinf(v):
             raise Error("bench_mhd_brio_wu_3d_p3: rho non-finite")
-        if v > rho_max: rho_max = v
-        if v < rho_min: rho_min = v
+        if v > rho_max:
+            rho_max = v
+        if v < rho_min:
+            rho_min = v
         mass_fin += Float64(v)
     mass_fin /= Float64(n_dof)
 
     print("  Bx max |dev|  =", bx_max_err, "  (tol=", BX_TOL, ")")
-    print("  psi max |val| =", psi_max,    "  (tol=", PSI_TOL, ")")
+    print("  psi max |val| =", psi_max, "  (tol=", PSI_TOL, ")")
     print("  rho in [", rho_min, ",", rho_max, "]")
     print("  mass(IC)=", mass_ic, "  mass(t=T)=", mass_fin)
 
     if bx_max_err > BX_TOL:
         raise Error(
             String("bench_mhd_brio_wu_3d_p3 FAILED: Bx drifted ")
-            + String(bx_max_err) + " > tol " + String(BX_TOL)
+            + String(bx_max_err)
+            + " > tol "
+            + String(BX_TOL)
         )
     if psi_max > PSI_TOL:
         raise Error(
             String("bench_mhd_brio_wu_3d_p3 FAILED: psi ")
-            + String(psi_max) + " > tol " + String(PSI_TOL)
+            + String(psi_max)
+            + " > tol "
+            + String(PSI_TOL)
         )
     if rho_min < RHO_MIN_OK:
         raise Error(
             String("bench_mhd_brio_wu_3d_p3 FAILED: rho_min ")
-            + String(rho_min) + " < " + String(RHO_MIN_OK)
+            + String(rho_min)
+            + " < "
+            + String(RHO_MIN_OK)
         )
     if rho_max > RHO_MAX_OK:
         raise Error(
             String("bench_mhd_brio_wu_3d_p3 FAILED: rho_max ")
-            + String(rho_max) + " > " + String(RHO_MAX_OK)
+            + String(rho_max)
+            + " > "
+            + String(RHO_MAX_OK)
         )
 
     var dmass = mass_fin - mass_ic
-    if dmass < 0.0: dmass = -dmass
+    if dmass < 0.0:
+        dmass = -dmass
     var rel = dmass / mass_ic
     if rel > MASS_TOL_REL:
         raise Error(
             String("bench_mhd_brio_wu_3d_p3 FAILED: mass drift ")
-            + String(rel * 100.0) + "%% > tol "
-            + String(MASS_TOL_REL * 100.0) + "%%"
+            + String(rel * 100.0)
+            + "%% > tol "
+            + String(MASS_TOL_REL * 100.0)
+            + "%%"
         )
 
     print("=== bench_mhd_brio_wu_3d_p3 PASSED ===")

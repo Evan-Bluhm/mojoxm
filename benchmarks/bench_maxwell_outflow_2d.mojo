@@ -36,7 +36,9 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
 from src.reference_2d import (
-    ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes,
+    ReferenceElement2D,
+    num_tri_nodes_2d,
+    num_edge_nodes,
 )
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_OUTFLOW
@@ -53,11 +55,11 @@ comptime T_FINAL: Float64 = 0.5
 
 # Uniform IC components (chosen non-trivial in every component to
 # exercise every flux term).
-comptime EX0: Float32 =  0.3
+comptime EX0: Float32 = 0.3
 comptime EY0: Float32 = -0.2
-comptime EZ0: Float32 =  0.5
-comptime BX0: Float32 =  0.4
-comptime BY0: Float32 =  0.1
+comptime EZ0: Float32 = 0.5
+comptime BX0: Float32 = 0.4
+comptime BY0: Float32 = 0.1
 comptime BZ0: Float32 = -0.6
 
 # Empirical drift ~9e-5 for ~100 SSPRK3 steps on this 8x8 mesh
@@ -86,7 +88,9 @@ def main() raises:
 
     # BC_OUTFLOW on all four faces -- the path that is otherwise
     # untested in 2D Maxwell.
-    var bcs = BoundaryConditions2D(BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW)
+    var bcs = BoundaryConditions2D(
+        BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW
+    )
     var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var host_re = ReferenceElement2D[P]()
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
@@ -97,14 +101,20 @@ def main() raises:
     var host_q = List[Float32]()
     var host_ic = List[Float32]()
     for _ in range(gpu_mesh.num_elements * NP_p):
-        host_q.append(EX0); host_ic.append(EX0)
-        host_q.append(EY0); host_ic.append(EY0)
-        host_q.append(EZ0); host_ic.append(EZ0)
-        host_q.append(BX0); host_ic.append(BX0)
-        host_q.append(BY0); host_ic.append(BY0)
-        host_q.append(BZ0); host_ic.append(BZ0)
+        host_q.append(EX0)
+        host_ic.append(EX0)
+        host_q.append(EY0)
+        host_ic.append(EY0)
+        host_q.append(EZ0)
+        host_ic.append(EZ0)
+        host_q.append(BX0)
+        host_ic.append(BX0)
+        host_q.append(BY0)
+        host_ic.append(BY0)
+        host_q.append(BZ0)
+        host_ic.append(BZ0)
 
-    var d_q  = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_fstar = ctx.enqueue_create_buffer[DType.float32](
@@ -141,7 +151,10 @@ def main() raises:
                 q_out=stage.q_out,
                 fstar_scratch=d_fstar.unsafe_ptr(),
                 c=C_LIGHT,
-                a=stage.a, b=stage.b, cc=stage.c, dt=dt,
+                a=stage.a,
+                b=stage.b,
+                cc=stage.c,
+                dt=dt,
             )
     ctx.synchronize()
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -153,14 +166,18 @@ def main() raises:
         if isnan(v) or isinf(v):
             raise Error("bench_maxwell_outflow_2d: non-finite output")
         var d = Float64(v - host_ic[k])
-        if d < 0.0: d = -d
-        if d > max_drift: max_drift = d
+        if d < 0.0:
+            d = -d
+        if d > max_drift:
+            max_drift = d
 
     print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
     if max_drift > DRIFT_TOL:
         raise Error(
             "bench_maxwell_outflow_2d FAILED: drift "
-            + String(max_drift) + " > " + String(DRIFT_TOL)
+            + String(max_drift)
+            + " > "
+            + String(DRIFT_TOL)
         )
 
     print("=== bench_maxwell_outflow_2d PASSED ===")

@@ -46,22 +46,22 @@ comptime NUM_STEPS = 5
 # Plasma parameters (matching bench_two_fluid_langmuir_3d).
 comptime GAMMA_E: Float32 = Float32(5.0 / 3.0)
 comptime GAMMA_I: Float32 = Float32(5.0 / 3.0)
-comptime Q_E:     Float32 = -1.0
-comptime M_E:     Float32 =  1.0
-comptime Q_I:     Float32 =  1.0
-comptime M_I:     Float32 = 25.0
-comptime EPS0:    Float32 =  1.0
+comptime Q_E: Float32 = -1.0
+comptime M_E: Float32 = 1.0
+comptime Q_I: Float32 = 1.0
+comptime M_I: Float32 = 25.0
+comptime EPS0: Float32 = 1.0
 comptime C_LIGHT: Float32 = 10.0
-comptime C_H:     Float32 = 0.0     # GLM off (psi=0 already in IC)
+comptime C_H: Float32 = 0.0  # GLM off (psi=0 already in IC)
 comptime ALPHA_D: Float32 = 0.0
-comptime MIN_DENSITY:  Float32 = 1.0e-6
+comptime MIN_DENSITY: Float32 = 1.0e-6
 comptime MIN_PRESSURE: Float32 = 1.0e-8
 
 # Charge-balanced rest state: q_e * n_e + q_i * n_i = 0 ->
 # n_e = n_i = N0 (since Q_E = -Q_I in our normalisation).
-comptime N0:    Float32 = 1.0
-comptime P_E0:  Float32 = 0.01
-comptime P_I0:  Float32 = 0.01
+comptime N0: Float32 = 1.0
+comptime P_E0: Float32 = 0.01
+comptime P_I0: Float32 = 0.01
 comptime CONST_TOL: Float32 = Float32(1.0e-4)
 
 
@@ -80,7 +80,7 @@ def fill_constant_kernel(
     var base = (e * NP + nn) * NC
     var rho_e = M_E * N0
     var rho_i = M_I * N0
-    var E_e = P_E0 / (GAMMA_E - Float32(1.0))   # u=0, no kinetic
+    var E_e = P_E0 / (GAMMA_E - Float32(1.0))  # u=0, no kinetic
     var E_i = P_I0 / (GAMMA_I - Float32(1.0))
     # Electrons (0..4)
     q[base + 0] = rho_e
@@ -114,7 +114,9 @@ def main() raises:
         mpi.finalize()
         print("two_fluid_3d_test: runs at np=1 only")
         return
-    print("two_fluid_3d_test: 3D FiveMomentTwoFluid constant-state preservation")
+    print(
+        "two_fluid_3d_test: 3D FiveMomentTwoFluid constant-state preservation"
+    )
 
     var nvtx = NvtxContext()
     var ctx = DeviceContext()
@@ -124,22 +126,41 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var mesh = Mesh[P](
-        ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ,
+        ctx,
+        build_partition(0, 1, NX, NY, NZ),
+        LX,
+        LY,
+        LZ,
         BoundaryConditions.periodic(),
     )
     var halo = HaloExchange(
-        ctx, mesh.part, FiveMomentTwoFluid.NUM_COMPONENTS,
+        ctx,
+        mesh.part,
+        FiveMomentTwoFluid.NUM_COMPONENTS,
         mesh.d_perm.unsafe_ptr(),
     )
     var physics = FiveMomentTwoFluid(
-        GAMMA_E, GAMMA_I,
-        Q_E, M_E, Q_I, M_I,
-        EPS0, C_LIGHT,
-        C_H, ALPHA_D,
-        MIN_DENSITY, MIN_PRESSURE,
+        GAMMA_E,
+        GAMMA_I,
+        Q_E,
+        M_E,
+        Q_I,
+        M_I,
+        EPS0,
+        C_LIGHT,
+        C_H,
+        ALPHA_D,
+        MIN_DENSITY,
+        MIN_PRESSURE,
     )
     var solver = Solver[FiveMomentTwoFluid, P](
-        ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^,
+        ctx^,
+        mesh^,
+        halo^,
+        physics^,
+        D_ref^,
+        Lift_ref^,
+        node_weights^,
     )
 
     var num_owned = solver.num_owned_elements
@@ -170,14 +191,16 @@ def main() raises:
     ic_vals.append(Float32(0.0))
     ic_vals.append(E_i)
     for _ in range(7):
-        ic_vals.append(Float32(0.0))   # E, B, psi all 0
+        ic_vals.append(Float32(0.0))  # E, B, psi all 0
 
     # Wave speed: max of c_light (Maxwell) and sqrt(gamma*p/rho) (fluids).
     var cs_e = sqrt(GAMMA_E * P_E0 / rho_e)
     var cs_i = sqrt(GAMMA_I * P_I0 / rho_i)
     var max_c = C_LIGHT
-    if cs_e > max_c: max_c = cs_e
-    if cs_i > max_c: max_c = cs_i
+    if cs_e > max_c:
+        max_c = cs_e
+    if cs_i > max_c:
+        max_c = cs_i
     var h_cell = Float32(LX) / Float32(NX)
     var dt = Float32(0.05) * h_cell / (max_c * Float32(2 * P + 1))
 
@@ -194,18 +217,31 @@ def main() raises:
         for k in range(n_dof):
             var v = scratch[k]
             if isnan(v) or isinf(v):
-                raise Error("two_fluid_3d_test: non-finite at component "
-                            + String(c_idx))
+                raise Error(
+                    "two_fluid_3d_test: non-finite at component "
+                    + String(c_idx)
+                )
             var d = v - ic_vals[c_idx]
             var ad = d if d >= Float32(0.0) else -d
-            if ad > max_err: max_err = ad
+            if ad > max_err:
+                max_err = ad
 
-    print("  max |q - IC| over", NUM_STEPS, "steps =", max_err,
-          "  (tol", CONST_TOL, ")")
+    print(
+        "  max |q - IC| over",
+        NUM_STEPS,
+        "steps =",
+        max_err,
+        "  (tol",
+        CONST_TOL,
+        ")",
+    )
     if max_err > CONST_TOL:
         raise Error(
             "two_fluid_3d_test FAILED: constant state shifted by "
-            + String(max_err) + " over " + String(NUM_STEPS) + " steps"
+            + String(max_err)
+            + " over "
+            + String(NUM_STEPS)
+            + " steps"
         )
 
     print("=== two_fluid_3d_test PASSED ===")

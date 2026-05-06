@@ -21,6 +21,7 @@
 # a cube, never crossing a cube boundary).
 # ======================================================================
 
+
 @fieldwise_init
 struct Partition(Copyable, Movable):
     """Per-rank view of the global cube grid decomposition."""
@@ -58,11 +59,11 @@ struct Partition(Copyable, Movable):
     # BCs.  In single-rank mode all six entries equal `rank` (so the
     # rank is its own neighbour) and the ghost layer is unused.
     var neighbour_minus_x: Int
-    var neighbour_plus_x:  Int
+    var neighbour_plus_x: Int
     var neighbour_minus_y: Int
-    var neighbour_plus_y:  Int
+    var neighbour_plus_y: Int
     var neighbour_minus_z: Int
-    var neighbour_plus_z:  Int
+    var neighbour_plus_z: Int
 
     def num_owned_cubes(self) -> Int:
         return self.nx * self.ny * self.nz
@@ -70,11 +71,16 @@ struct Partition(Copyable, Movable):
     def neighbour(self, axis: Int, sign: Int) -> Int:
         """Return rank of neighbour along (axis, sign) where axis is
         0/1/2 for x/y/z and sign is -1 or +1."""
-        if axis == 0 and sign < 0: return self.neighbour_minus_x
-        if axis == 0 and sign > 0: return self.neighbour_plus_x
-        if axis == 1 and sign < 0: return self.neighbour_minus_y
-        if axis == 1 and sign > 0: return self.neighbour_plus_y
-        if axis == 2 and sign < 0: return self.neighbour_minus_z
+        if axis == 0 and sign < 0:
+            return self.neighbour_minus_x
+        if axis == 0 and sign > 0:
+            return self.neighbour_plus_x
+        if axis == 1 and sign < 0:
+            return self.neighbour_minus_y
+        if axis == 1 and sign > 0:
+            return self.neighbour_plus_y
+        if axis == 2 and sign < 0:
+            return self.neighbour_minus_z
         return self.neighbour_plus_z
 
 
@@ -89,14 +95,19 @@ struct Partition(Copyable, Movable):
 # Tiebreaker: shape closest to (Nx, Ny, Nz) ratio.
 # ----------------------------------------------------------------------
 
+
 @fieldwise_init
 struct ProcGrid(Copyable, Movable):
     var px: Int
     var py: Int
     var pz: Int
 
+
 def choose_proc_grid(
-    nprocs: Int, nx: Int, ny: Int, nz: Int,
+    nprocs: Int,
+    nx: Int,
+    ny: Int,
+    nz: Int,
 ) raises -> ProcGrid:
     var best_px: Int = 1
     var best_py: Int = 1
@@ -135,10 +146,16 @@ def choose_proc_grid(
     if not found:
         raise Error(
             "no axis-aligned cube-grid factorisation of nprocs="
-            + String(nprocs) + " evenly divides ("
-            + String(nx) + ", " + String(ny) + ", " + String(nz)
+            + String(nprocs)
+            + " evenly divides ("
+            + String(nx)
+            + ", "
+            + String(ny)
+            + ", "
+            + String(nz)
             + ").  Adjust the mesh size to be divisible by your factor "
-            + "structure (e.g. mesh sides multiples of small primes).")
+            + "structure (e.g. mesh sides multiples of small primes)."
+        )
     return ProcGrid(best_px, best_py, best_pz)
 
 
@@ -146,9 +163,13 @@ def choose_proc_grid(
 # Build a Partition for a given rank
 # ----------------------------------------------------------------------
 
+
 def build_partition(
-    rank: Int, nprocs: Int,
-    nx: Int, ny: Int, nz: Int,
+    rank: Int,
+    nprocs: Int,
+    nx: Int,
+    ny: Int,
+    nz: Int,
 ) raises -> Partition:
     var grid = choose_proc_grid(nprocs, nx, ny, nz)
 
@@ -171,22 +192,35 @@ def build_partition(
 
     def _wrap(v: Int, mod: Int) capturing -> Int:
         # Periodic wrap (for triply periodic BCs).  v is in [-1, mod].
-        if v < 0: return v + mod
-        if v >= mod: return v - mod
+        if v < 0:
+            return v + mod
+        if v >= mod:
+            return v - mod
         return v
 
     return Partition(
-        global_nx=nx, global_ny=ny, global_nz=nz,
-        px=grid.px, py=grid.py, pz=grid.pz,
-        rx=rx, ry=ry, rz=rz,
-        cx0=cx0, cx1=cx0 + lx,
-        cy0=cy0, cy1=cy0 + ly,
-        cz0=cz0, cz1=cz0 + lz,
-        nx=lx, ny=ly, nz=lz,
+        global_nx=nx,
+        global_ny=ny,
+        global_nz=nz,
+        px=grid.px,
+        py=grid.py,
+        pz=grid.pz,
+        rx=rx,
+        ry=ry,
+        rz=rz,
+        cx0=cx0,
+        cx1=cx0 + lx,
+        cy0=cy0,
+        cy1=cy0 + ly,
+        cz0=cz0,
+        cz1=cz0 + lz,
+        nx=lx,
+        ny=ly,
+        nz=lz,
         neighbour_minus_x=_rank_of(_wrap(rx - 1, grid.px), ry, rz),
-        neighbour_plus_x =_rank_of(_wrap(rx + 1, grid.px), ry, rz),
+        neighbour_plus_x=_rank_of(_wrap(rx + 1, grid.px), ry, rz),
         neighbour_minus_y=_rank_of(rx, _wrap(ry - 1, grid.py), rz),
-        neighbour_plus_y =_rank_of(rx, _wrap(ry + 1, grid.py), rz),
+        neighbour_plus_y=_rank_of(rx, _wrap(ry + 1, grid.py), rz),
         neighbour_minus_z=_rank_of(rx, ry, _wrap(rz - 1, grid.pz)),
-        neighbour_plus_z =_rank_of(rx, ry, _wrap(rz + 1, grid.pz)),
+        neighbour_plus_z=_rank_of(rx, ry, _wrap(rz + 1, grid.pz)),
     )
