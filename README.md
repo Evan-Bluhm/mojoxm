@@ -185,7 +185,7 @@ Nine reference drivers under `examples/`:
   largest comptime configuration the suite gates end-to-end.  When
   iterating, pick the slice that matches what's changing:
   `make bench-quick` (13 representative gates, ~65s),
-  `make bench-p5` (15 P=5 high-order gates, ~85s),
+  `make bench-p5` (17 P=5 high-order gates, ~90s),
   `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~70s),
   `make bench-rates` (10 explicit convergence-rate gates, ~50s),
   `make bench-bcs` (26 BC + source-term gates, ~95s).  Or
