@@ -207,7 +207,7 @@ help:
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
 	@echo '  make test-quick          smoke 8 representative tests (~30s w/ cached binaries)'
 	@echo '  make bench-quick         smoke 13 representative benches (~65s)'
-	@echo '  make smoke               test-quick + bench-quick combined (~90s; one-command sanity check)'
+	@echo '  make smoke               test-utils + test-quick + bench-quick combined (~95s; one-command sanity check)'
 	@echo '  make bench-p5            run 19 P=5 P-parity gates at NP=21/56 (~95s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
@@ -465,8 +465,8 @@ test-quick: test-reference test-reference-2d test-euler-2d-gpu test-euler-3d \
 # wall (cached binaries).  Runs sequentially: a test failure stops
 # the bench sweep early so you don't wait through 12 benches when
 # the foundation is already broken.
-smoke: test-quick bench-quick
-	@echo '=== smoke: test-quick + bench-quick PASSED ==='
+smoke: test-utils test-quick bench-quick
+	@echo '=== smoke: test-utils + test-quick + bench-quick PASSED ==='
 
 
 # Utility / host-only test aggregator -- 5 sub-second tests covering
