@@ -157,4 +157,62 @@ def main() raises:
             + String(rho_uniform)
         )
 
+    # ---------- Toro Test 3: strong shock (rare + shock structure) ----------
+    # Toro 2009 Table 4.1 / 4.3: rho_L = rho_R = 1, p_L = 1000, p_R = 0.01
+    # (5 orders of magnitude in pressure).  Same wave structure as Sod
+    # (left rarefaction + contact + right shock) but the shock is much
+    # stronger -- catches Newton-iteration regressions that Sod's mild
+    # 10:1 pressure ratio doesn't stress.
+    #
+    # Textbook reference values (Toro 2009 sec 4.3.3):
+    #   p_star    ~  460.894
+    #   u_star    ~  19.5975
+    #   rho_*L    ~  0.5754
+    #   rho_*R    ~  5.999
+    #   S_R       ~  23.5175  (shock speed; NOT u_star)
+    #
+    # At t = 0.012 (textbook standard time): contact at x ~ 0.735,
+    # shock at x ~ 0.782; sample at 0.76 to land in the post-shock band.
+    var rho_L3: Float64 = 1.0
+    var p_L3: Float64 = 1000.0
+    var rho_R3: Float64 = 1.0
+    var p_R3: Float64 = 0.01
+    var rho_starL3_ref: Float64 = 0.5754
+    var rho_starR3_ref: Float64 = 5.999
+    var S_R3_ref: Float64 = 23.5175
+
+    var rho_starL3 = sod_exact_rho(
+        0.55, 0.012, gamma, rho_L3, p_L3, rho_R3, p_R3
+    )
+    if not approx_eq(rho_starL3, rho_starL3_ref, EPS_LOOSE):
+        raise Error(
+            "sod_exact_riemann_test FAILED: Toro 3 rho_*L expected "
+            + String(rho_starL3_ref)
+            + ", got "
+            + String(rho_starL3)
+        )
+    var rho_starR3 = sod_exact_rho(
+        0.76, 0.012, gamma, rho_L3, p_L3, rho_R3, p_R3
+    )
+    # Strong-shock relative tol: 5.999 vs 5.999 -- absolute eps_loose
+    # (5e-3) is generous given the magnitude.
+    if not approx_eq(rho_starR3, rho_starR3_ref, EPS_LOOSE):
+        raise Error(
+            "sod_exact_riemann_test FAILED: Toro 3 rho_*R expected "
+            + String(rho_starR3_ref)
+            + ", got "
+            + String(rho_starR3)
+        )
+    var S_R3 = shock_speed_S_R(rho_L3, p_L3, rho_R3, p_R3, gamma)
+    # S_R magnitude is ~23, so EPS_LOOSE = 5e-3 is too tight; use 0.01
+    # absolute for the speed (one part in ~2300, well below textbook
+    # truncation of 4 sigfigs).
+    if not approx_eq(S_R3, S_R3_ref, 0.01):
+        raise Error(
+            "sod_exact_riemann_test FAILED: Toro 3 S_R expected "
+            + String(S_R3_ref)
+            + ", got "
+            + String(S_R3)
+        )
+
     print("=== sod_exact_riemann_test PASSED ===")
