@@ -201,7 +201,7 @@ help:
 	@echo '  make test-quick          smoke 8 representative tests (~30s w/ cached binaries)'
 	@echo '  make bench-quick         smoke 13 representative benches (~65s)'
 	@echo '  make smoke               test-quick + bench-quick combined (~90s; one-command sanity check)'
-	@echo '  make bench-p5            run 12 P=5 P-parity gates at NP=21/56 (~80s)'
+	@echo '  make bench-p5            run 15 P=5 P-parity gates at NP=21/56 (~85s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
 	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
@@ -251,10 +251,11 @@ help:
 	@echo ''
 	@echo 'Bench targets (analytic-solution gates):'
 	@echo '  make bench-quick         smoke-test one bench per physics per dim + limiter (13 gates, ~65s)'
-	@echo '  make bench-p5            P=5 P-parity sweep -- 12 gates at NP=21 (2D) / NP=56 (3D)'
-	@echo '                           across all 5 smooth physics + limited shocked Sod (~80s);'
-	@echo '                           the largest comptime configs the suite covers, where high-P'
-	@echo '                           regressions show first.'
+	@echo '  make bench-p5            P=5 P-parity sweep -- 15 gates at NP=21 (2D) / NP=56 (3D)'
+	@echo '                           across all 5 smooth physics + limited shocked Sod + Euler'
+	@echo '                           hydrostatic + 3D Two-Fluid (NC=17) (~85s); the largest'
+	@echo '                           comptime configs the suite covers, where high-P regressions'
+	@echo '                           show first.'
 	@echo '  make bench-shocks        13 shocked-flow gates exercising HLLC / HLLEC + BJ limiter'
 	@echo '                           (Euler Sod 2D + 3D, P=2-5), HLL SW dam-break (2D + 3D), and'
 	@echo '                           Brio-Wu MHD shock (3D P=2/3); use when iterating on Riemann'
@@ -782,12 +783,13 @@ bench-shocks: \
 	@echo '=== bench-shocks: 13 shocked-flow gates PASSED ==='
 
 
-# P=5 P-parity sweep -- 12 gates at the largest comptime config
+# P=5 P-parity sweep -- 15 gates at the largest comptime config
 # the suite covers (2D NP=21 + 3D NP=56 across all 5 smooth physics
-# + 2D and 3D limited shocked Sod).  High-P regressions tend to
-# surface here first since these stress the comptime template +
-# shared-memory rk_stage_kernel + the BJ limiter pipeline hardest.
-# Run-time ~80s wall.
+# + 2D and 3D limited shocked Sod + 2D and 3D Euler hydrostatic
+# (gravity source) + 3D Two-Fluid (NC=17, the largest NC in the
+# suite)).  High-P regressions tend to surface here first since
+# these stress the comptime template + shared-memory rk_stage_kernel
+# + the BJ limiter pipeline hardest.  Run-time ~85s wall.
 bench-p5: \
 		bench-advection-translation-2d-p5 \
 		bench-advection-3d-p5 \
@@ -795,13 +797,16 @@ bench-p5: \
 		bench-euler-smooth-wave-3d-p5 \
 		bench-euler-sod-limited-2d-p5 \
 		bench-euler-sod-3d-p5 \
+		bench-euler-hydrostatic-2d-p5 \
+		bench-euler-hydrostatic-3d-p5 \
 		bench-maxwell-plane-wave-2d-p5 \
 		bench-maxwell-plane-wave-3d-p5 \
 		bench-shallow-water-wave-2d-p5 \
 		bench-shallow-water-wave-3d-p5 \
 		bench-mhd-alfven-glm-2d-p5 \
-		bench-mhd-alfven-3d-p5
-	@echo '=== bench-p5: 12 P=5 P-parity gates PASSED ==='
+		bench-mhd-alfven-3d-p5 \
+		bench-two-fluid-walls-3d-p5
+	@echo '=== bench-p5: 15 P=5 P-parity gates PASSED ==='
 
 
 # Aggregate target -- runs every analytic benchmark.  Grouped by
