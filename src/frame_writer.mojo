@@ -219,3 +219,42 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
 
     def num_frames_written(self) -> Int:
         return len(self._paths)
+
+
+# ----------------------------------------------------------------------
+# Standalone snapshot helper for end-of-run multi-field dumps.
+# ----------------------------------------------------------------------
+# Companion to FrameWriter.write_frame_multi but without the per-frame
+# PVD bookkeeping.  Drivers use this for one-shot multi-field VTUs at
+# end-of-run (rho + p + |v| etc.) that ParaView opens directly without
+# a time-series collection -- side-effect file alongside the per-frame
+# async pipeline.  Wraps the rebind + nvtx range so each driver's
+# snapshot block stays roughly 30 lines (download N components, derive,
+# call this) instead of ~50 lines.
+#
+# Argument convention matches dump_vtu_3d_frame_multi (the underlying
+# helper this dispatches to): one List[Float64] of length
+# `num_owned_elements * num_tet_nodes(P)` per field in `field_data`,
+# names in the same order as fields, first field becomes the
+# PointData `Scalars` default.
+def write_snapshot_3d_multi[
+    PhysT: Physics, P: Int = 2,
+](
+    mut solver: Solver[PhysT, P],
+    field_names: List[String],
+    field_data: List[List[Float64]],
+    path: String,
+    mut nvtx: NvtxContext,
+) raises:
+    nvtx.push_range("snapshot_3d_multi")
+    dump_vtu_3d_frame_multi(
+        num_elements=solver.num_owned_elements,
+        nodes_per_elem=num_tet_nodes(P),
+        elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](
+            solver.mesh.owned_node_xyz_f32_ptr
+        ),
+        field_names=field_names,
+        field_data=field_data,
+        path=path,
+    )
+    nvtx.pop_range()

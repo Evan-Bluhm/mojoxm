@@ -44,11 +44,10 @@ from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
 from src.nvtx import NvtxContext
-from src.frame_writer import FrameWriter
+from src.frame_writer import FrameWriter, write_snapshot_3d_multi
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
 from src.diagnostics import DiagnosticsWriter, NamedComponent
 from src.memory_report import ThroughputReport
-from src.vtu import dump_vtu_3d_frame_multi
 
 comptime NX = 32
 comptime NY = 32
@@ -252,17 +251,11 @@ def main() raises:
 
     writer.finalize("output/solution.pvd", nvtx)
 
-    # Final-state multi-field snapshot for richer ParaView inspection.
-    # Independent of the per-frame async pipeline above (which writes
-    # one rho field per frame for performance) -- this writes ONE VTU
-    # at output/snapshot_t_final.vtu containing rho + p + |v| at
-    # t=T_FINAL.  Uses dump_vtu_3d_frame_multi directly rather than
-    # FrameWriter.write_frame_multi to keep it out of the rho-only
-    # PVD time series.  Gated on np=1 since each rank would dump only
-    # its owned slab and produce a partial picture.
+    # Final-state multi-field snapshot (rho + p + |v|) for richer
+    # ParaView inspection.  Independent of the per-frame async pipeline.
+    # Gated on np=1 since each rank would dump only its owned slab.
     var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
     if nprocs == 1:
-        nvtx.push_range("snapshot_t_final")
         var n_owned_dof = solver.num_owned_elements * N_P
         var snap_rho  = List[Float32]()
         var snap_rhou = List[Float32]()
@@ -290,10 +283,9 @@ def main() raises:
             var w = snap_rhow[k] / rho
             var ke = Float32(0.5) * rho * (u*u + v*v + w*w)
             var p = (GAMMA - Float32(1.0)) * (snap_E[k] - ke)
-            var vmag = sqrt(u*u + v*v + w*w)
             f_rho.append(Float64(rho))
             f_p.append(Float64(p))
-            f_vmag.append(Float64(vmag))
+            f_vmag.append(Float64(sqrt(u*u + v*v + w*w)))
         var fields = List[List[Float64]]()
         fields.append(f_rho^)
         fields.append(f_p^)
@@ -302,17 +294,10 @@ def main() raises:
         names.append(String("rho"))
         names.append(String("p"))
         names.append(String("|v|"))
-        dump_vtu_3d_frame_multi(
-            num_elements=solver.num_owned_elements,
-            nodes_per_elem=N_P,
-            elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](
-                solver.mesh.owned_node_xyz_f32_ptr
-            ),
-            field_names=names,
-            field_data=fields,
-            path=String("output/snapshot_t_final.vtu"),
+        write_snapshot_3d_multi(
+            solver=solver, field_names=names, field_data=fields,
+            path=String("output/snapshot_t_final.vtu"), nvtx=nvtx,
         )
-        nvtx.pop_range()
         if rank == 0:
             print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
 
