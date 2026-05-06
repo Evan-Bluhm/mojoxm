@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# pre-commit: reject commits whose staged .mojo files don't match
+# `mojo format` output.  Wire up with `make install-hooks` (sets
+# core.hooksPath to scripts/git-hooks/).
+#
+# Validates the *staged* content (`git show :path`), not the working
+# tree, so partially-staged hunks are checked correctly.  Files are
+# never modified -- if any are out of conformance the hook lists them
+# and aborts; run `make format` to fix.
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Pick a mojo binary: explicit override, then PATH, then the project
+# venv that the Makefile defaults to.
+MOJO="${MOJO:-}"
+if [[ -z "$MOJO" ]]; then
+    if command -v mojo >/dev/null 2>&1; then
+        MOJO=mojo
+    elif [[ -x .venv/bin/mojo ]]; then
+        MOJO=.venv/bin/mojo
+    else
+        echo "pre-commit: 'mojo' not on PATH and .venv/bin/mojo not found." >&2
+        echo "            Set MOJO=<path> or activate the venv." >&2
+        exit 1
+    fi
+fi
+
+# Staged Mojo files (added/copied/modified/renamed only -- skip deletes).
+mapfile -t files < <(
+    git diff --cached --name-only --diff-filter=ACMR | grep -E '\.mojo$' || true
+)
+if [[ ${#files[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+bad=()
+for f in "${files[@]}"; do
+    tmp="$tmpdir/$f"
+    mkdir -p "$(dirname "$tmp")"
+    git show ":$f" > "$tmp"
+    "$MOJO" format -q "$tmp"
+    if ! git show ":$f" | diff -q - "$tmp" >/dev/null 2>&1; then
+        bad+=("$f")
+    fi
+done
+
+if [[ ${#bad[@]} -gt 0 ]]; then
+    echo "pre-commit: the following staged Mojo files are not formatted:" >&2
+    printf '  %s\n' "${bad[@]}" >&2
+    echo >&2
+    echo "Run 'make format' (or 'mojo format <file>') and re-stage." >&2
+    exit 1
+fi
