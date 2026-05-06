@@ -159,6 +159,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_inflow_3d \
                 bench_mhd_alfven_3d_p4 bench_mhd_alfven_3d_p5 \
                 bench_mhd_glm_psi_damp_3d bench_mhd_glm_psi_damp_3d_p3 \
+                bench_mhd_glm_psi_damp_3d_p5 \
                 bench_mhd_glm_psi_transport_3d \
                 bench_mhd_glm_psi_transport_3d_p3 \
                 bench_maxwell_cavity_3d bench_maxwell_plane_wave_3d \
@@ -205,7 +206,7 @@ help:
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
 	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
-	@echo '  make bench-all           build + run every analytic-solution gate (113 benches)'
+	@echo '  make bench-all           build + run every analytic-solution gate (114 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -269,7 +270,7 @@ help:
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
 	@echo '                           the source-term hook in rk_stage_kernel (~95s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (113 benches, ~10 min)'
+	@echo '  make bench-all           build + run every gate (114 benches, ~10 min)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -614,6 +615,8 @@ bench-mhd-glm-psi-damp-3d: bench_mhd_glm_psi_damp_3d
 	./bench_mhd_glm_psi_damp_3d
 bench-mhd-glm-psi-damp-3d-p3: bench_mhd_glm_psi_damp_3d_p3
 	./bench_mhd_glm_psi_damp_3d_p3
+bench-mhd-glm-psi-damp-3d-p5: bench_mhd_glm_psi_damp_3d_p5
+	./bench_mhd_glm_psi_damp_3d_p5
 bench-mhd-glm-psi-transport-3d: bench_mhd_glm_psi_transport_3d
 	./bench_mhd_glm_psi_transport_3d
 bench-mhd-glm-psi-transport-3d-p3: bench_mhd_glm_psi_transport_3d_p3
