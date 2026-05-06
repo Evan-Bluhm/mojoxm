@@ -66,6 +66,7 @@ class KernelRow:
     total_ns: int
     instances: int
     avg_ns: float
+    stddev_ns: float
     name: str
 
     @property
@@ -75,6 +76,16 @@ class KernelRow:
     @property
     def total_ms(self) -> float:
         return self.total_ns / 1_000_000.0
+
+    @property
+    def cv_pct(self) -> float:
+        """Coefficient of variation -- stddev / avg, percent.  >50%
+        typically means the bench runs a refinement sweep (multiple
+        mesh sizes back-to-back) so the per-launch distribution is
+        bimodal, not a real timing anomaly."""
+        if self.avg_ns <= 0:
+            return 0.0
+        return 100.0 * self.stddev_ns / self.avg_ns
 
 
 def parse_file(path: Path) -> list[KernelRow]:
@@ -91,6 +102,7 @@ def parse_file(path: Path) -> list[KernelRow]:
                 total_ns=int(m["total_ns"]),
                 instances=int(m["instances"]),
                 avg_ns=float(m["avg_ns"]),
+                stddev_ns=float(m["stddev_ns"]),
                 name=m["name"],
             )
         )
@@ -157,23 +169,41 @@ def print_table(
     rows: list[KernelRow],
     header: str,
     total_ms_all_benches: float | None = None,
+    show_cv: bool = False,
 ) -> None:
     if not rows:
         print("(no rows)")
         return
     print(f"{header}")
-    print(
-        f"  {'bench':<48} {'kernel':<14} {'avg us':>9} {'inst':>7} "
-        f"{'total ms':>10}"
-    )
-    print(f"  {'-' * 48} {'-' * 14} {'-' * 9} {'-' * 7} {'-' * 10}")
+    if show_cv:
+        print(
+            f"  {'bench':<48} {'kernel':<14} {'avg us':>9} {'inst':>7} "
+            f"{'total ms':>10} {'CV %':>6}"
+        )
+        print(
+            f"  {'-' * 48} {'-' * 14} {'-' * 9} {'-' * 7} "
+            f"{'-' * 10} {'-' * 6}"
+        )
+    else:
+        print(
+            f"  {'bench':<48} {'kernel':<14} {'avg us':>9} {'inst':>7} "
+            f"{'total ms':>10}"
+        )
+        print(f"  {'-' * 48} {'-' * 14} {'-' * 9} {'-' * 7} {'-' * 10}")
     shown_ms_sum = 0.0
     for r in rows:
         shown_ms_sum += r.total_ms
-        print(
-            f"  {r.bench:<48} {kernel_kind(r.name):<14} "
-            f"{r.avg_us:>9.1f} {r.instances:>7d} {r.total_ms:>10.1f}"
-        )
+        if show_cv:
+            print(
+                f"  {r.bench:<48} {kernel_kind(r.name):<14} "
+                f"{r.avg_us:>9.1f} {r.instances:>7d} {r.total_ms:>10.1f} "
+                f"{r.cv_pct:>6.1f}"
+            )
+        else:
+            print(
+                f"  {r.bench:<48} {kernel_kind(r.name):<14} "
+                f"{r.avg_us:>9.1f} {r.instances:>7d} {r.total_ms:>10.1f}"
+            )
     # Footer: total kernel time across the displayed benches, plus the
     # full-suite total when only a slice is shown.  Useful for sizing
     # how long `make profile-bench-all` will take to re-baseline.
@@ -238,6 +268,16 @@ def main() -> int:
             "Emit machine-readable CSV instead of the human-readable table."
         ),
     )
+    ap.add_argument(
+        "--show-cv",
+        action="store_true",
+        help=(
+            "Add a 'CV %%' column showing coefficient of variation "
+            "(stddev / avg).  >50%% typically signals a refinement-sweep "
+            "bench (multi-resolution back-to-back) rather than a real "
+            "timing anomaly."
+        ),
+    )
     args = ap.parse_args()
 
     if not PROFILE_DIR.is_dir():
@@ -280,15 +320,20 @@ def main() -> int:
     show = dom if args.all else dom[: args.top]
     if args.csv:
         # Stable column order; downstream tooling can pivot/aggregate.
-        print("bench,kernel,avg_us,instances,total_ms")
+        print("bench,kernel,avg_us,instances,total_ms,cv_pct")
         for r in show:
             print(
                 f"{r.bench},{kernel_kind(r.name)},{r.avg_us:.3f},"
-                f"{r.instances},{r.total_ms:.3f}"
+                f"{r.instances},{r.total_ms:.3f},{r.cv_pct:.3f}"
             )
         return 0
     total_ms_all = sum(r.total_ms for r in dom)
-    print_table(show, label, total_ms_all_benches=total_ms_all)
+    print_table(
+        show,
+        label,
+        total_ms_all_benches=total_ms_all,
+        show_cv=args.show_cv,
+    )
     return 0
 
 
