@@ -125,7 +125,18 @@ Nine reference drivers under `examples/`:
   multi-panel animations via
   [`scripts/animate_2d.py`](scripts/animate_2d.py) -- e.g.
   `scripts/animate_2d.py output/solution_euler2d_gpu.pvd -f rho,p,'|v|'`
-  produces a 3-panel MP4:
+  produces a 3-panel MP4.
+
+  Every multi-component 3D driver under `examples/*.mojo` (Euler
+  vortex / Taylor-Green / Sod / rising-bubble, Maxwell cavity, MHD
+  Alfvén, SW drop, Two-Fluid Langmuir) additionally writes a final-
+  state multi-field VTU at `output/snapshot_t_final.vtu` (rho+p+|v|
+  for Euler, Ex+|E|+|B| for Maxwell, By+|B|+psi for MHD, h+|u| for
+  SW, n_e+n_i+Ex+charge for Two-Fluid).  ParaView opens this
+  directly without a PVD.  The per-frame async pipeline still emits
+  one component per frame for performance.
+
+  Per-driver smoke / rate verifications:
   * **Periodic:** `advection_gaussian_2d_gpu` (~7700 compute
     steps/sec, 0.07 % rel L2 over one period), `euler_vortex_2d_gpu`
     (~7600, isentropic vortex, 6.8 % rel L2 at P=2 / 32x32),
