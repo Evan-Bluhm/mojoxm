@@ -31,7 +31,7 @@
 # ======================================================================
 
 from src.solver import Solver, Physics
-from src.vtu import VtuWriter, write_pvd
+from src.vtu import VtuWriter, write_pvd, dump_vtu_3d_frame_multi
 from src.async_writer import AsyncWriter
 from src.nvtx import NvtxContext
 from src.reference import num_tet_nodes
@@ -141,6 +141,50 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
         nvtx.push_range("vtu_submit")
         self._aw.submit(self._output_dir + "/" + fname, segs)
         nvtx.pop_range()
+        self._paths.append(fname)
+        self._times.append(t)
+        nvtx.pop_range()
+
+    def write_frame_multi(
+        mut self,
+        mut solver: Solver[Self.PhysT, Self.P],
+        t: Float64,
+        field_names: List[String],
+        field_data: List[List[Float64]],
+        mut nvtx: NvtxContext,
+    ) raises:
+        """Write one multi-field 3D VTU frame *synchronously* using
+        pre-computed host-side `field_data` (one List[Float64] of length
+        `num_owned_elements * num_tet_nodes(P)` per field, in the order
+        named by `field_names`).  Drivers compute derived fields (rho /
+        p / |v| / |B| / ...) themselves on host and pass them in.
+
+        This is the multi-field counterpart to `write_frame`.  Unlike
+        `write_frame`, this path is synchronous -- it calls the
+        in-memory `dump_vtu_3d_frame_multi` directly without going
+        through `AsyncWriter`, so the driver pays the VTU pack + write
+        cost on the calling thread.  Use `write_frame` for the
+        single-field hot path; reach for this when richer ParaView
+        output (e.g. rho + p + |v|) outweighs the async overlap.
+
+        Records (path, time) so the eventual PVD collection at
+        `finalize()` references this frame correctly."""
+        nvtx.push_range("write_frame_multi")
+        var frame_id = len(self._paths)
+        var fname = String("frame_")
+        var sid = String(frame_id)
+        for _ in range(5 - sid.byte_length()):
+            fname += "0"
+        fname += sid
+        fname += ".vtu"
+        dump_vtu_3d_frame_multi(
+            num_elements=solver.num_owned_elements,
+            nodes_per_elem=num_tet_nodes(Self.P),
+            elem_node_xyz=solver.mesh.owned_node_xyz_f32_ptr,
+            field_names=field_names,
+            field_data=field_data,
+            path=self._output_dir + "/" + fname,
+        )
         self._paths.append(fname)
         self._times.append(t)
         nvtx.pop_range()
