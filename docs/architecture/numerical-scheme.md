@@ -41,8 +41,13 @@ on the reference simplex — no numerical quadrature, no round-off
 accumulation in the operator construction.
 
 The full machinery lives in `src/reference.mojo` (3D, 826 lines) and
-`src/reference_2d.mojo` (2D triangle). Operator size grows fast: at
-\(P=5\) the volume operator alone is ~80 k Float32s.
+`src/reference_2d.mojo` (2D triangle). Operator size at \(P=5\):
+`D_ref` is \(3 \times N_P \times N_P = 3 \times 56 \times 56 \approx 9.4\) k
+Float32s (\(\sim 38\) kB), `Lift_ref` is
+\(4 \times N_P \times N_{FP} = 4 \times 56 \times 21 \approx 4.7\) k
+Float32s (\(\sim 19\) kB). Both are tiny compared to the per-element
+state buffers, but the kernel reads them on every face / volume
+contribution so they sit comfortably in L2 throughout the run.
 
 ### VTK compatibility
 
