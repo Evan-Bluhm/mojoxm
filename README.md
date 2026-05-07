@@ -620,12 +620,30 @@ frames out to disk.
 
 ### VTU output
 
-The VTU writer emits one scalar (named `"density"`) per frame. Drivers
-use `solver.download_component(c, buf)` to extract a single component
-from the multi-component `q` for visualization. For Advection, `c = 0`
-is the whole solution; for Euler, `c = 0` is the mass density ρ.
+Two write paths are available, with different concurrency / field-
+count tradeoffs:
 
-### The I/O pipeline
+- **Single-field async** (the default per-frame path used by every
+  3D example driver): emits one scalar field per frame, hardcoded
+  to the XML name `"density"` regardless of which component the
+  driver chose.  Drivers pick the component via
+  `solver.download_component(c, buf)` -- for Advection, `c = 0` is
+  the whole solution; for Euler, `c = 0` is the mass density ρ; for
+  Maxwell, `c = 0` is `Ex` (still labelled `"density"` in the file
+  for now).  Backed by the `pthread`-based `AsyncWriter` for
+  overlap with compute.
+- **Multi-field sync** (`FrameWriter.write_frame_multi` / underlying
+  `dump_vtu_3d_frame_multi` in `src/vtu.mojo`): writes N named
+  scalar fields in a single VTU and lets drivers compute derived
+  quantities (e.g. `rho`, `p`, `|v|` for Euler) before writing.
+  Synchronous (one blocking write per frame), but useful for
+  end-of-run snapshots and any setup where ParaView needs more than
+  a single field.  Used by `examples/mhd_alfven.mojo`'s final-state
+  snapshot.  2D-GPU drivers use a parallel multi-field pipeline
+  via `src/vtu_2d.dump_vtu_2d_frame_multi` (no async path on the
+  2D side).
+
+### The I/O pipeline (single-field async path)
 
 Per-frame writes use a pthread-based `AsyncWriter` that issues
 `writev()` with 6 scatter-gather segments per frame:
