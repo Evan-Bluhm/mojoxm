@@ -297,7 +297,7 @@ help:
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
 	@echo '                           the source-term hook in rk_stage_kernel (~45s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (123 benches; ~4 min cached, ~10 min cold)'
+	@echo '  make bench-all           build + run every gate (123 benches; ~4 min cached, ~14 min cold)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
