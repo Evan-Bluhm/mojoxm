@@ -179,6 +179,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_glm_psi_transport_3d_p4 \
                 bench_mhd_glm_psi_transport_3d_p5 \
                 bench_maxwell_cavity_3d bench_maxwell_plane_wave_3d \
+                bench_maxwell_te_plane_wave_3d \
                 bench_maxwell_plane_wave_3d_p3 \
                 bench_maxwell_plane_wave_3d_p4 \
                 bench_maxwell_plane_wave_3d_p5 \
@@ -227,9 +228,9 @@ help:
 	@echo '  make bench-bcs           run 27 BC + source-term gates -- inflow / outflow / wall / gravity (~45s cached)'
 	@echo '  make bench-{mhd,euler,maxwell,sw,advection,two-fluid}'
 	@echo '                           run all gates for one physics module (cached):'
-	@echo '                             mhd 33 gates ~70s, euler 33 ~105s, maxwell 23 ~40s,'
+	@echo '                             mhd 33 gates ~70s, euler 33 ~105s, maxwell 24 ~42s,'
 	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 7 ~22s'
-	@echo '  make bench-all           build + run every analytic-solution gate (122 benches; ~4 min cached)'
+	@echo '  make bench-all           build + run every analytic-solution gate (123 benches; ~4 min cached)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -296,7 +297,7 @@ help:
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
 	@echo '                           the source-term hook in rk_stage_kernel (~45s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (122 benches; ~4 min cached, ~10 min cold)'
+	@echo '  make bench-all           build + run every gate (123 benches; ~4 min cached, ~10 min cold)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -748,6 +749,8 @@ bench-maxwell-cavity-3d: bench_maxwell_cavity_3d
 	./bench_maxwell_cavity_3d
 bench-maxwell-plane-wave-3d: bench_maxwell_plane_wave_3d
 	./bench_maxwell_plane_wave_3d
+bench-maxwell-te-plane-wave-3d: bench_maxwell_te_plane_wave_3d
+	./bench_maxwell_te_plane_wave_3d
 bench-maxwell-plane-wave-3d-p3: bench_maxwell_plane_wave_3d_p3
 	./bench_maxwell_plane_wave_3d_p3
 bench-maxwell-plane-wave-3d-p4: bench_maxwell_plane_wave_3d_p4
@@ -981,14 +984,14 @@ bench-maxwell: \
 		bench-maxwell-plane-wave-2d-p4 bench-maxwell-plane-wave-2d-p5 \
 		bench-maxwell-plane-wave-3d bench-maxwell-plane-wave-3d-p3 \
 		bench-maxwell-plane-wave-3d-p4 bench-maxwell-plane-wave-3d-p5 \
-		bench-maxwell-te-plane-wave-2d \
+		bench-maxwell-te-plane-wave-2d bench-maxwell-te-plane-wave-3d \
 		bench-maxwell-uniform-j-2d bench-maxwell-uniform-j-2d-p3 \
 		bench-maxwell-uniform-j-3d bench-maxwell-uniform-j-3d-p3 \
 		bench-maxwell-uniform-m-2d bench-maxwell-uniform-m-2d-p3 \
 		bench-maxwell-uniform-m-3d bench-maxwell-uniform-m-3d-p3 \
 		bench-maxwell-inflow-2d bench-maxwell-inflow-3d \
 		bench-maxwell-outflow-2d bench-maxwell-outflow-3d
-	@echo '=== bench-maxwell: 23 Maxwell-focused gates PASSED ==='
+	@echo '=== bench-maxwell: 24 Maxwell-focused gates PASSED ==='
 
 
 # ShallowWater-focused regression suite -- 14 gates covering every
@@ -1275,6 +1278,8 @@ profile-bench-maxwell-cavity-3d: bench_maxwell_cavity_3d
 	@bin=bench_maxwell_cavity_3d; $(PROFILE_BIN)
 profile-bench-maxwell-plane-wave-3d: bench_maxwell_plane_wave_3d
 	@bin=bench_maxwell_plane_wave_3d; $(PROFILE_BIN)
+profile-bench-maxwell-te-plane-wave-3d: bench_maxwell_te_plane_wave_3d
+	@bin=bench_maxwell_te_plane_wave_3d; $(PROFILE_BIN)
 profile-bench-maxwell-plane-wave-3d-p3: bench_maxwell_plane_wave_3d_p3
 	@bin=bench_maxwell_plane_wave_3d_p3; $(PROFILE_BIN)
 profile-bench-maxwell-plane-wave-3d-p4: bench_maxwell_plane_wave_3d_p4
@@ -1469,6 +1474,7 @@ profile-bench-all: \
 		profile-bench-maxwell-cavity-3d \
 		profile-bench-maxwell-plane-wave-3d profile-bench-maxwell-plane-wave-3d-p3 \
 		profile-bench-maxwell-plane-wave-3d-p4 profile-bench-maxwell-plane-wave-3d-p5 \
+		profile-bench-maxwell-te-plane-wave-3d \
 		profile-bench-maxwell-uniform-j-3d profile-bench-maxwell-uniform-j-3d-p3 \
 		profile-bench-maxwell-uniform-m-3d profile-bench-maxwell-uniform-m-3d-p3 \
 		profile-bench-maxwell-outflow-3d profile-bench-maxwell-inflow-3d \

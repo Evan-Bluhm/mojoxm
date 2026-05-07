@@ -229,7 +229,7 @@ multi-rank decomposition + halo-exchange machinery.
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  122 analytic-solution gates tying schemes to closed-form reference
+  123 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   10 explicit log2(e_N / e_2N) rate gates -- advection 2D + 3D at
@@ -249,7 +249,7 @@ multi-rank decomposition + halo-exchange machinery.
   `make bench-bcs` (27 BC + source-term gates, ~45s cached).  When iterating
   on a single physics module, the per-physics aggregators run only
   the gates exercising that module: `make bench-mhd` (33), `bench-euler`
-  (33), `bench-maxwell` (23), `bench-sw` (14), `bench-advection` (12),
+  (33), `bench-maxwell` (24), `bench-sw` (14), `bench-advection` (12),
   `bench-two-fluid` (7).  Or `make smoke` for a one-command
   `test-quick + bench-quick` combined sanity check (~45s cached).
   `make pre-push` chains the four gates a routine push wants to
@@ -337,7 +337,7 @@ multi-rank decomposition + halo-exchange machinery.
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (55):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (56):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -388,6 +388,10 @@ multi-rank decomposition + halo-exchange machinery.
     the `_p5` variant is the highest-order vacuum-Maxwell gate in
     the 3D suite, rel L2 ~2.3e-5 + zero-component leakage ~6e-6
     under the Kuhn-tet asymmetry floor),
+    `bench_maxwell_te_plane_wave_3d` (TE-polarization dual to the
+    TM plane-wave gate above: gates the previously-untested Bz / Ey
+    flux paths in the 3D Maxwell volume + face-flux kernel by
+    flipping which components are nonzero),
     `bench_maxwell_uniform_j_3d` + `_p3` + `_m` + `_m_p3` (uniform-J /
     uniform-M source-term gates: Ex / Bz grow linearly under the
     source while flux divergences stay zero on uniform fields; both
@@ -479,7 +483,7 @@ multi-rank decomposition + halo-exchange machinery.
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 122 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 123 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
@@ -887,7 +891,7 @@ Other useful flags:
 * `--by-physics` rolls up per-physics totals (Euler 60% / MHD 15% /
   Two-Fluid 9% / Advection 7% / Maxwell 5% / SW 3% on the current
   baselines) -- size where the suite-wide compute budget actually
-  sits across the 122 benches.
+  sits across the 123 benches.
 * `--show-cv` adds a CV% column (stddev / avg).  Distinguishes
   refinement-sweep benches (CV ~50-66%, expected) from single-
   resolution benches (CV <1%).  Combined with `--by-physics`, the
