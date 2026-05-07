@@ -560,7 +560,7 @@ profile-summary-test:
 # NP=10/20/35/56 = P=2..5).
 # Use when touching any of the helper modules in `src/` to catch
 # regressions without paying for the 2D/3D physics-test compile
-# times (~5s wall total cached, vs ~30s for test-quick).
+# times (~7s wall total cached, vs ~13s for test-quick).
 test-utils: test-memory-report test-frame-writer-multi test-ssprk3 \
             test-partition test-sod-exact-riemann
 	@echo '=== test-utils: 5 utility tests PASSED ==='
@@ -572,7 +572,7 @@ test-utils: test-memory-report test-frame-writer-multi test-ssprk3 \
 # `ReferenceElement[P].node_weights` distributions, so a regression
 # in either the kernel weights or the BJ pipeline's downstream use
 # of them is caught at the P that introduced it.  Mirrors bench-p5
-# coverage on the test side.  ~20s w/ cached binaries.
+# coverage on the test side.  ~13s w/ cached binaries.
 test-limiter: test-limiter-2d-gpu test-limiter-2d-gpu-p3 \
               test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 \
               test-limiter-3d test-limiter-3d-p3 \
