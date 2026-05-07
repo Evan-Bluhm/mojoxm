@@ -597,14 +597,18 @@ and emits one specialized kernel per `(NC, PhysT)` pair.
 After construction, no host-side arrays indexed by element, face, or
 DOF survive past startup. All of the following are device-resident:
 
-- **Mesh** (`Mesh` struct, populated by two build kernels):
-  - 10 node coordinates per element (`elem_node_xyz`)
+- **Mesh** (`Mesh[P]` struct, populated by two build kernels):
+  - `N_P` node coordinates per element (`elem_node_xyz`).
+    `N_P = (P+1)(P+2)(P+3)/6`: 10 at P=2, 20 at P=3, 35 at P=4, 56 at P=5.
   - inverse Jacobian + `1/(6V)` per element
   - 4 face indices, sides, and canonical→reference permutations per element
-  - per-face: 2 elements, 12 per-side node indices, normal, area
-- **DG operators** (uploaded once from host, ~540 Float32s total):
-  - `D_ref[3][10][10]` = `M_ref⁻¹ · S_ref^k` (volume)
-  - `Lift_ref[4][10][6]` = `M_ref⁻¹ · L_ref^f` (face)
+  - per-face: 2 elements, 2 sets of `N_FP` element-local node indices
+    (one per side; `N_FP = (P+1)(P+2)/2`: 6 at P=2, 10 at P=3,
+    15 at P=4, 21 at P=5), normal, area
+- **DG operators** (uploaded once from host, sized by P):
+  - `D_ref[3][N_P][N_P]` = `M_ref⁻¹ · S_ref^k` (volume; ~540 Float32s
+    at P=2, ~80k at P=5)
+  - `Lift_ref[4][N_P][N_FP]` = `M_ref⁻¹ · L_ref^f` (face)
 - **Solution state**: three `q` buffers for SSPRK3
   (each `num_elements * N_P * NC` Float32s)
 - **Initial condition**: each driver owns an IC kernel that writes
