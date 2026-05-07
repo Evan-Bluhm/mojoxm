@@ -847,10 +847,10 @@ proportionally tiny:
 
 | kernel                  | % at 3D P=3 | % at 3D P=5 |
 |-------------------------|-------------|-------------|
-| `rk_stage_kernel`       |  82.1%      |  87.7%      |
-| `bj_limiter compute_theta` |  14.2%   |  10.4%      |
-| `bj_limiter apply`      |   2.0%      |   1.0%      |
-| `compute_cell_average`  |   1.7%      |   0.8%      |
+| `rk_stage_kernel`       |  84.2%      |  87.9%      |
+| `bj_limiter compute_theta` |  11.6%   |  10.2%      |
+| `bj_limiter apply`      |   2.4%      |   1.0%      |
+| `compute_cell_average`  |   1.8%      |   0.8%      |
 
 This means: 2D limiter optimization has ~3-4x the ROI of the
 same effort in 3D, where the cooperative kernel is the real
