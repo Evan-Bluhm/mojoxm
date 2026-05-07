@@ -520,12 +520,12 @@ test-quick: test-reference test-reference-2d test-euler-2d-gpu test-euler-3d \
 	@echo '=== test-quick: 8 representative tests PASSED ==='
 
 
-# One-command smoke aggregate: test-quick + bench-quick.  Use this
-# right after pulling, after a non-trivial refactor, or before
-# committing to catch the broadest class of regressions in ~45s
-# wall (cached binaries).  Runs sequentially: a test failure stops
-# the bench sweep early so you don't wait through 12 benches when
-# the foundation is already broken.
+# One-command smoke aggregate: test-utils + test-quick + bench-quick.
+# Use this right after pulling, after a non-trivial refactor, or
+# before committing to catch the broadest class of regressions in
+# ~45s wall (cached binaries).  Runs sequentially: a test failure
+# stops the bench sweep early so you don't wait through 13 benches
+# when the foundation is already broken.
 smoke: test-utils test-quick bench-quick
 	@echo '=== smoke: test-utils + test-quick + bench-quick PASSED ==='
 
