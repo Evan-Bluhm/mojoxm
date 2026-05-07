@@ -341,6 +341,15 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("files", nargs="+", help="VTU files to validate")
+    ap.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help=(
+            "Print one diagnostic line per file (P, NP, num_cells, "
+            "num_points) before the summary."
+        ),
+    )
     args = ap.parse_args()
 
     n_ok = 0
@@ -355,6 +364,24 @@ def main() -> int:
             for msg in failures:
                 print(f"  * {msg}", file=sys.stderr)
             return 1
+        if args.verbose:
+            # Re-read for the diagnostic line; cheap (kern.txt files
+            # are tiny and validate_one already loaded once).
+            mfile = meshio.read(path)
+            cells = mfile.cells[0]
+            np_val = cells.data.shape[1]
+            n_cells = cells.data.shape[0]
+            n_points = mfile.points.shape[0]
+            for p in range(1, 8):
+                if num_tet_nodes(p) == np_val:
+                    p_eff = p
+                    break
+            else:
+                p_eff = "?"
+            print(
+                f"  {path}: P={p_eff} NP={np_val} cells={n_cells} "
+                f"points={n_points}"
+            )
         n_ok += 1
     print(f"validate_vtu: {n_ok} file(s) OK")
     return 0
