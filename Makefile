@@ -226,7 +226,7 @@ help:
 	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~45s cached)'
 	@echo '  make bench-{mhd,euler,maxwell,sw,advection,two-fluid}'
 	@echo '                           run all gates for one physics module (cached):'
-	@echo '                             mhd 33gates ~70s, euler 33 ~105s, maxwell 23 ~40s,'
+	@echo '                             mhd 33 gates ~70s, euler 33 ~105s, maxwell 23 ~40s,'
 	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 6 ~20s'
 	@echo '  make bench-all           build + run every analytic-solution gate (121 benches; ~4 min cached)'
 	@echo ''
