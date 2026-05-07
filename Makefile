@@ -267,7 +267,7 @@ help:
 	@echo '  make test-sod-exact-riemann'
 	@echo '                           Toro 2009 reference values for the analytic Sod solver'
 	@echo '  make test-vtu-meshio     meshio-roundtrip + VTK_LAGRANGE_TETRAHEDRON spec'
-	@echo '                           validation on the P=2..5 fixtures (~5s incl. test-vtu-3d-multi)'
+	@echo '                           validation on the P=2..5 fixtures (~2-3s incl. test-vtu-3d-multi)'
 	@echo '  make test-quick          run 8 representative tests (~30s with cached binaries)'
 	@echo '  make test-utils          run 5 helper-module tests (~5s; 3 host-only + 2 small GPU)'
 	@echo '  make test-limiter        run 8 BJ-limiter unit tests (2D + 3D, P=2/3/4/5; ~20s cached)'
