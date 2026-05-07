@@ -12,8 +12,16 @@ Output:
     output/dashboard.gif         animated GIF, one frame per VTU
 
 Layout:
-    [ density slice ]  [ mass vs t ]
-    [ momentum xyz ]   [ total energy ]
+    [ density slice         ]  [ "linear conserved" panel    ]
+    [ "momentum" panel      ]  [ "energy / squared / max"    ]
+
+The three time-series panels are populated by auto-grouping the CSV
+columns by name: any column matching 'mass' goes to "linear
+conserved", any column matching 'momentum' or 'mom_' goes to
+"momentum", everything else (typically L2-squared and max_abs columns
+covering energy, magnetic energy, GLM noise, etc.) goes to "energy /
+squared / max".  Empty groups collapse so a writer with only a
+single linear column still renders cleanly.
 
 Dependencies: meshio, matplotlib, numpy.
 
