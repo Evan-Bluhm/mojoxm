@@ -836,17 +836,21 @@ Other useful flags:
   sits across the 121 benches.
 * `--show-cv` adds a CV% column (stddev / avg).  Distinguishes
   refinement-sweep benches (CV ~50-66%, expected) from single-
-  resolution benches (CV <1%).
+  resolution benches (CV <1%).  Combined with `--by-physics`, the
+  rollup gains a `max CV %` column that surfaces refinement-sweep
+  modules at a glance (e.g. euler / advection at >60% on current
+  baselines, vs mhd / two-fluid / maxwell <14%).
 * `--csv` emits machine-readable output for downstream tooling
-  (`bench,kernel,avg_us,instances,total_ms,cv_pct`).
+  (`bench,kernel,avg_us,instances,total_ms,cv_pct`).  Mutually
+  exclusive with `--markdown`.
 * `--markdown` emits a markdown table -- handy for pasting into PR
   descriptions / issues / docs.  Composes with `--show-cv` and
-  `--by-physics`.
+  `--by-physics`; mutually exclusive with `--csv`.
 * `--filter <substr>` narrows by bench-name substring; `--kernel
   <substr>` narrows by kernel-name substring; `--sort
   {avg,total,inst}` picks the ranking key.
 * `--self-test` (also `make profile-summary-test`) runs an in-script
-  parser + classifier check (18 assertions, sub-second) -- catches a
+  parser + classifier check (24 assertions, sub-second) -- catches a
   future nsys-output-format change.  Wired into `make pre-push`.
 
 For refresh-then-rank workflows, `make profile-bench-quick`
