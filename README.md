@@ -266,7 +266,7 @@ multi-rank decomposition + halo-exchange machinery.
   cross-bench summary parser), `smoke` (~45s, test+bench-quick),
   and `test-vtu-meshio` (~1s, meshio-roundtrip + VTK_LAGRANGE_*
   spec compliance on the 3D P=2..5 fixtures).  Total ~50s cached.
-  * **2D smooth (43):** `bench_advection_translation_2d` (rate >= 2.0)
+  * **2D smooth (42):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
     `bench_advection_inflow_2d` (BC_INFLOW preservation gate with
@@ -307,7 +307,7 @@ multi-rank decomposition + halo-exchange machinery.
     `bench_euler_hydrostatic_2d` + `_p3` + `_p4` + `_p5` (closes a 2D
     gravity source-term parity gap with the 3D path; full P-parity
     at NP=6/10/15/21).
-  * **2D shocks + EM (18):** `bench_euler_sod_2d`,
+  * **2D shocks + EM (19):** `bench_euler_sod_2d`,
     `bench_euler_sod_limited_2d` + `_p3` + `_p4` + `_p5` (HLLC + BJ
     limiter at P=2 / P=3 / P=4 / P=5; the P=2 variant lands the
     shock within 0.2 cells of Rankine-Hugoniot, the P=3 variant

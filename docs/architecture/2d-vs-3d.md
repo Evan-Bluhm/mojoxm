@@ -130,9 +130,9 @@ Both pipelines have full P-parity coverage across all 5 smooth physics
 at \(P = 2 / 3 / 4 / 5\), plus shocked Euler at every supported P. The
 benchmark suite categorises:
 
-- **2D smooth (43 gates)** — see `bench-quick`, `bench-rates`, `bench-p5`,
+- **2D smooth (42 gates)** — see `bench-quick`, `bench-rates`, `bench-p5`,
   per-physics aggregators
-- **2D shocks + EM (18 gates)** — `bench-shocks`, `bench-bcs`
+- **2D shocks + EM (19 gates)** — `bench-shocks`, `bench-bcs`
 - **3D smooth (58 gates)** — same shape, 3D versions
 - **3D shocks (7 gates)** — Sod, Brio–Wu, dam break
 
