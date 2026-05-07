@@ -33,7 +33,7 @@ from src.boundary import (
     BC_INFLOW,
 )
 from src.ssprk3 import ssprk3_stage_plans
-from src.memory_report import MemoryReport, ThroughputReport
+from src.memory_report import MemoryReport, ThroughputReport, format_seconds
 from src.vtu_2d import (
     dump_vtu_2d_frame_multi,
     dump_pvd_collection,
@@ -280,7 +280,7 @@ def main() raises:
 
     var total_sec = Float64(run_end - run_start) * 1.0e-9
     var compute_sec = Float64(compute_ns) * 1.0e-9
-    print("  total time  :", total_sec, "s (incl. frame I/O)")
+    print("  total time  :", format_seconds(total_sec), "(incl. frame I/O)")
     ThroughputReport(
         num_steps=total_steps,
         wall_seconds=compute_sec,

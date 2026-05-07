@@ -37,7 +37,7 @@ from src.vtu_2d import (
     dump_pvd_collection,
     vtu_frame_name,
 )
-from src.memory_report import MemoryReport, ThroughputReport
+from src.memory_report import MemoryReport, ThroughputReport, format_seconds
 from src.ssprk3 import ssprk3_stage_plans
 
 
@@ -287,7 +287,7 @@ def main() raises:
 
     var total_sec = Float64(run_end - run_start) * 1.0e-9
     var compute_sec = Float64(compute_ns) * 1.0e-9
-    print("  total time  :", total_sec, "s (incl. frame I/O)")
+    print("  total time  :", format_seconds(total_sec), "(incl. frame I/O)")
     # WARPXM-style throughput summary.  compute_sec is already a
     # sync'd measurement -- the per-frame timing block above ends in
     # ctx.synchronize() before stopping the counter.  state_bytes_per_
