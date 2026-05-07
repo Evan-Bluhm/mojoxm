@@ -450,7 +450,10 @@ Nine reference drivers under `examples/`:
   (cell type 71).  `make test-vtu-meshio` (or `scripts/validate_vtu.py`)
   validates VTK-spec node ordering at every P: corners distinct,
   edge interiors at parametric `(j+1)/P` spacing, face interiors on
-  face planes, volume interiors strictly inside.
+  face planes, volume interiors strictly inside.  The same script
+  also handles 2D triangle VTUs (`triangle6` at P=2, cell type 69
+  `VTK_LAGRANGE_TRIANGLE` at P>=3) when invoked directly on
+  `output/*.vtu` from a 2D-GPU driver.
 - **Kuhn 6-tet decomposition** of a Cartesian cell grid. Each cube
   owns 12 uniquely numbered faces (6 interior diagonal + 6 external on
   its +x/+y/+z boundaries). Face IDs are `owner_cell * 12 + face_type`,
