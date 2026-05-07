@@ -186,7 +186,8 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_maxwell_uniform_j_3d bench_maxwell_uniform_j_3d_p3 \
                 bench_maxwell_uniform_m_3d bench_maxwell_uniform_m_3d_p3 \
                 bench_maxwell_outflow_3d bench_maxwell_inflow_3d \
-                bench_two_fluid_langmuir_3d bench_two_fluid_outflow_3d \
+                bench_two_fluid_langmuir_3d bench_two_fluid_langmuir_3d_p3 \
+                bench_two_fluid_outflow_3d \
                 bench_two_fluid_inflow_3d \
                 bench_two_fluid_walls_3d bench_two_fluid_walls_3d_p3 \
                 bench_two_fluid_walls_3d_p4 bench_two_fluid_walls_3d_p5 \
@@ -229,8 +230,8 @@ help:
 	@echo '  make bench-{mhd,euler,maxwell,sw,advection,two-fluid}'
 	@echo '                           run all gates for one physics module (cached):'
 	@echo '                             mhd 33 gates ~70s, euler 33 ~105s, maxwell 24 ~42s,'
-	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 7 ~22s'
-	@echo '  make bench-all           build + run every analytic-solution gate (123 benches; ~4 min cached)'
+	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 8 ~25s'
+	@echo '  make bench-all           build + run every analytic-solution gate (124 benches; ~4 min cached)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -297,7 +298,7 @@ help:
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
 	@echo '                           the source-term hook in rk_stage_kernel (~45s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (123 benches; ~4 min cached, ~14 min cold)'
+	@echo '  make bench-all           build + run every gate (124 benches; ~4 min cached, ~14 min cold)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -771,6 +772,8 @@ bench-maxwell-inflow-3d: bench_maxwell_inflow_3d
 	./bench_maxwell_inflow_3d
 bench-two-fluid-langmuir-3d: bench_two_fluid_langmuir_3d
 	./bench_two_fluid_langmuir_3d
+bench-two-fluid-langmuir-3d-p3: bench_two_fluid_langmuir_3d_p3
+	./bench_two_fluid_langmuir_3d_p3
 bench-two-fluid-outflow-3d: bench_two_fluid_outflow_3d
 	./bench_two_fluid_outflow_3d
 bench-two-fluid-inflow-3d: bench_two_fluid_inflow_3d
@@ -1035,11 +1038,11 @@ bench-advection: \
 # iterating on the Two-Fluid module, the J/M-coupled Maxwell stack,
 # or BC dispatch on NC=17.  Run-time ~22s w/ cached binaries.
 bench-two-fluid: \
-		bench-two-fluid-langmuir-3d \
+		bench-two-fluid-langmuir-3d bench-two-fluid-langmuir-3d-p3 \
 		bench-two-fluid-outflow-3d bench-two-fluid-inflow-3d \
 		bench-two-fluid-walls-3d bench-two-fluid-walls-3d-p3 \
 		bench-two-fluid-walls-3d-p4 bench-two-fluid-walls-3d-p5
-	@echo '=== bench-two-fluid: 7 Two-Fluid-focused gates PASSED ==='
+	@echo '=== bench-two-fluid: 8 Two-Fluid-focused gates PASSED ==='
 
 
 # P=5 P-parity sweep -- 19 gates at the largest comptime config
@@ -1144,11 +1147,11 @@ bench-all: \
 		bench-maxwell-uniform-j-3d bench-maxwell-uniform-j-3d-p3 \
 		bench-maxwell-uniform-m-3d bench-maxwell-uniform-m-3d-p3 \
 		bench-maxwell-outflow-3d bench-maxwell-inflow-3d \
-		bench-two-fluid-langmuir-3d \
+		bench-two-fluid-langmuir-3d bench-two-fluid-langmuir-3d-p3 \
 		bench-two-fluid-outflow-3d bench-two-fluid-inflow-3d \
 		bench-two-fluid-walls-3d bench-two-fluid-walls-3d-p3 \
 		bench-two-fluid-walls-3d-p4 bench-two-fluid-walls-3d-p5
-	@echo '=== ALL 123 BENCHMARKS PASSED ==='
+	@echo '=== ALL 124 BENCHMARKS PASSED ==='
 
 # Profiling: run a benchmark under nsys with --stats=true and capture
 # the kernel-time summary to benchmarks/profile_reports/<name>.kern.txt.
@@ -1314,6 +1317,8 @@ profile-bench-maxwell-inflow-3d: bench_maxwell_inflow_3d
 	@bin=bench_maxwell_inflow_3d; $(PROFILE_BIN)
 profile-bench-two-fluid-langmuir-3d: bench_two_fluid_langmuir_3d
 	@bin=bench_two_fluid_langmuir_3d; $(PROFILE_BIN)
+profile-bench-two-fluid-langmuir-3d-p3: bench_two_fluid_langmuir_3d_p3
+	@bin=bench_two_fluid_langmuir_3d_p3; $(PROFILE_BIN)
 profile-bench-two-fluid-outflow-3d: bench_two_fluid_outflow_3d
 	@bin=bench_two_fluid_outflow_3d; $(PROFILE_BIN)
 profile-bench-two-fluid-inflow-3d: bench_two_fluid_inflow_3d
@@ -1415,7 +1420,7 @@ profile-bench-two-fluid-walls-3d-p5: bench_two_fluid_walls_3d_p5
 # 13 bench-quick gates -- one representative bench per physics per
 # dim + the 2D limited Sod gate.  Use after a kernel-level change
 # to refresh the most-used profile baselines without paying for the
-# full 123-bench `profile-bench-all` sweep.  Run-time scales as
+# full 124-bench `profile-bench-all` sweep.  Run-time scales as
 # 13 * (~30-60 s nsys-profile overhead per bench), so ~10-15 min
 # wall vs ~90 min for the full all-bench sweep.
 profile-bench-quick: \
@@ -1492,7 +1497,8 @@ profile-bench-all: \
 		profile-bench-maxwell-uniform-j-3d profile-bench-maxwell-uniform-j-3d-p3 \
 		profile-bench-maxwell-uniform-m-3d profile-bench-maxwell-uniform-m-3d-p3 \
 		profile-bench-maxwell-outflow-3d profile-bench-maxwell-inflow-3d \
-		profile-bench-two-fluid-langmuir-3d profile-bench-two-fluid-outflow-3d \
+		profile-bench-two-fluid-langmuir-3d profile-bench-two-fluid-langmuir-3d-p3 \
+		profile-bench-two-fluid-outflow-3d \
 		profile-bench-two-fluid-inflow-3d \
 		profile-bench-two-fluid-walls-3d profile-bench-two-fluid-walls-3d-p3 \
 		profile-bench-two-fluid-walls-3d-p4 profile-bench-two-fluid-walls-3d-p5 \

@@ -229,7 +229,7 @@ multi-rank decomposition + halo-exchange machinery.
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  123 analytic-solution gates tying schemes to closed-form reference
+  124 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   10 explicit log2(e_N / e_2N) rate gates -- advection 2D + 3D at
@@ -250,7 +250,7 @@ multi-rank decomposition + halo-exchange machinery.
   on a single physics module, the per-physics aggregators run only
   the gates exercising that module: `make bench-mhd` (33), `bench-euler`
   (33), `bench-maxwell` (24), `bench-sw` (14), `bench-advection` (12),
-  `bench-two-fluid` (7).  Or `make smoke` for a one-command
+  `bench-two-fluid` (8).  Or `make smoke` for a one-command
   `test-quick + bench-quick` combined sanity check (~45s cached).
   `make pre-push` chains the four gates a routine push wants to
   pass: `format-check` (~3s, working-tree-wide mojo-format gate),
@@ -337,7 +337,7 @@ multi-rank decomposition + halo-exchange machinery.
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (56):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (57):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -418,7 +418,10 @@ multi-rank decomposition + halo-exchange machinery.
     P-parity at NP=10/20/35/56, exercising the highest-NC physics
     at every supported P; the `_inflow` variant closes the
     FiveMomentTwoFluid BC_INFLOW dispatch arm),
-    `bench_two_fluid_langmuir_3d`.
+    `bench_two_fluid_langmuir_3d` + `_p3` (electron plasma oscillation at
+    omega_p = sqrt(26/25); the `_p3` variant exercises the Lorentz +
+    Ampere source-term hook at NP=20 under non-trivial state evolution,
+    closing a coverage gap that the rest-state walls benches can't see).
   * **3D shocks (7):** `bench_euler_sod_3d` + `_p3` + `_p4` + `_p5`
     (BJ-limited, bounds + mass conservation; the `_p5` / NP=56
     variant is the highest-NP shocked-flow gate in the suite --
@@ -483,7 +486,7 @@ multi-rank decomposition + halo-exchange machinery.
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 123 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 124 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
@@ -864,7 +867,7 @@ benchmark.
 ### Cross-bench profile summary
 
 `make profile-summary` (or `scripts/profile_summary.py`) parses the
-123 cached profile reports and ranks every bench by dominant-kernel
+124 cached profile reports and ranks every bench by dominant-kernel
 cost.  Use the default `avg us/launch` view to spot kernel-level
 optimisation targets; switch to `--sort total` to see where the
 suite-wide kernel budget actually sits (top of the avg list isn't
@@ -895,7 +898,7 @@ Other useful flags:
 * `--by-physics` rolls up per-physics totals (Euler 60% / MHD 15% /
   Two-Fluid 10% / Advection 7% / Maxwell 5% / SW 3% on the current
   baselines) -- size where the suite-wide compute budget actually
-  sits across the 123 benches.
+  sits across the 124 benches.
 * `--show-cv` adds a CV% column (stddev / avg).  Distinguishes
   refinement-sweep benches (CV ~50-66%, expected) from single-
   resolution benches (CV <1%).  Combined with `--by-physics`, the
