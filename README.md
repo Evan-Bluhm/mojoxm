@@ -860,7 +860,7 @@ benchmark.
 ### Cross-bench profile summary
 
 `make profile-summary` (or `scripts/profile_summary.py`) parses the
-121 cached profile reports and ranks every bench by dominant-kernel
+123 cached profile reports and ranks every bench by dominant-kernel
 cost.  Use the default `avg us/launch` view to spot kernel-level
 optimisation targets; switch to `--sort total` to see where the
 suite-wide kernel budget actually sits (top of the avg list isn't

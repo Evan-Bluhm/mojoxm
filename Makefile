@@ -1415,7 +1415,7 @@ profile-bench-two-fluid-walls-3d-p5: bench_two_fluid_walls_3d_p5
 # 13 bench-quick gates -- one representative bench per physics per
 # dim + the 2D limited Sod gate.  Use after a kernel-level change
 # to refresh the most-used profile baselines without paying for the
-# full 121-bench `profile-bench-all` sweep.  Run-time scales as
+# full 123-bench `profile-bench-all` sweep.  Run-time scales as
 # 13 * (~30-60 s nsys-profile overhead per bench), so ~10-15 min
 # wall vs ~90 min for the full all-bench sweep.
 profile-bench-quick: \
