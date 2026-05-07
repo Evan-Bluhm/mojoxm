@@ -199,7 +199,7 @@ multi-rank decomposition + halo-exchange machinery.
   at P=2/3/4/5 in 2D + 3D); `make test-utils` (5 helper-module
   tests covering perf-introspection, VTU multi-field, SSPRK3
   stage-plan, MPI partition factorisation, Sod Riemann solver --
-  3 host-only + 2 small GPU-using; ~5s cached).  The full inventory:
+  3 host-only + 2 small GPU-using; ~7s cached).  The full inventory:
   * 2D pipeline -- `local_mesh_2d_gpu_test` (upload round-trips +
     constant-state at P=1..5), `euler_2d_gpu_test` /
     `sw_2d_gpu_test` / `mhd_2d_gpu_test` / `mhd_glm_2d_gpu_test` /
