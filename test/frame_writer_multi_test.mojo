@@ -32,20 +32,8 @@ from src.frame_writer import FrameWriter
 from src.nvtx import NvtxContext
 
 
-def main() raises:
-    comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var size = mpi.world_size()
-    if size > 1:
-        mpi.finalize()
-        print("frame_writer_multi_test: runs at np=1 only")
-        return
-
-    print("frame_writer_multi_test (FrameWriter.write_frame_multi smoke)")
-
-    comptime P = 2
-    var rank = mpi.world_rank()
-    var nvtx = NvtxContext()
+def check[P: Int](mut nvtx: NvtxContext, rank: Int, size: Int) raises:
+    print("  P=", P)
     var ctx = DeviceContext()
 
     var re = ReferenceElement[P]()
@@ -82,7 +70,7 @@ def main() raises:
         node_weights=node_weights^,
     )
 
-    var output_dir = String("/tmp/frame_writer_multi_test_out")
+    var output_dir = String("/tmp/frame_writer_multi_test_out_p") + String(P)
     var writer = FrameWriter[Advection, P](
         solver=solver,
         nvtx=nvtx,
@@ -131,7 +119,9 @@ def main() raises:
     # --- Check num_frames_written tracks the writes ---
     if writer.num_frames_written() != 2:
         raise Error(
-            "frame_writer_multi_test: num_frames_written="
+            "frame_writer_multi_test P="
+            + String(P)
+            + ": num_frames_written="
             + String(writer.num_frames_written())
             + " after 2 write_frame_multi calls (expected 2)"
         )
@@ -164,9 +154,26 @@ def main() raises:
         raise Error("frame_writer_multi_test: PVD missing frame 0 reference")
     if not (String("frame_00001.vtu") in ps):
         raise Error("frame_writer_multi_test: PVD missing frame 1 reference")
-    print("  wrote frame_00000.vtu, frame_00001.vtu, solution.pvd")
-    print('  XML multi-field layout OK (Scalars="rho", rho + phi DataArrays)')
-    print("  PVD references both frames")
+    print("    wrote frame_00000.vtu, frame_00001.vtu, solution.pvd")
+    print('    XML multi-field layout OK (Scalars="rho", rho + phi DataArrays)')
+    print("    PVD references both frames")
 
+
+def main() raises:
+    comptime assert has_accelerator(), "Requires GPU"
+    mpi.init()
+    var size = mpi.world_size()
+    if size > 1:
+        mpi.finalize()
+        print("frame_writer_multi_test: runs at np=1 only")
+        return
+
+    print("frame_writer_multi_test (FrameWriter.write_frame_multi, P=2..5)")
+    var rank = mpi.world_rank()
+    var nvtx = NvtxContext()
+    check[2](nvtx, rank, size)
+    check[3](nvtx, rank, size)
+    check[4](nvtx, rank, size)
+    check[5](nvtx, rank, size)
     print("=== frame_writer_multi_test PASSED ===")
     mpi.finalize()
