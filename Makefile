@@ -228,7 +228,7 @@ help:
 	@echo '                           run all gates for one physics module (cached):'
 	@echo '                             mhd 33gates ~70s, euler 33 ~105s, maxwell 23 ~40s,'
 	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 6 ~20s'
-	@echo '  make bench-all           build + run every analytic-solution gate (121 benches)'
+	@echo '  make bench-all           build + run every analytic-solution gate (121 benches; ~4 min cached)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -295,7 +295,7 @@ help:
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
 	@echo '                           the source-term hook in rk_stage_kernel (~45s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (121 benches, ~10 min)'
+	@echo '  make bench-all           build + run every gate (121 benches; ~4 min cached, ~10 min cold)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -813,9 +813,9 @@ bench-mhd-brio-wu-3d-p3: bench_mhd_brio_wu_3d_p3
 # Quick smoke-test subset -- one representative bench per physics
 # per dimension, plus the 2D limited Sod gate so the BJ limiter +
 # shocked-flow path is also covered.  Catches gross regressions in
-# ~60s wall-time vs ~10 min for `bench-all`.  Use for fast
-# iteration; reach for `bench-all` for the full P-parity matrix +
-# all shocked-flow + EM source-term gates.
+# ~30s wall-time (cached) vs ~4 min for `bench-all` cached.  Use
+# for fast iteration; reach for `bench-all` for the full P-parity
+# matrix + all shocked-flow + EM source-term gates.
 bench-quick: \
 		bench-advection-translation-2d \
 		bench-euler-vortex-2d \
