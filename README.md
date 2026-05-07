@@ -98,9 +98,11 @@ multi-rank decomposition + halo-exchange machinery.
   both at startup / shutdown; see [Performance](#performance) for a
   sample.
 - **Animated dashboard**: `scripts/animate_dashboard.py` reads the VTU
-  frames + diagnostics CSV and emits a 2×2 animated GIF (density
-  field + auto-grouped time-series panels). Lazy frame loader scales
-  to large meshes.
+  frames + diagnostics CSV and emits a 2×2 animated GIF -- one
+  thin-z slice of the per-frame scalar (`tricontourf`) plus three
+  time-series panels auto-grouped from the CSV column names
+  (`linear conserved` / `momentum` / `energy / squared / max`).
+  Lazy frame loader scales to large meshes.
 - **Higher-order reference element**: `ReferenceElement[P]` computes
   Lagrange basis, mass, stiffness, and lift operators at arbitrary
   order via Vandermonde inverse + analytic integration. Node ordering
