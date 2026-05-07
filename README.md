@@ -907,6 +907,13 @@ that bare path won't find its stdlib without `MODULAR_HOME` —
 go through `pixi run mojo` (what the Makefile defaults to) or
 drop into a subshell with `pixi shell`.
 
+If you plan to commit, also run **`make install-hooks` once per
+clone** to enable the staged-file `mojo format` pre-commit hook
+(git intentionally won't auto-enable hooks from a freshly-cloned
+repo).  The hook only checks staged files and is fast (~0.5 s);
+the broader working-tree check `make format-check` and `make
+pre-push` round out the format-correctness gates before you push.
+
 ### Compile a driver
 
 `src/` is a Mojo package (it contains `__init__.mojo`), so drivers
