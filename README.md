@@ -241,10 +241,13 @@ multi-rank decomposition + halo-exchange machinery.
   the gates exercising that module: `make bench-mhd` (33), `bench-euler`
   (33), `bench-maxwell` (23), `bench-sw` (14), `bench-advection` (12),
   `bench-two-fluid` (6).  Or `make smoke` for a one-command
-  `test-quick + bench-quick` combined sanity check (~45s cached);
-  `make pre-push` adds the working-tree `format-check` (~3s) and
-  the VTK_LAGRANGE_TETRAHEDRON spec validation in front + after
-  so the standard pre-push gate is one command (~50s cached).
+  `test-quick + bench-quick` combined sanity check (~45s cached).
+  `make pre-push` chains the four gates a routine push wants to
+  pass: `format-check` (~3s, working-tree-wide mojo-format gate),
+  `profile-summary-test` (~0.2s, in-script self-test on the
+  cross-bench summary parser), `smoke` (~45s, test+bench-quick),
+  and `test-vtu-meshio` (~1s, meshio-roundtrip + VTK_LAGRANGE_*
+  spec compliance on the 3D P=2..5 fixtures).  Total ~50s cached.
   * **2D smooth (42):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
