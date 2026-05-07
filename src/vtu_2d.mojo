@@ -2,9 +2,10 @@
 # 2D VTU frame writer
 # ======================================================================
 #
-# One-shot dump of a 2D triangulated scalar field to a VTK
-# UnstructuredGrid file (appended-raw binary).  Host-only; suitable for
-# CPU-stepped advection demos before the 2D GPU solver lands.
+# Dumps a 2D triangulated scalar (or multi-scalar) field to a VTK
+# UnstructuredGrid file (appended-raw binary).  Used by every 2D-GPU
+# example driver and bench under examples/*_2d_gpu.mojo /
+# benchmarks/bench_*_2d.mojo for per-frame VTU output.
 #
 #   - Points:     num_elements * NP points, each stored 3D with z=0
 #                 so ParaView opens them in a 3D viewer naturally.
@@ -12,10 +13,16 @@
 #   - Cell type:  VTK_TRIANGLE (5) at P=1, VTK_QUADRATIC_TRIANGLE (22)
 #                 at P=2, VTK_LAGRANGE_TRIANGLE (69) at P >= 3.  The
 #                 first two use our canonical 3- and 6-node orderings
-#                 (matching VTK); P >= 3 assumes the `_tri_node_exponents`
-#                 ordering matches VTK Lagrange (validated up to P=2;
-#                 may need remap for P >= 3).
-#   - PointData:  one scalar field at every nodal DOF.
+#                 (matching VTK); P >= 3 follows VTK's arbitrary-order
+#                 Lagrange triangle spec.  Position-class compliance
+#                 (corner / edge interior / face interior) at P=2..5 is
+#                 validated by scripts/validate_vtu.py invoked outside
+#                 the pixi env (the pixi-managed meshio 5.3.5 hits a
+#                 base64 padding bug specifically on the 2D P=2 fixture
+#                 -- the standalone validator uses the system Python
+#                 instead and parses cleanly).
+#   - PointData:  one scalar (`dump_vtu_2d_frame`) or N named scalars
+#                 (`dump_vtu_2d_frame_multi`) at every nodal DOF.
 #
 # Unlike the 3D `VtuWriter`, this writer does not cache per-frame
 # blobs -- 2D meshes are small enough that the cost is negligible.
