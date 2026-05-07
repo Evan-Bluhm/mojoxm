@@ -352,13 +352,47 @@ def run_self_test() -> int:
             f"bench_physics({bench!r}) = {got!r}, expected {expected_phys!r}",
         )
 
+    # dominant_per_bench: synthesize rows from multiple distinct benches
+    # and verify the highest-time_pct row wins for each.
+    synth = [
+        KernelRow("bench_a", 50.0, 1000, 10, 100.0, 5.0, "kernel_x"),
+        KernelRow("bench_a", 25.0, 500, 10, 50.0, 2.5, "kernel_y"),
+        KernelRow("bench_a", 25.0, 500, 10, 50.0, 2.5, "kernel_z"),
+        KernelRow("bench_b", 60.0, 6000, 100, 60.0, 30.0, "kernel_x"),
+        KernelRow("bench_b", 40.0, 4000, 100, 40.0, 1.0, "kernel_w"),
+    ]
+    dom_synth = dominant_per_bench(synth)
+    expect(
+        len(dom_synth) == 2,
+        f"dominant_per_bench: expected 2 distinct benches, got {len(dom_synth)}",
+    )
+    by_bench = {r.bench: r for r in dom_synth}
+    expect(
+        by_bench["bench_a"].name == "kernel_x",
+        f"bench_a dominant = {by_bench['bench_a'].name!r}, expected 'kernel_x'",
+    )
+    expect(
+        by_bench["bench_b"].name == "kernel_x",
+        f"bench_b dominant = {by_bench['bench_b'].name!r}, expected 'kernel_x'",
+    )
+
+    # cv_pct: stddev_ns=30, avg_ns=60 -> 50%
+    cv_row = KernelRow("synth", 100.0, 6000, 100, 60.0, 30.0, "k")
+    expect(
+        abs(cv_row.cv_pct - 50.0) < 1e-9,
+        f"cv_pct = {cv_row.cv_pct}, expected 50.0",
+    )
+
     if failures:
         print("profile_summary.py self-test FAILED:", file=sys.stderr)
         for msg in failures:
             print(f"  * {msg}", file=sys.stderr)
         return 1
+    n_dom_synth = 3  # 2 length checks + 2 winner checks ~= 3 named asserts
     print(
-        f"profile_summary.py self-test PASSED ({3 + len(test_cases_kk) + len(test_cases_phys)} assertions)"
+        f"profile_summary.py self-test PASSED ("
+        f"{3 + len(test_cases_kk) + len(test_cases_phys) + n_dom_synth + 1} "
+        f"assertions)"
     )
     return 0
 
