@@ -1255,6 +1255,17 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
   (3rd ed.), Springer 2009.  Sec 4.3 / Table 4.1 + 4.3 give the
   canonical Sod (Test 1) and strong-shock (Test 3) reference
   values gated by `test/sod_exact_riemann_test.mojo`.
+- **HLLC flux**: Toro, Spruce, Speares, "Restoration of the contact
+  surface in the HLL Riemann solver", Shock Waves 4(1), 1994.
+- **Barth-Jespersen slope limiter**: Barth & Jespersen, "The design
+  and application of upwind schemes on unstructured meshes",
+  AIAA-89-0366, 1989.
+- **Venkatakrishnan smoothing of BJ**: Venkatakrishnan, "Convergence
+  to steady state solutions of the Euler equations on unstructured
+  grids with limiters", J. Comput. Phys. 118(1), 1995.
+- **GLM divB cleaning (Dedner)**: Dedner et al., "Hyperbolic
+  divergence cleaning for the MHD equations", J. Comput. Phys.
+  175(2), 2002.
 - **WARPXM**: the reference implementation whose `advection_t` and
   `euler_t` numerical formulas were the starting point here.
 - **VTK appended binary format**: Kitware's VTK File Formats
