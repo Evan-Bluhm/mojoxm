@@ -350,6 +350,16 @@ def main() -> int:
             "num_points) before the summary."
         ),
     )
+    ap.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help=(
+            "Suppress the trailing success summary line.  Errors still "
+            "print on stderr.  Useful in CI scripts where 'no output = "
+            "OK' is the convention."
+        ),
+    )
     args = ap.parse_args()
 
     n_ok = 0
@@ -383,7 +393,8 @@ def main() -> int:
                 f"points={n_points}"
             )
         n_ok += 1
-    print(f"validate_vtu: {n_ok} file(s) OK")
+    if not args.quiet:
+        print(f"validate_vtu: {n_ok} file(s) OK")
     return 0
 
 
