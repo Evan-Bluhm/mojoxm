@@ -645,9 +645,10 @@ DOF survive past startup. All of the following are device-resident:
     (one per side; `N_FP = (P+1)(P+2)/2`: 6 at P=2, 10 at P=3,
     15 at P=4, 21 at P=5), normal, area
 - **DG operators** (uploaded once from host, sized by P):
-  - `D_ref[3][N_P][N_P]` = `M_ref⁻¹ · S_ref^k` (volume; ~540 Float32s
-    at P=2, ~80k at P=5)
-  - `Lift_ref[4][N_P][N_FP]` = `M_ref⁻¹ · L_ref^f` (face)
+  - `D_ref[3][N_P][N_P]` = `M_ref⁻¹ · S_ref^k` (volume; 300 Float32s
+    at P=2 / NP=10, ~9.4k at P=5 / NP=56)
+  - `Lift_ref[4][N_P][N_FP]` = `M_ref⁻¹ · L_ref^f` (face; 240
+    Float32s at P=2, ~4.7k at P=5)
 - **Solution state**: three `q` buffers for SSPRK3
   (each `num_elements * N_P * NC` Float32s)
 - **Initial condition**: each driver owns an IC kernel that writes
