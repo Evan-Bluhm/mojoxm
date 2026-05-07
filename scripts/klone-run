@@ -83,9 +83,12 @@ cd "$PROJECT_DIR"
 
 # --- Parse args -------------------------------------------------------
 if [ $# -eq 0 ]; then
-    sed -n '7,56p' "$0"
+    sed -n '2,60p' "$0" | cut -c3-
     exit 1
 fi
+case "$1" in
+    -h|--help) sed -n '2,60p' "$0" | cut -c3-; exit 0 ;;
+esac
 DRIVER="$1"; shift
 DRIVER_ARGS=("$@")
 
