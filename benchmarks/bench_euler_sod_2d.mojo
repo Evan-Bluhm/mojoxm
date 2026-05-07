@@ -48,6 +48,7 @@ from src.reference_2d import (
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL, BC_OUTFLOW
 from src.sod_exact_riemann import sod_exact_rho, shock_speed_S_R
+from src.memory_report import format_seconds
 
 
 comptime P = 2
@@ -177,8 +178,7 @@ def main() raises:
         "  dt=",
         dt,
         "  wall=",
-        wall_sec,
-        "s",
+        format_seconds(wall_sec),
         "  throughput=",
         Float64(num_steps) / wall_sec,
         "steps/s",
