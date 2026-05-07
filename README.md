@@ -82,9 +82,8 @@ multi-rank decomposition + halo-exchange machinery.
   struct; the mesh builder allocates BC-side faces and routes them to
   a physics-provided `boundary_flux(q, bc_type, n)` hook.  Every BC
   dispatch arm in every physics has at least one direct gate in the
-  test/bench harness, with one known rare-in-practice gap:
-  FiveMomentTwoFluid's BC_INFLOW arm is unexercised (most plasma
-  applications drive the system through the J source-coupling).
+  test/bench harness (closed end-to-end as of the FiveMomentTwoFluid
+  BC_INFLOW gate `bench_two_fluid_inflow_3d`).
 - **Source-term hook**: physics types provide a `source_term(q, x, s_out)`
   method evaluated per-node and added pointwise to the SSPRK3 RHS.
   Used for gravity (Euler), current / charge coupling (Maxwell,
@@ -230,7 +229,7 @@ multi-rank decomposition + halo-exchange machinery.
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  121 analytic-solution gates tying schemes to closed-form reference
+  122 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   10 explicit log2(e_N / e_2N) rate gates -- advection 2D + 3D at
@@ -247,11 +246,11 @@ multi-rank decomposition + halo-exchange machinery.
   `make bench-p5` (19 P=5 high-order gates, ~65s cached),
   `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~40s cached),
   `make bench-rates` (10 explicit convergence-rate gates, ~30s cached),
-  `make bench-bcs` (26 BC + source-term gates, ~45s cached).  When iterating
+  `make bench-bcs` (27 BC + source-term gates, ~45s cached).  When iterating
   on a single physics module, the per-physics aggregators run only
   the gates exercising that module: `make bench-mhd` (33), `bench-euler`
   (33), `bench-maxwell` (23), `bench-sw` (14), `bench-advection` (12),
-  `bench-two-fluid` (6).  Or `make smoke` for a one-command
+  `bench-two-fluid` (7).  Or `make smoke` for a one-command
   `test-quick + bench-quick` combined sanity check (~45s cached).
   `make pre-push` chains the four gates a routine push wants to
   pass: `format-check` (~3s, working-tree-wide mojo-format gate),
@@ -338,7 +337,7 @@ multi-rank decomposition + halo-exchange machinery.
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (54):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (55):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -400,19 +399,21 @@ multi-rank decomposition + halo-exchange machinery.
     `Maxwell.boundary_flux` that the cavity / plane-wave gates
     didn't exercise),
     `bench_maxwell_inflow_3d` (uniform constant state matched to
-    the inflow ghost on all six faces; together with the BC_INFLOW
-    gates for Advection / Euler / SW / IdealMHD plain+GLM,
-    completes the BC_INFLOW coverage in every physics module
-    except FiveMomentTwoFluid -- known rare-in-practice gap),
+    the inflow ghost on all six faces; together with
+    `bench_two_fluid_inflow_3d` and the BC_INFLOW gates for
+    Advection / Euler / SW / IdealMHD plain+GLM, completes the
+    BC_INFLOW coverage in every physics module),
     `bench_shallow_water_wave_3d` + `_p3` + `_p4` + `_p5` (NP=20 /
     NP=35 / NP=56 SW gates; the `_p5` variant closes 3D SW P-parity
     sweep at NP=56 and sits at the same A/H=0.01 nonlinear floor as
     P=3/P=4) + `_inflow` (BC_INFLOW + BC_OUTFLOW preservation),
-    `bench_two_fluid_outflow_3d` + `_walls` + `_walls_p3` +
-    `_walls_p4` + `_walls_p5` (charge-balanced 17-component rest
-    state preserved under BC_OUTFLOW / BC_WALL on all 6 faces; the
-    `_walls` variant runs full P-parity at NP=10/20/35/56, exercising
-    the highest-NC physics at every supported P),
+    `bench_two_fluid_outflow_3d` + `_inflow` + `_walls` +
+    `_walls_p3` + `_walls_p4` + `_walls_p5` (charge-balanced
+    17-component rest state preserved under BC_OUTFLOW / BC_INFLOW
+    / BC_WALL on all 6 faces; the `_walls` variant runs full
+    P-parity at NP=10/20/35/56, exercising the highest-NC physics
+    at every supported P; the `_inflow` variant closes the
+    FiveMomentTwoFluid BC_INFLOW dispatch arm),
     `bench_two_fluid_langmuir_3d`.
   * **3D shocks (7):** `bench_euler_sod_3d` + `_p3` + `_p4` + `_p5`
     (BJ-limited, bounds + mass conservation; the `_p5` / NP=56
@@ -478,7 +479,7 @@ multi-rank decomposition + halo-exchange machinery.
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 121 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 122 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
@@ -886,7 +887,7 @@ Other useful flags:
 * `--by-physics` rolls up per-physics totals (Euler 60% / MHD 15% /
   Two-Fluid 9% / Advection 7% / Maxwell 5% / SW 3% on the current
   baselines) -- size where the suite-wide compute budget actually
-  sits across the 121 benches.
+  sits across the 122 benches.
 * `--show-cv` adds a CV% column (stddev / avg).  Distinguishes
   refinement-sweep benches (CV ~50-66%, expected) from single-
   resolution benches (CV <1%).  Combined with `--by-physics`, the

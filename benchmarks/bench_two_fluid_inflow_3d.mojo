@@ -1,24 +1,34 @@
 # ======================================================================
-# bench_two_fluid_walls_3d -- 3D Two-Fluid BC_WALL preservation
+# bench_two_fluid_inflow_3d -- 3D Two-Fluid BC_INFLOW + BC_OUTFLOW preservation
 # ======================================================================
 #
-# Companion to bench_two_fluid_outflow_3d.  Same charge-balanced
-# rest state, but with slip-wall (BC_WALL) on all six faces instead
-# of BC_OUTFLOW.  At rest the wall ghost has u=0 (so the reflected
-# normal momentum is zero), no E or B (so no Lorentz force), and
-# psi=0 -- the state is preserved indefinitely.
+# Closes the BC coverage gap explicitly called out in
+# bench_two_fluid_walls_3d's docstring and acknowledged as
+# "FiveMomentTwoFluid BC_INFLOW unexercised" in the README's
+# Capabilities-at-a-glance bullet.  The 17-component BC_INFLOW arm
+# of FiveMomentTwoFluid.boundary_flux (src/two_fluid.mojo line 522)
+# now has a direct gate.
 #
-# This exercises the BC_WALL dispatch arm in
-# `FiveMomentTwoFluid.boundary_flux` (src/two_fluid.mojo line 502).
-# Companion to bench_two_fluid_outflow_3d (BC_OUTFLOW arm) and
-# bench_two_fluid_inflow_3d (BC_INFLOW arm).  Together the three
-# benches exercise all four BC dispatch arms in
-# FiveMomentTwoFluid.boundary_flux at P=2, with the BC_WALL arm
-# additionally swept at P=2/3/4/5 via the _p3 / _p4 / _p5 variants.
+# Cleanest test: charge-balanced rest state under BC_INFLOW on -x
+# and BC_OUTFLOW on +x (periodic in y/z).  The 17 `inflow_*` fields
+# of the FiveMomentTwoFluid struct are matched to the IC: charge-
+# balanced uniform plasma (q_e * n_e + q_i * n_i = 0, all velocities
+# = 0, E = B = 0, psi = 0).  Inflow ghost == interior == IC, so all
+# Rusanov dissipation vanishes at every face and the boundary flux
+# divergence integrates to zero around each tet.  Net RHS = 0; state
+# stays at rest indefinitely.
+#
+# Mirrors the pattern used by bench_mhd_inflow_3d (matched-state
+# inflow + outflow, sub-Alfvenic / quiescent uniform IC) but at NC=17
+# instead of NC=9.  Companion to bench_two_fluid_walls_3d (BC_WALL)
+# and bench_two_fluid_outflow_3d (BC_OUTFLOW); together the three
+# benches now exercise all four BC dispatch arms in
+# FiveMomentTwoFluid.boundary_flux.
 #
 # Pass criteria (P=2, NX=NY=NZ=4, T=0.5):
-#   * max |q - q_IC| < 5e-4 (same Float32 epsilon * step
-#     accumulation budget as the BC_OUTFLOW analog)
+#   * max |q - q_IC| < 5e-4 (Float32 epsilon * step accumulation;
+#     same threshold as the BC_OUTFLOW / BC_WALL analogs since 17
+#     components compound roundoff at the same rate)
 #   * no NaN / Inf
 # ======================================================================
 
@@ -31,7 +41,12 @@ from src import mpi
 from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
-from src.boundary import BoundaryConditions, BC_WALL
+from src.boundary import (
+    BoundaryConditions,
+    BC_INFLOW,
+    BC_OUTFLOW,
+    BC_INTERIOR,
+)
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.two_fluid import FiveMomentTwoFluid
@@ -85,16 +100,19 @@ def fill_constant_kernel(
     var rho_i = M_I * N0
     var E_e = P_E0 / (GAMMA_E - Float32(1.0))
     var E_i = P_I0 / (GAMMA_I - Float32(1.0))
+    # Electrons (0..4)
     q[base + 0] = rho_e
     q[base + 1] = Float32(0.0)
     q[base + 2] = Float32(0.0)
     q[base + 3] = Float32(0.0)
     q[base + 4] = E_e
+    # Ions (5..9)
     q[base + 5] = rho_i
     q[base + 6] = Float32(0.0)
     q[base + 7] = Float32(0.0)
     q[base + 8] = Float32(0.0)
     q[base + 9] = E_i
+    # Maxwell E (10..12), B (13..15), psi (16) all zero
     q[base + 10] = Float32(0.0)
     q[base + 11] = Float32(0.0)
     q[base + 12] = Float32(0.0)
@@ -110,10 +128,10 @@ def main() raises:
     var size = mpi.world_size()
     if size > 1:
         mpi.finalize()
-        print("bench_two_fluid_walls_3d: runs at np=1 only")
+        print("bench_two_fluid_inflow_3d: runs at np=1 only")
         return
 
-    print("bench_two_fluid_walls_3d (3D Two-Fluid BC_WALL preservation)")
+    print("bench_two_fluid_inflow_3d (3D Two-Fluid BC_INFLOW + BC_OUTFLOW)")
     print("  P= 2   mesh=", NX, "x", NY, "x", NZ, "   T=", T_FINAL)
 
     var rank = mpi.world_rank()
@@ -121,42 +139,57 @@ def main() raises:
     var refs = build_reference_operators(nvtx)
     var ctx = DeviceContext()
 
+    # Inflow on -x, outflow on +x, periodic in y/z (matches
+    # bench_mhd_inflow_3d's BC layout).
     var bcs = BoundaryConditions(
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
+        BC_INFLOW,
+        BC_OUTFLOW,  # -x, +x
+        BC_INTERIOR,
+        BC_INTERIOR,  # -y, +y
+        BC_INTERIOR,
+        BC_INTERIOR,  # -z, +z
     )
     var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
+        ctx=ctx,
+        part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ),
+        Lx=LX,
+        Ly=LY,
+        Lz=LZ,
+        bcs=bcs,
     )
     var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        FiveMomentTwoFluid.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
+        ctx=ctx,
+        part=mesh.part,
+        nc=FiveMomentTwoFluid.NUM_COMPONENTS,
+        d_perm=mesh.d_perm.unsafe_ptr(),
+        bcs=bcs,
     )
+
+    # Inflow ghost = IC (charge-balanced rest state).
+    var rho_e0 = M_E * N0
+    var rho_i0 = M_I * N0
+    var E_e0 = P_E0 / (GAMMA_E - Float32(1.0))
+    var E_i0 = P_I0 / (GAMMA_I - Float32(1.0))
+
     var physics = FiveMomentTwoFluid(
-        GAMMA_E,
-        GAMMA_I,
-        Q_E,
-        M_E,
-        Q_I,
-        M_I,
-        EPS0,
-        C_LIGHT,
-        C_H,
-        ALPHA_D,
-        MIN_DENSITY,
-        MIN_PRESSURE,
+        gamma_e=GAMMA_E,
+        gamma_i=GAMMA_I,
+        q_e=Q_E,
+        m_e=M_E,
+        q_i=Q_I,
+        m_i=M_I,
+        eps0=EPS0,
+        c_light=C_LIGHT,
+        c_h=C_H,
+        alpha_d=ALPHA_D,
+        min_density=MIN_DENSITY,
+        min_pressure=MIN_PRESSURE,
+        inflow_rho_e=rho_e0,
+        inflow_E_e=E_e0,
+        inflow_rho_i=rho_i0,
+        inflow_E_i=E_i0,
+        # All momenta, E-field, B-field, psi default to 0 -- matching
+        # the IC's quiescent rest state.
     )
     var solver = Solver[FiveMomentTwoFluid](
         ctx^,
@@ -213,7 +246,7 @@ def main() raises:
     for k in range(n_owned_dof):
         var v = q_ptr[k]
         if isnan(v) or isinf(v):
-            raise Error("bench_two_fluid_walls_3d: non-finite output")
+            raise Error("bench_two_fluid_inflow_3d: non-finite output")
         var d = Float64(v - host_ic[k])
         if d < 0.0:
             d = -d
@@ -223,11 +256,11 @@ def main() raises:
     print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
     if max_drift > DRIFT_TOL:
         raise Error(
-            "bench_two_fluid_walls_3d FAILED: drift "
+            "bench_two_fluid_inflow_3d FAILED: drift "
             + String(max_drift)
             + " > "
             + String(DRIFT_TOL)
         )
 
-    print("=== bench_two_fluid_walls_3d PASSED ===")
+    print("=== bench_two_fluid_inflow_3d PASSED ===")
     mpi.finalize()

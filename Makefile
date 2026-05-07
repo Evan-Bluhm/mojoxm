@@ -186,6 +186,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_maxwell_uniform_m_3d bench_maxwell_uniform_m_3d_p3 \
                 bench_maxwell_outflow_3d bench_maxwell_inflow_3d \
                 bench_two_fluid_langmuir_3d bench_two_fluid_outflow_3d \
+                bench_two_fluid_inflow_3d \
                 bench_two_fluid_walls_3d bench_two_fluid_walls_3d_p3 \
                 bench_two_fluid_walls_3d_p4 bench_two_fluid_walls_3d_p5 \
                 bench_euler_smooth_wave_3d bench_euler_smooth_wave_3d_p3 \
@@ -223,12 +224,12 @@ help:
 	@echo '  make bench-p5            run 19 P=5 P-parity gates at NP=21/56 (~65s cached)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~40s cached)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~30s cached)'
-	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~45s cached)'
+	@echo '  make bench-bcs           run 27 BC + source-term gates -- inflow / outflow / wall / gravity (~45s cached)'
 	@echo '  make bench-{mhd,euler,maxwell,sw,advection,two-fluid}'
 	@echo '                           run all gates for one physics module (cached):'
 	@echo '                             mhd 33 gates ~70s, euler 33 ~105s, maxwell 23 ~40s,'
 	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 6 ~20s'
-	@echo '  make bench-all           build + run every analytic-solution gate (121 benches; ~4 min cached)'
+	@echo '  make bench-all           build + run every analytic-solution gate (122 benches; ~4 min cached)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -290,12 +291,12 @@ help:
 	@echo '                           e_2N) >= P-dependent floor.  Advection 2D + 3D P=2-5 (8) +'
 	@echo '                           Euler 3D P=2/3 (2).  Catches scheme-order regressions an'
 	@echo '                           absolute-L2 sentinel would miss (~30s cached).'
-	@echo '  make bench-bcs           26 boundary-condition + source-term gates exercising every'
+	@echo '  make bench-bcs           27 boundary-condition + source-term gates exercising every'
 	@echo '                           BC dispatch arm (interior / wall / outflow / inflow) across'
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
 	@echo '                           the source-term hook in rk_stage_kernel (~45s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (121 benches; ~4 min cached, ~10 min cold)'
+	@echo '  make bench-all           build + run every gate (122 benches; ~4 min cached, ~10 min cold)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -769,6 +770,8 @@ bench-two-fluid-langmuir-3d: bench_two_fluid_langmuir_3d
 	./bench_two_fluid_langmuir_3d
 bench-two-fluid-outflow-3d: bench_two_fluid_outflow_3d
 	./bench_two_fluid_outflow_3d
+bench-two-fluid-inflow-3d: bench_two_fluid_inflow_3d
+	./bench_two_fluid_inflow_3d
 bench-two-fluid-walls-3d: bench_two_fluid_walls_3d
 	./bench_two_fluid_walls_3d
 bench-two-fluid-walls-3d-p3: bench_two_fluid_walls_3d_p3
@@ -849,13 +852,13 @@ bench-quick: \
 	@echo '=== bench-quick: 13 representative gates PASSED ==='
 
 
-# Boundary-condition + source-term sweep -- 26 gates exercising
+# Boundary-condition + source-term sweep -- 27 gates exercising
 # every BC dispatch arm (BC_INTERIOR / BC_WALL / BC_OUTFLOW /
-# BC_INFLOW) across all physics except FiveMomentTwoFluid's
-# BC_INFLOW arm (rare-in-practice; covered explicitly elsewhere
-# only via the J source-coupling), plus the Euler gravity source
-# (hydrostatic) and Euler channel steady-state (3 BC types in one
-# gate).  Run when iterating on BC routing, ghost-state assembly,
+# BC_INFLOW) across every physics module, plus the Euler gravity
+# source (hydrostatic) and Euler channel steady-state (3 BC types
+# in one gate).  bench_two_fluid_inflow_3d closes the FiveMoment-
+# TwoFluid BC_INFLOW gap that earlier README + bench docstrings
+# noted as unexercised.  Run when iterating on BC routing, ghost-state assembly,
 # inflow_q wiring, or the source-term hook in rk_stage_kernel.
 # Run-time ~45s w/ cached binaries (first cold run is ~6 min
 # since most BC benches aren't in any other aggregator's prebuild
@@ -871,8 +874,9 @@ bench-bcs: \
 		bench-mhd-wall-2d bench-mhd-wall-2d-glm bench-mhd-wall-3d \
 		bench-maxwell-outflow-2d bench-maxwell-inflow-2d \
 		bench-maxwell-outflow-3d bench-maxwell-inflow-3d \
-		bench-two-fluid-outflow-3d bench-two-fluid-walls-3d
-	@echo '=== bench-bcs: 26 BC + source-term gates PASSED ==='
+		bench-two-fluid-outflow-3d bench-two-fluid-inflow-3d \
+		bench-two-fluid-walls-3d
+	@echo '=== bench-bcs: 27 BC + source-term gates PASSED ==='
 
 
 # Convergence-rate sweep -- 10 gates that explicitly assert
@@ -1019,19 +1023,20 @@ bench-advection: \
 	@echo '=== bench-advection: 12 Advection-focused gates PASSED ==='
 
 
-# Two-Fluid focused regression suite -- 6 gates covering the
+# Two-Fluid focused regression suite -- 7 gates covering the
 # FiveMomentTwoFluid (NC=17) physics: Langmuir oscillation (the
 # primary plasma test, validates the Maxwell-coupling J source),
-# wall + outflow BC preservation (P=2/3/4/5 for walls; P=2 outflow).
-# Run when iterating on the Two-Fluid module, the J/M-coupled
-# Maxwell stack, or BC dispatch on NC=17.  Run-time ~20s w/ cached
-# binaries.
+# wall + outflow + inflow BC preservation (P=2/3/4/5 for walls;
+# P=2 outflow; P=2 inflow).  After this set every BC dispatch arm
+# in FiveMomentTwoFluid.boundary_flux has a direct gate.  Run when
+# iterating on the Two-Fluid module, the J/M-coupled Maxwell stack,
+# or BC dispatch on NC=17.  Run-time ~22s w/ cached binaries.
 bench-two-fluid: \
 		bench-two-fluid-langmuir-3d \
-		bench-two-fluid-outflow-3d \
+		bench-two-fluid-outflow-3d bench-two-fluid-inflow-3d \
 		bench-two-fluid-walls-3d bench-two-fluid-walls-3d-p3 \
 		bench-two-fluid-walls-3d-p4 bench-two-fluid-walls-3d-p5
-	@echo '=== bench-two-fluid: 6 Two-Fluid-focused gates PASSED ==='
+	@echo '=== bench-two-fluid: 7 Two-Fluid-focused gates PASSED ==='
 
 
 # P=5 P-parity sweep -- 19 gates at the largest comptime config
