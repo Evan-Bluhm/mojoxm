@@ -23,8 +23,18 @@
 # x=0.50001 (just right of x0) -> rho_*L (post-rarefaction), and
 # x=0.95 -> rho_*R (post-shock at t=0.2 since x_shock ~ 0.5+0.2*1.75=0.85).
 #
+# Plus a rarefaction-fan monotonicity sweep: 8 samples from x=0.30 to
+# x=0.485 must be monotonically non-increasing across the head-tail
+# band, gating the rarefaction's similarity-solution branch.
+#
 # Plus one symmetry check: identical L/R state -> IC density is
 # returned everywhere (Newton solver doesn't fail on degenerate IC).
+#
+# Plus a strong-shock case from Toro 2009 Table 4.1 / 4.3 (Test 3:
+# p_L=1000, p_R=0.01, 5 orders of magnitude pressure ratio): three
+# checks gate rho_*L ~ 0.5754, rho_*R ~ 5.999, and S_R ~ 23.5175 at
+# t=0.012.  Sod's mild 10:1 pressure ratio leaves Newton-iteration
+# bugs latent that this strong shock catches.
 #
 # Pure host Float64 math: no GPU, no MPI.  Runs in <0.5s.
 # ======================================================================
