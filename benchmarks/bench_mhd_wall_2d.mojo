@@ -6,7 +6,7 @@
 # tangential to the +/-y walls (periodic in x, walls only in y) --
 # routed through `mhd_face_flux_kernel_2d` (NC=6) instead of the
 # GLM kernel.  Closes a coverage gap: the BC_WALL branch in the
-# plain-MHD kernel (lines 242-250 of src/local_mesh_2d_gpu_mhd.mojo)
+# plain-MHD kernel (lines 287-295 of src/local_mesh_2d_gpu_mhd.mojo)
 # was previously untested.
 #
 # Pass criteria (P=2, NX=8 NY=4, T=1):

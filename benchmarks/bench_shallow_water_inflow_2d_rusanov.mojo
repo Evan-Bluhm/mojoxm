@@ -6,9 +6,9 @@
 # `bench_shallow_water_inflow_2d` exercises BC_INFLOW + BC_OUTFLOW
 # through the HLL flux kernel (`sw_face_flux_hll_kernel_2d`).  The
 # Rusanov flux kernel (`sw_face_flux_kernel_2d`) has its own copy of
-# the BC ghost-state assembly logic at lines 187-206 of
+# the BC ghost-state assembly logic at lines 221-240 of
 # src/local_mesh_2d_gpu_sw.mojo -- structurally identical to the
-# HLL copy at lines 322-341, but a separate compiled body.  A
+# HLL copy at lines 372-391, but a separate compiled body.  A
 # regression in the Rusanov-side BC code wouldn't trip the existing
 # inflow bench (which uses HLL).  This bench is the matched gate.
 #

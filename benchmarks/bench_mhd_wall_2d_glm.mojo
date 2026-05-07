@@ -3,7 +3,7 @@
 # ======================================================================
 #
 # Direct gate for the BC_WALL branch of `mhd_glm_face_flux_kernel_2d`
-# (lines 262-271 of src/local_mesh_2d_gpu_mhd_glm.mojo), which
+# (lines 312-321 of src/local_mesh_2d_gpu_mhd_glm.mojo), which
 # reflects normal momentum and normal B-field, plus negates psi.
 # Companion to bench_mhd_inflow_2d_glm (BC_INFLOW arm) and the
 # periodic Alfven / GLM psi-damp / GLM psi-transport benches
