@@ -878,12 +878,12 @@ top 5 benches, sorted by avg us/launch:
   bench_mhd_brio_wu_3d_p3          rk_stage       408.9    3807     1556.8
   bench_euler_vortex_3d_p3         rk_stage       392.3   11403     4473.2
   -> shown 5 benches: 14.39 s of dominant-kernel time;
-     full suite (62.51 s across all benches dominant-kernel-only)
+     full suite (62.79 s across all benches dominant-kernel-only)
 ```
 
-The full-suite footer (`62.51 s`) is the irreducible compute budget
+The full-suite footer (`62.79 s`) is the irreducible compute budget
 for `make profile-bench-all` (excluding nsys profile + launch
-overhead which dominates wall time).  3D dominates (58.9 s) over 2D
+overhead which dominates wall time).  3D dominates (59.2 s) over 2D
 (3.6 s) by ~16x.
 
 Other useful flags:
