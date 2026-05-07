@@ -12,10 +12,12 @@
 #   1 internal face (the diagonal) + 1 +x face + 1 +y face = 3
 # so TOTAL_FACES = 3 * Nx * Ny on a periodic grid.
 #
-# This module is intentionally host-only -- it builds NumPy-scale tables
-# so a CPU-side 2D solver (or validation harness) can run before GPU
-# kernels are ported.  Device buffers and GPU build kernels are future
-# work; see project_2d_triangles_scope.md for the roadmap.
+# This module is host-only Float64 -- it builds NumPy-scale tables on
+# the host that get uploaded to the device (in Float32) by
+# `LocalMesh2DGpu` in `src/local_mesh_2d_gpu.mojo`.  Keeping the host
+# tables in Float64 lets the topology-construction math be exact; the
+# per-physics 2D GPU kernels then run in Float32 to match the 3D
+# stack's register / shared-mem budget.
 #
 # Table layouts (all flat 1D lists):
 #
