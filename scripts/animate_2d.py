@@ -123,7 +123,10 @@ def build_triangulation(mesh: meshio.Mesh) -> Triangulation:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "pvd_or_dir",
         type=Path,
