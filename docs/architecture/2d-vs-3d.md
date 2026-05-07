@@ -20,7 +20,7 @@ trait, the same SSPRK3 stage plan, and (mostly) the same BC menu.
 | Get answers fastest (z-uniform, single-GPU box)       | **2D**      |
 
 The 2D path runs at **~17 K SSPRK3 steps/sec** on a 64×64 mesh on an RTX
-3090; the 3D path runs at **~1.2 GDOF/s** on a 32³ mesh. For an apples-to-
+3090; the 3D path runs at **~1.1 GDOF/s** on a 32³ mesh. For an apples-to-
 apples convergence study at small mesh, 2D wall-clocks tend to be 5–10×
 faster because the per-element working set is so much smaller.
 

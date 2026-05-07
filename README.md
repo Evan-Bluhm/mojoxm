@@ -826,8 +826,8 @@ End-to-end wall clock for a 10-frame run at 32³ (196 K tets, 2.0 M DOF
 ~0.2 s is the final sync, and ~0.01 s is async kernel enqueue.
 
 Sync'd post-run measurement (`Solver.bench_step_loop`, 50 steps
-after warmup) reports **1.2 GDOF/s** throughput and **~36 GB/s
-state bandwidth** (lower bound; ~3.5 % of the RTX 3090's ~1 TB/s
+after warmup) reports **~1.1 GDOF/s** throughput and **~34 GB/s
+state bandwidth** (lower bound; ~3.4 % of the RTX 3090's ~1 TB/s
 peak DRAM).  The mean density drifts by ~2·10⁻⁶ over the 280-step
 run — well within single-precision round-off expectations.
 
