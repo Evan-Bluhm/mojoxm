@@ -196,9 +196,9 @@ multi-rank decomposition + halo-exchange machinery.
     wave with rel L2 ~4e-5 at P=2 / 32x32 over one period; BC_WALL
     on all four sides).
   * **Shocks (HLLC + BJ limiter):** `euler_sod_2d_gpu` (classical
-    Sod lifted to 2D at P=2 / 128x16: rho overshoot 0.27 % above
-    rho_L, boundary states within 0.2 % of expected; 5100 steps/sec
-    with three limiter passes per SSPRK3 step).
+    Sod lifted to 2D at P=2 / 128x16: rho overshoot ~0.17 % above
+    rho_L, boundary states within ~0.15 % of expected; ~7300
+    SSPRK3 steps/sec with three limiter passes per stage).
 
   **Tests:** GPU kernels are validated by self-consistent invariants
   rather than CPU reference code.  33 tests run under `make test-all`,
