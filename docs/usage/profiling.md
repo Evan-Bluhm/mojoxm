@@ -111,7 +111,7 @@ top 5 benches, sorted by avg us/launch:
   bench_mhd_brio_wu_3d_p3          rk_stage       408.9    3807     1556.8
   bench_euler_vortex_3d_p3         rk_stage       392.3   11403     4473.2
   -> shown 5 benches: 14.39 s of dominant-kernel time;
-     full suite (67.46 s across all benches dominant-kernel-only)
+     full suite (67.87 s across all benches dominant-kernel-only)
 ```
 
 Useful flags:
