@@ -811,8 +811,9 @@ End-to-end wall clock for a full 20-frame run at 48³ (663 K tets,
 **~5.6 s**, of which ~5.4 s is download + VTU frame I/O.
 
 Sync'd post-run measurement (`Solver.bench_step_loop`) reports
-**3.3 GDOF/s** throughput and **~97 GB/s state bandwidth** (lower
-bound; ~10 % of the RTX 3090's ~1 TB/s peak DRAM).  The fused
+**~3.0 GDOF/s** throughput and **~90 GB/s state bandwidth** (lower
+bound; ~9 % of the RTX 3090's ~1 TB/s peak DRAM; run-to-run noise
+on a 5-step warmup + 50-step measurement is ~5%).  The fused
 RK-stage kernel additionally achieves **98% of peak L1-cache
 throughput** according to Nsight Compute at 48³ (scalar advection
 specialization).
