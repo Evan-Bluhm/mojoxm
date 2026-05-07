@@ -328,6 +328,9 @@ help:
 	@echo '                           render a 3D run to dashboard.gif (density slice +'
 	@echo '                           diagnostics CSV time-series in a 2x2 layout)'
 	@echo '  ParaView                 open output/solution_X.pvd directly'
+	@echo '  scripts/validate_vtu.py output/frame_*.vtu'
+	@echo '                           sanity-check VTU output (meshio-roundtrip + VTK_LAGRANGE'
+	@echo '                           _TETRAHEDRON spec compliance; -v for per-file diagnostics)'
 	@echo ''
 	@echo 'Overrides (use for Klone + Apptainer):'
 	@echo "  MOJO='apptainer exec --nv --bind /sw --bind /gscratch mojo.sif mojo'"
