@@ -2,10 +2,11 @@
 # bench_maxwell_inflow_2d -- 2D Maxwell BC_INFLOW preservation gate
 # ======================================================================
 #
-# Companion to bench_maxwell_outflow_2d.  After this commit
-# `maxwell_face_flux_kernel_2d` has a fourth dispatch arm for
-# BC_INFLOW (Maxwell was previously the only 2D physics that lacked
-# one) and this gate exercises it directly.
+# Companion to bench_maxwell_outflow_2d.  Exercises the BC_INFLOW
+# dispatch arm of `maxwell_face_flux_kernel_2d`, which writes the
+# user-set 6-component ghost state (Ex, Ey, Ez, Bx, By, Bz) before
+# the Rusanov arbiter decides which side's information propagates
+# into the domain.
 #
 # Cleanest test: uniform constant state matched to the inflow ghost.
 # Since the IC matches the BC_INFLOW ghost exactly, the analytic

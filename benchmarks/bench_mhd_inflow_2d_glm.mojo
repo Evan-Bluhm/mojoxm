@@ -2,13 +2,12 @@
 # bench_mhd_inflow_2d_glm -- first BC gate for 2D GLM-MHD
 # ======================================================================
 #
-# Closes a real coverage + feature gap.  Until this iteration, the
-# 2D GLM-MHD face-flux kernel had no BC_INFLOW path -- only
-# BC_INTERIOR + BC_WALL with the else branch acting as zero-gradient
-# outflow.  The README's "full BC menu (periodic / wall / outflow /
-# inflow)" claim was inaccurate for 2D MHD.  This iteration adds the
-# BC_INFLOW path to mhd_glm_face_flux_kernel_2d (NC=7 ghost) and
-# closes the loop with this bench.
+# First BC_INFLOW gate for 2D GLM-MHD (NC=7).  The BC_INFLOW arm of
+# `mhd_glm_face_flux_kernel_2d` writes the user-set 7-component
+# ghost state (rho, rho*u, rho*v, Bx, By, E, psi) and the Rusanov
+# arbiter then decides which side's information propagates into the
+# domain.  This gate exercises that arm directly; without it the
+# BC_INFLOW dispatch in 2D GLM-MHD would have no test traffic.
 #
 # Setup mirrors bench_mhd_inflow_3d: matched-state subsonic inflow
 # on -x with BC_OUTFLOW on +x and periodic in y.  IC = inflow ghost
