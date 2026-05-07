@@ -830,11 +830,15 @@ compute_theta + apply split (commit `cdc3210`):
 | `bj_limit_apply_2d`        |  9.2%         |
 | `cell_mean_kernel_2d`      |  6.6%         |
 
-The 2D limiter pipeline tracks ~44 / 48 / 50% of GPU time at
-P=3 / 4 / 5 -- it grows with NP because the inner per-element
-`compute_theta` loop is O(NP).  The apply-pass uncoalesced
-pattern that previously dominated has been neutralized:
-adjacent threads now share `elem` and stride-1 writes to `q[]`.
+The 2D limiter pipeline (compute_theta + apply) tracks ~44 / 48 /
+45% of GPU time at P=3 / 4 / 5 on the limited Sod path.  It grows
+from P=3 to P=4 because the inner per-element `compute_theta`
+loop is O(NP), but at P=5 the per-element Euler vol+lift+rk
+kernel pulls ahead (vol+lift+rk grows with NP * NC * arithmetic
+at NP=21 / NC=4 = 84 q values per thread block) and the limiter's
+share comes back down to ~45%.  The apply-pass uncoalesced pattern
+that previously dominated has been neutralized: adjacent threads
+now share `elem` and stride-1 writes to `q[]`.
 
 The same split was mirrored to 3D in commit `0435ad6`, but the
 cost story flips: in 3D the cooperative `rk_stage_kernel` grows
