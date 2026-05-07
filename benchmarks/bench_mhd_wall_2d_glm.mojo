@@ -2,13 +2,13 @@
 # bench_mhd_wall_2d_glm -- BC_WALL preservation gate for 2D GLM-MHD
 # ======================================================================
 #
-# Closes a coverage gap: every 2D MHD bench either uses periodic BCs
-# (Alfven, GLM psi-damp / -transport) or has been the new BC_INFLOW
-# bench just landed.  The BC_WALL branch in `mhd_glm_face_flux_kernel_2d`
-# (lines 262-271 of src/local_mesh_2d_gpu_mhd_glm.mojo) -- which
-# reflects normal momentum and normal B-field, plus negates psi -- has
-# never been gated by a 2D bench.  A regression in any of those reflect
-# signs would not have been caught.
+# Direct gate for the BC_WALL branch of `mhd_glm_face_flux_kernel_2d`
+# (lines 262-271 of src/local_mesh_2d_gpu_mhd_glm.mojo), which
+# reflects normal momentum and normal B-field, plus negates psi.
+# Companion to bench_mhd_inflow_2d_glm (BC_INFLOW arm) and the
+# periodic Alfven / GLM psi-damp / GLM psi-transport benches
+# (BC_INTERIOR).  Together these cover all four BC dispatch arms
+# in the 2D GLM-MHD face-flux kernel.
 #
 # Cleanest non-shocked test: uniform state at rest (u=0) with B =
 # (B0, 0) tangential to the +/-y walls (periodic in x; walls only
