@@ -82,12 +82,45 @@ def main():
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--output-dir", default="output")
-    ap.add_argument("--rank-dirs", action="store_true",
-                    help="glob output/rank_*/ for multi-rank runs")
-    ap.add_argument("--out", default="output/dashboard.gif")
-    ap.add_argument("--fps", type=int, default=10)
-    ap.add_argument("--dpi", type=int, default=100)
+    ap.add_argument(
+        "--output-dir",
+        default="output",
+        help=(
+            "directory to scan for VTU frames + diagnostics.csv "
+            "(default: 'output').  At np=1 the script expects "
+            "<dir>/frame_*.vtu + <dir>/diagnostics.csv."
+        ),
+    )
+    ap.add_argument(
+        "--rank-dirs",
+        action="store_true",
+        help=(
+            "glob <output-dir>/rank_*/ for multi-rank runs (each rank "
+            "writes its own owned-element frame set).  Frames are "
+            "concatenated in lexicographic rank order to form one "
+            "global slice per timestep."
+        ),
+    )
+    ap.add_argument(
+        "--out",
+        default="output/dashboard.gif",
+        help="output GIF path (default: 'output/dashboard.gif').",
+    )
+    ap.add_argument(
+        "--fps",
+        type=int,
+        default=10,
+        help="frames per second in the rendered GIF (default: 10).",
+    )
+    ap.add_argument(
+        "--dpi",
+        type=int,
+        default=100,
+        help=(
+            "matplotlib figure DPI -- raise for sharper text + lines, "
+            "lower for a faster render and smaller file (default: 100)."
+        ),
+    )
     args = ap.parse_args()
 
     diag = load_diagnostics(os.path.join(args.output_dir, "diagnostics.csv"))
