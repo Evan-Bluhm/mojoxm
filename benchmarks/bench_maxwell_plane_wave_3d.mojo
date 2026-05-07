@@ -56,9 +56,11 @@ comptime CFL = Float32(0.2)
 comptime IC_BLOCK = 256
 comptime TWO_PI_F: Float32 = 6.28318530717958647692
 
-# Empirical: ~5e-4 at NX=16 NY=NZ=4 P=2; 1e-3 leaves ~2x margin.
+# Empirical: ~6.5e-4 at NX=16 NY=NZ=4 P=2; 1e-3 leaves ~1.5x margin.
 comptime L2_MAX_REL: Float64 = 1.0e-3
-# Empirical leakage ~3e-4 (Kuhn-tet asymmetry).  5e-4 = ~1.7x margin.
+# Empirical leakage ~4.5e-4 (Kuhn-tet asymmetry).  5e-4 = ~1.1x margin
+# -- the gate is tight here; if the floor drifts further, the
+# threshold needs raising rather than the kernel needing fixing.
 comptime ZERO_COMPONENT_MAX: Float64 = 5.0e-4
 
 
