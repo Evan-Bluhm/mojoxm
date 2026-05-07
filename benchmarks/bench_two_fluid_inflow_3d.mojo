@@ -2,12 +2,13 @@
 # bench_two_fluid_inflow_3d -- 3D Two-Fluid BC_INFLOW + BC_OUTFLOW preservation
 # ======================================================================
 #
-# Closes the BC coverage gap explicitly called out in
-# bench_two_fluid_walls_3d's docstring and acknowledged as
-# "FiveMomentTwoFluid BC_INFLOW unexercised" in the README's
-# Capabilities-at-a-glance bullet.  The 17-component BC_INFLOW arm
-# of FiveMomentTwoFluid.boundary_flux (src/two_fluid.mojo line 522)
-# now has a direct gate.
+# Direct gate for the 17-component BC_INFLOW arm of
+# FiveMomentTwoFluid.boundary_flux (src/two_fluid.mojo line 522),
+# the highest-NC BC dispatch path in the suite.  Without this
+# bench the BC_INFLOW arm would be reachable from no test or
+# bench, so a regression in the inflow-ghost write (writing the
+# wrong 17 components, or one of the 17 inflow_* fields not being
+# threaded through to the kernel) would silently pass.
 #
 # Cleanest test: charge-balanced rest state under BC_INFLOW on -x
 # and BC_OUTFLOW on +x (periodic in y/z).  The 17 `inflow_*` fields
