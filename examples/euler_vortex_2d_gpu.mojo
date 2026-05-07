@@ -10,11 +10,12 @@
 # Uses the Float32 Euler kernels from `src/local_mesh_2d_gpu_euler.mojo`:
 #   euler_face_flux_kernel_2d + euler_vol_lift_combine_rk_kernel_2d
 # (2 launches per SSPRK3 stage), orchestrated by `euler_rk_stage_2d`.
-# Every NUM_FRAMES-th step
-# downloads the state, extracts density, and writes a VTU frame to
-# `output/frame_euler2d_gpu_NNNNN.vtu` + a `.pvd` collection -- same
-# layout as the CPU driver, so `scripts/animate_2d.py` works unchanged.
-# Prints wall time (compute only vs total), throughput, final rel L2.
+# Every NUM_FRAMES-th step downloads the state, extracts density,
+# and writes a VTU frame to `output/frame_euler2d_gpu_NNNNN.vtu` +
+# a `.pvd` collection -- the same per-frame layout the rest of the
+# 2D-GPU drivers produce, so `scripts/animate_2d.py` renders this
+# run with no driver-specific flags.  Prints wall time (compute
+# only vs total), throughput, final rel L2.
 # ======================================================================
 
 from std.math import sqrt, exp, pi

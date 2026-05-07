@@ -152,7 +152,8 @@ def main() raises:
     var gamma = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
     var min_p = Float32(1.0e-6)
-    # Kernel-level inflow state (matches the CPU driver's Euler2D ctor).
+    # Kernel-level inflow state passed into the BC_INFLOW arm of
+    # `euler_face_flux_kernel_2d` as the matched ghost.
     var inflow_rho = Float32(RHO_0)
     var inflow_rhou = Float32(rhou_inf)
     var inflow_rhov = Float32(0.0)

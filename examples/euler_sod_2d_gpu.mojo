@@ -98,8 +98,8 @@ def main() raises:
     # IC: tanh-smoothed over ~8 cells so P>=2 can resolve the jump.
     # The BJ limiter + HLLC can handle a fully discontinuous IC too,
     # but the smoothed version keeps rho / p clamped away from the
-    # floors on the first few steps and gives a cleaner comparison
-    # with the CPU driver.
+    # floors on the first few steps and produces a noticeably
+    # cleaner shock at this NX=128 resolution.
     var smooth_width = 8.0 * (LX / Float64(NX))
     var n_q = gpu_mesh.num_elements * NP_p * NC
     var host_q = List[Float32]()
