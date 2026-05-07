@@ -893,7 +893,7 @@ overhead which dominates wall time).  3D dominates (59.2 s) over 2D
 Other useful flags:
 
 * `--by-physics` rolls up per-physics totals (Euler 60% / MHD 15% /
-  Two-Fluid 9% / Advection 7% / Maxwell 5% / SW 3% on the current
+  Two-Fluid 10% / Advection 7% / Maxwell 5% / SW 3% on the current
   baselines) -- size where the suite-wide compute budget actually
   sits across the 123 benches.
 * `--show-cv` adds a CV% column (stddev / avg).  Distinguishes
