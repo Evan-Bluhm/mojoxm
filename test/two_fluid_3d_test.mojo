@@ -2,16 +2,21 @@
 # two_fluid_3d_test -- 3D FiveMomentTwoFluid constant-state preservation
 # ======================================================================
 #
-# Constant-state preservation through Solver[FiveMomentTwoFluid, 2]
-# on a periodic 3D mesh.  17-component state (electrons, ions,
-# Maxwell EM, GLM psi).  IC: charge-balanced uniform plasma (rho_e
-# and rho_i set so net charge = 0), zero drift, E = B = 0, psi = 0.
-# In this rest state the source terms are all zero (no Lorentz force,
-# no current, no charge density driving E) and uniform fluxes cancel,
-# so SSPRK3 must leave the state unchanged to Float32 roundoff.
+# Constant-state preservation through Solver[FiveMomentTwoFluid, P]
+# on a periodic 3D mesh, parameterised over P in {2, 3, 4, 5}.
+# 17-component state (electrons, ions, Maxwell EM, GLM psi).  IC:
+# charge-balanced uniform plasma (rho_e and rho_i set so net charge
+# = 0), zero drift, E = B = 0, psi = 0.  In this rest state the
+# source terms are all zero (no Lorentz force, no current, no
+# charge density driving E) and uniform fluxes cancel, so SSPRK3
+# must leave the state unchanged to Float32 roundoff.
 #
 # This is the most-components physics in the suite (NC=17) and
-# exercises all the source-term arithmetic.
+# exercises all the source-term arithmetic at every supported NP
+# (10/20/35/56 = P=2/3/4/5).  A regression in the per-P comptime
+# specialisation of the source-term kernel that broke at NC*NP=595
+# (P=4) or NC*NP=952 (P=5) but worked at the smaller comptime
+# configs would be caught here.
 # ======================================================================
 
 from std.sys import has_accelerator
