@@ -53,5 +53,8 @@ mojo.sif
 # build products
 build/*.o
 
+# Zensical static site output (built by `make docs-build`)
+/site/
+
 # cron-scheduled task state (Claude Code session-local)
 .claude/scheduled_tasks.lock

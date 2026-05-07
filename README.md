@@ -61,6 +61,14 @@ Plus four MPI utility drivers (`mpi_hello`, `mpi_partition`,
 `mpi_patch_mesh`, `mpi_halo_pingpong`) for hands-on inspection of the
 multi-rank decomposition + halo-exchange machinery.
 
+> **User-facing documentation** is published as a static site, built
+> from the `docs/` directory in this repository.
+> Run `make docs-serve` for a live-reload preview at
+> http://localhost:8000, or `make docs-build` to produce a static site
+> under `./site/`.  See [`docs/getting-started/installation.md`](docs/getting-started/installation.md)
+> for the install instructions if you'd rather read the markdown
+> directly.
+
 ## Contents
 
 - [Capabilities at a glance](#capabilities-at-a-glance)

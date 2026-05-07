@@ -42,13 +42,13 @@ The `IdealMHDGLM` variant adds a hyperbolic scalar \(\psi\) coupled to
 \[
 \frac{\partial \mathbf{B}}{\partial t} + \nabla \cdot (\ldots) + \nabla \psi = 0
 \qquad
-\frac{\partial \psi}{\partial t} + c_h^2 \nabla \cdot \mathbf{B} = -\alpha_d c_h \psi
+\frac{\partial \psi}{\partial t} + c_h^2 \nabla \cdot \mathbf{B} = -\alpha_d \psi
 \]
 
 The first equation propagates \(\nabla \cdot \mathbf{B}\) errors at speed
 \(c_h\) (a free parameter, typically a small multiple of the fastest
 fluid wave speed). The second damps \(\psi\) on a timescale
-\(1/(\alpha_d c_h)\).
+\(1/\alpha_d\).
 
 The result is that any divergence error introduced by truncation
 **propagates away as a wave** rather than accumulating, and is
