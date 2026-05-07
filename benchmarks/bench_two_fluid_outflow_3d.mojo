@@ -2,12 +2,12 @@
 # bench_two_fluid_outflow_3d -- 3D Two-Fluid BC_OUTFLOW preservation
 # ======================================================================
 #
-# Two-Fluid is the only physics in the project whose tests/benches
-# all use BC_INTERIOR (periodic) -- bench_two_fluid_langmuir_3d
-# (plasma oscillation) and test/two_fluid_3d_test (constant-state
-# preservation) both run periodic.  The BC_WALL / BC_OUTFLOW /
-# BC_INFLOW dispatch arms in `FiveMomentTwoFluid.boundary_flux`
-# (src/two_fluid.mojo line 420) are completely untested.
+# Direct gate for the BC_OUTFLOW dispatch arm of
+# `FiveMomentTwoFluid.boundary_flux` (src/two_fluid.mojo line 487).
+# Companion to bench_two_fluid_walls_3d (BC_WALL) and
+# bench_two_fluid_inflow_3d (BC_INFLOW); together the three benches
+# exercise all four BC dispatch arms in the highest-NC physics
+# module (NC=17).
 #
 # Cleanest test: charge-balanced rest state under BC_OUTFLOW on all
 # six faces.  q_e * n_e + q_i * n_i = 0, all velocities = 0, no E,
