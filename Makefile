@@ -218,7 +218,8 @@ help:
 	@echo '  make test-quick          smoke 8 representative tests (~30s w/ cached binaries)'
 	@echo '  make bench-quick         smoke 13 representative benches (~65s)'
 	@echo '  make smoke               test-utils + test-quick + bench-quick combined (~95s; one-command sanity check)'
-	@echo '  make pre-push            format-check + profile-summary-test + smoke (~100s)'
+	@echo '  make pre-push            format-check + profile-summary-test + smoke +'
+	@echo '                           test-vtu-meshio (~100s; routine pre-push gate)'
 	@echo '  make bench-p5            run 19 P=5 P-parity gates at NP=21/56 (~95s)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
@@ -515,14 +516,16 @@ smoke: test-utils test-quick bench-quick
 
 
 # Pre-push check: format-check (~3s) + profile_summary self-test
-# (~0.2s) + smoke (~95s).  Catches the common pre-push regressions:
-# format drift (which the pre-commit hook only sees on staged files,
-# not the working tree at large), plus a parser-self-test on the
-# profile_summary script, plus the broad smoke aggregator.  Use as
-# a routine "is this safe to push?" gate before `git push`.
-# Run-time ~100s wall on the cached path.
-pre-push: format-check profile-summary-test smoke
-	@echo '=== pre-push: format-check + profile-summary-test + smoke PASSED ==='
+# (~0.2s) + smoke (~95s) + VTU meshio-roundtrip validation (~1s).
+# Catches the common pre-push regressions: format drift (which the
+# pre-commit hook only sees on staged files, not the working tree
+# at large), plus a parser-self-test on the profile_summary script,
+# plus the broad smoke aggregator, plus VTK_LAGRANGE_TETRAHEDRON
+# spec validation at P=2..5.  Use as a routine "is this safe to
+# push?" gate before `git push`.  Run-time ~100s wall on the cached
+# path.
+pre-push: format-check profile-summary-test smoke test-vtu-meshio
+	@echo '=== pre-push: format-check + profile-summary-test + smoke + test-vtu-meshio PASSED ==='
 
 
 # Sub-second parser self-test on profile_summary.py.  Catches
