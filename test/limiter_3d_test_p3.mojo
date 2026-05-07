@@ -2,9 +2,9 @@
 # limiter_3d_test_p3 -- P=3 (NP=20) 3D BJ slope limiter coverage
 # ======================================================================
 #
-# P=3 counterpart of limiter_3d_test.  Same two checks
+# P=3 counterpart of limiter_3d_test.  Same three checks
 # (constant-state preservation + cell-mean conservation under
-# perturbation) but at NP=20 nodes per tet.
+# perturbation + limiter-fired sanity) but at NP=20 nodes per tet.
 #
 # At P=2 the mass-matrix-weighted node weights are
 # (-1/20, ..., 1/5, ...).  At P=3 they're a different distribution

@@ -2,9 +2,9 @@
 # limiter_3d_test_p4 -- P=4 (NP=35) 3D BJ slope limiter coverage
 # ======================================================================
 #
-# P=4 counterpart of limiter_3d_test_p3.  Same two checks
+# P=4 counterpart of limiter_3d_test_p3.  Same three checks
 # (constant-state preservation + cell-mean conservation under
-# perturbation) but at NP=35 nodes per tet.
+# perturbation + limiter-fired sanity) but at NP=35 nodes per tet.
 #
 # Brings 3D limiter unit-test parity up to the highest 3D-Euler NP
 # the bench harness exercises through P=4 (`bench_euler_sod_3d_p4`).

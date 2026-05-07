@@ -2,10 +2,11 @@
 # limiter_3d_test_p5 -- P=5 (NP=56) 3D BJ slope limiter coverage
 # ======================================================================
 #
-# P=5 counterpart of limiter_3d_test_p4.  Same two checks
+# P=5 counterpart of limiter_3d_test_p4.  Same three checks
 # (constant-state preservation + cell-mean conservation under
-# perturbation) but at NP=56 nodes per tet -- the largest 3D-Euler
-# NP the bench harness exercises (`bench_euler_sod_3d_p5`).
+# perturbation + limiter-fired sanity) but at NP=56 nodes per tet
+# -- the largest 3D-Euler NP the bench harness exercises
+# (`bench_euler_sod_3d_p5`).
 #
 # A regression in either ReferenceElement[5].node_weights or the
 # 3D BJ limiter's downstream use of them at NP=56 wouldn't be caught
