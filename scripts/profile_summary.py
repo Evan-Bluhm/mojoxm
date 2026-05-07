@@ -383,15 +383,38 @@ def run_self_test() -> int:
         f"cv_pct = {cv_row.cv_pct}, expected 50.0",
     )
 
+    # --by-physics + --show-cv: max-CV reduction per group should pick
+    # the highest per-bench CV.  Two synthetic euler benches with CVs
+    # 50% and 10%; the group max should be 50%.
+    cv_synth = [
+        KernelRow("bench_euler_a", 100.0, 1000, 10, 100.0, 50.0, "kernel_x"),  # CV=50%
+        KernelRow("bench_euler_b", 100.0, 2000, 20, 100.0, 10.0, "kernel_x"),  # CV=10%
+        KernelRow("bench_advection_a", 100.0, 500, 5, 100.0, 80.0, "kernel_y"),  # CV=80%
+    ]
+    cv_by_phys: dict[str, list[KernelRow]] = {}
+    for r in cv_synth:
+        cv_by_phys.setdefault(bench_physics(r.bench), []).append(r)
+    euler_max_cv = max(r.cv_pct for r in cv_by_phys["euler"])
+    advection_max_cv = max(r.cv_pct for r in cv_by_phys["advection"])
+    expect(
+        abs(euler_max_cv - 50.0) < 1e-6,
+        f"euler group max CV = {euler_max_cv}, expected 50.0",
+    )
+    expect(
+        abs(advection_max_cv - 80.0) < 1e-6,
+        f"advection group max CV = {advection_max_cv}, expected 80.0",
+    )
+
     if failures:
         print("profile_summary.py self-test FAILED:", file=sys.stderr)
         for msg in failures:
             print(f"  * {msg}", file=sys.stderr)
         return 1
     n_dom_synth = 3  # 2 length checks + 2 winner checks ~= 3 named asserts
+    n_cv_group = 2  # max-CV reduction per group
     print(
         f"profile_summary.py self-test PASSED ("
-        f"{3 + len(test_cases_kk) + len(test_cases_phys) + n_dom_synth + 1} "
+        f"{3 + len(test_cases_kk) + len(test_cases_phys) + n_dom_synth + 1 + n_cv_group} "
         f"assertions)"
     )
     return 0
@@ -460,7 +483,9 @@ def main() -> int:
             "Add a 'CV %%' column showing coefficient of variation "
             "(stddev / avg).  >50%% typically signals a refinement-sweep "
             "bench (multi-resolution back-to-back) rather than a real "
-            "timing anomaly."
+            "timing anomaly.  Combined with --by-physics, surfaces the "
+            "max per-bench CV in each group (catches refinement-sweep "
+            "modules at a glance)."
         ),
     )
     ap.add_argument(
@@ -533,32 +558,52 @@ def main() -> int:
         by_phys: dict[str, list[KernelRow]] = {}
         for r in dom:
             by_phys.setdefault(bench_physics(r.bench), []).append(r)
+        # Optional max-CV summary per group when --show-cv is set --
+        # surfaces refinement-sweep benches (multi-resolution back-to-
+        # back) clustered into one physics module.  Group rows are
+        # tuples; the trailing max_cv field is None when --show-cv is off.
         groups = [
             (
                 phys,
                 len(rows),
                 sum(r.instances for r in rows),
                 sum(r.total_ms for r in rows),
+                max((r.cv_pct for r in rows), default=0.0)
+                if args.show_cv
+                else None,
             )
             for phys, rows in by_phys.items()
         ]
         groups.sort(key=lambda g: -g[3])
         suite_total_ms = sum(g[3] for g in groups)
         if args.csv:
-            print("physics,benches,instances,total_ms,share_pct")
-            for phys, n_benches, n_inst, t_ms in groups:
+            header = "physics,benches,instances,total_ms,share_pct"
+            if args.show_cv:
+                header += ",max_cv_pct"
+            print(header)
+            for phys, n_benches, n_inst, t_ms, max_cv in groups:
                 share = 100.0 * t_ms / suite_total_ms if suite_total_ms > 0 else 0.0
-                print(f"{phys},{n_benches},{n_inst},{t_ms:.3f},{share:.2f}")
+                row = f"{phys},{n_benches},{n_inst},{t_ms:.3f},{share:.2f}"
+                if args.show_cv:
+                    row += f",{max_cv:.2f}"
+                print(row)
             return 0
         if args.markdown:
-            print("| physics | benches | launches | total ms | share |")
-            print("|---|---:|---:|---:|---:|")
-            for phys, n_benches, n_inst, t_ms in groups:
+            if args.show_cv:
+                print("| physics | benches | launches | total ms | share | max CV % |")
+                print("|---|---:|---:|---:|---:|---:|")
+            else:
+                print("| physics | benches | launches | total ms | share |")
+                print("|---|---:|---:|---:|---:|")
+            for phys, n_benches, n_inst, t_ms, max_cv in groups:
                 share = 100.0 * t_ms / suite_total_ms if suite_total_ms > 0 else 0.0
-                print(
+                row = (
                     f"| {phys} | {n_benches} | {n_inst} | "
                     f"{t_ms:.1f} | {share:.1f}% |"
                 )
+                if args.show_cv:
+                    row += f" {max_cv:.1f} |"
+                print(row)
             return 0
         # Different label semantics in --by-physics: --top is irrelevant
         # since we're aggregating, and the rows are sorted by group total
@@ -570,17 +615,33 @@ def main() -> int:
             phys_label += f" (bench ~ '{args.filter}')"
         phys_label += ", sorted by group total ms:"
         print(phys_label)
-        print(
-            f"  {'physics':<14} {'benches':>8} {'launches':>10} "
-            f"{'total ms':>11} {'share':>7}"
-        )
-        print(f"  {'-' * 14} {'-' * 8} {'-' * 10} {'-' * 11} {'-' * 7}")
-        for phys, n_benches, n_inst, t_ms in groups:
-            share = 100.0 * t_ms / suite_total_ms if suite_total_ms > 0 else 0.0
+        if args.show_cv:
             print(
-                f"  {phys:<14} {n_benches:>8d} {n_inst:>10d} "
-                f"{t_ms:>11.1f} {share:>6.1f}%"
+                f"  {'physics':<14} {'benches':>8} {'launches':>10} "
+                f"{'total ms':>11} {'share':>7} {'max CV %':>9}"
             )
+            print(
+                f"  {'-' * 14} {'-' * 8} {'-' * 10} {'-' * 11} "
+                f"{'-' * 7} {'-' * 9}"
+            )
+            for phys, n_benches, n_inst, t_ms, max_cv in groups:
+                share = 100.0 * t_ms / suite_total_ms if suite_total_ms > 0 else 0.0
+                print(
+                    f"  {phys:<14} {n_benches:>8d} {n_inst:>10d} "
+                    f"{t_ms:>11.1f} {share:>6.1f}% {max_cv:>8.1f}%"
+                )
+        else:
+            print(
+                f"  {'physics':<14} {'benches':>8} {'launches':>10} "
+                f"{'total ms':>11} {'share':>7}"
+            )
+            print(f"  {'-' * 14} {'-' * 8} {'-' * 10} {'-' * 11} {'-' * 7}")
+            for phys, n_benches, n_inst, t_ms, _ in groups:
+                share = 100.0 * t_ms / suite_total_ms if suite_total_ms > 0 else 0.0
+                print(
+                    f"  {phys:<14} {n_benches:>8d} {n_inst:>10d} "
+                    f"{t_ms:>11.1f} {share:>6.1f}%"
+                )
         print(
             f"  -> {len(dom)} benches across {len(groups)} physics modules, "
             f"{suite_total_ms / 1000:.2f} s total"
