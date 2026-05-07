@@ -5,7 +5,7 @@
 # Validates the 3D Barth-Jespersen slope limiter
 # (`compute_cell_averages_kernel` + `bj_limiter_compute_theta_kernel`
 # + `bj_limiter_apply_kernel` in src/solver.mojo, since the
-# split-for-coalescing refactor in commit 0435ad6).  Two checks:
+# split-for-coalescing refactor in commit 0435ad6).  Three checks:
 #
 #   (1) Constant-state preservation: q[c] = constant on every node ->
 #       limiter is a no-op (every nodal deviation is 0, theta=1).
@@ -16,6 +16,11 @@
 #       limiting, the mass-matrix-weighted cell mean
 #         sum_i node_weights[i] * q[i]
 #       must be unchanged to machine precision.
+#
+#   (3) Limiter-fired sanity: max |q - q_perturbed_ic| > 0.01 after
+#       limiting -- proves the test's perturbation actually triggered
+#       active limiting.  Without this, a no-op limiter would pass
+#       check (2) trivially.
 #
 # Why it matters: the original (pre-fix) 3D limiter used an
 # UNWEIGHTED nodal average for the cell mean, which at P=2 gives
