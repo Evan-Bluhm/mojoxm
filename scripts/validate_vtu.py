@@ -129,9 +129,26 @@ def validate_one(path: Path) -> list[str]:
             f"{path}: point coords have {m.points.shape[1]} components, expected 3"
         )
 
+    import numpy as np
+
+    # Sanity: point coords + every point-data scalar are finite.  A NaN
+    # or Inf in the geometry / fields would render as a black hole in
+    # ParaView (or crash the importer).  Catches a writer bug that
+    # propagated bad floats through to disk.
+    if not np.isfinite(m.points).all():
+        n_bad = int((~np.isfinite(m.points)).sum())
+        failures.append(
+            f"{path}: {n_bad} non-finite value(s) in point coordinates"
+        )
+    for name, arr in m.point_data.items():
+        if not np.isfinite(arr).all():
+            n_bad = int((~np.isfinite(arr)).sum())
+            failures.append(
+                f"{path}: {n_bad} non-finite value(s) in point_data[{name!r}]"
+            )
+
     # Per-cell invariants: scan up to 32 cells (covers small-mesh test
     # fixtures fully; samples driver output cheaply).
-    import numpy as np
 
     n_cells_check = min(32, cells.data.shape[0])
     for ci in range(n_cells_check):
