@@ -9,23 +9,29 @@
 #   1. `linear` integrals on a uniform field recover (value * domain
 #      volume) to better than roundoff.
 #   2. `squared` integrals on a uniform field recover (value^2 * vol).
-#   3. `max_abs` reports the global peak.
-#   4. Zero-component writer (no columns configured) writes just the
+#   3. `max_abs` on a uniform field equals that value.
+#   4. `squared` on a sign-alternating checkerboard IC equals
+#      amp^2 * vol -- independent of sign, validating that the L2
+#      accumulator squares before summing rather than summing then
+#      squaring.
+#   5. `max_abs` on the same checkerboard IC equals amp -- a non-
+#      uniform field where the peak is at element parity boundaries.
+#   6. Zero-component writer (no columns configured) writes just the
 #      time column and doesn't crash.
 #
 # Runs end to end: builds a 4x4x4 mesh, a trivial Advection solver,
-# fills q with a known constant, calls record(), checks the produced
+# fills q with a known IC, calls record(), checks the produced
 # `last_row` values.
 #
-# Parameterised over P in {2, 3, 4, 5}.  All three invariants
-# (linear / squared / max_abs of a uniform field) are exact at every
-# P -- the linear and squared integrals depend on the partition-of-
-# unity property of the mass-matrix-weighted `node_weights` vector
-# (sum_i w_i = 1 across nodes of one element), which is itself unit-
-# tested at P=1..5 in `reference_element_test`.  A regression in the
-# DiagnosticsWriter's per-P `node_weights` upload to the GPU
-# accumulator kernel that broke at NP=20 / 35 / 56 but kept working
-# at NP=10 would be caught here at test-quick latency.
+# Parameterised over P in {2, 3, 4, 5}.  All five numeric invariants
+# (linear / squared / max_abs across uniform + checkerboard) are
+# exact at every P -- the linear and squared integrals depend on the
+# partition-of-unity property of the mass-matrix-weighted
+# `node_weights` vector (sum_i w_i = 1 across nodes of one element),
+# which is itself unit-tested at P=1..5 in `reference_element_test`.
+# A regression in the DiagnosticsWriter's per-P `node_weights` upload
+# to the GPU accumulator kernel that broke at NP=20 / 35 / 56 but
+# kept working at NP=10 would be caught here at test-quick latency.
 # ======================================================================
 
 from src import mpi
