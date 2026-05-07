@@ -2,15 +2,22 @@
 # reference_element_2d_test -- ReferenceElement2D math validation
 # ======================================================================
 #
-# What we check at each P in {1, 2, 3, 4}:
+# What we check at each P in {1, 2, 3, 4, 5}:
 #
-#   1. node count matches num_tri_nodes_2d(P) = (P+1)(P+2)/2.
+#   1. node_pos / M_ref_inv / D_ref / Lift_ref / edge_to_elem
+#      length sanity (each matches num_tri_nodes_2d(P) =
+#      (P+1)(P+2)/2 or its derived size).
 #   2. every node has barycentric coordinates in [0, 1]: each (r, s)
 #      is inside the reference simplex r + s <= 1.
 #   3. Mass matrix M_ref = (M_ref_inv)^-1 is symmetric positive-definite
 #      via Cholesky.
 #   4. Edge-to-element map covers every edge node: 3 edges * (P+1)
-#      entries all in [0, NP).
+#      entries all in [0, NP_p), with vertex spot-check that
+#      edge 0 starts at v0 / ends at v1, etc.
+#   5. node_weights partition-of-unity: sum_i w_i == 1.  At P=2
+#      closed-form spot check (vertex weights 0, edge-midpoint
+#      weights 1/3); at P<=3 weights are non-negative.  Load-
+#      bearing for the 2D BJ limiter's cell-mean conservation.
 #
 # Host-only: no GPU, no MPI.  Runs as `mojo run test/reference_element_2d_test.mojo`.
 # ======================================================================
