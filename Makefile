@@ -1548,5 +1548,5 @@ profile-summary:
 	@scripts/profile_summary.py
 
 clean:
-	rm -f $(ALL_DRIVERS) $(TEST_DRIVERS)
+	rm -f $(ALL_DRIVERS) $(TEST_DRIVERS) $(BENCH_DRIVERS)
 	rm -rf $(BUILD_DIR) test/dumps_np1 test/dumps_np4 output
