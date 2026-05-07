@@ -112,10 +112,17 @@ multi-rank decomposition + halo-exchange machinery.
   (NP=21) and 3D (NP=56), plus shocked Euler at P=2/3/4/5 in both
   dimensions, plus the BJ limiter at P=2/3/4/5 in both dimensions
   (`make bench-p5`, `make test-quick`).
-- **Shock limiter (3D)**: `Solver.enable_cell_limiter(eps)` turns on a
-  Venkatakrishnan-smoothed Barth-Jespersen slope limiter that runs
-  after every RK stage.  Brings classical Sod to T=0.20 with left
-  rho = 0.998, right rho = 0.119 (within ~0.2%/5% of exact).
+- **Shock limiter (2D + 3D)**: a Venkatakrishnan-smoothed Barth-
+  Jespersen slope limiter runs after every RK stage in both
+  pipelines.  3D: `Solver.enable_cell_limiter(eps)` switches on
+  the `compute_cell_average` + `compute_theta` + `apply` kernels
+  in `solver.mojo`.  2D: `bj_limit_full_2d` in
+  `src/local_mesh_2d_gpu_limiter.mojo`, with the same three-stage
+  split (cell_mean kernel, compute_theta, coalesced apply).
+  Both gated end-to-end at P=2/3/4/5 by `bench_euler_sod_limited_*`
+  + `limiter_*_test`.  The 3D path brings classical Sod to T=0.20
+  with left rho = 0.998, right rho = 0.119 (within ~0.2%/5% of
+  exact).
 - **2D triangulated DG (GPU-only)**: `src/reference_2d.mojo` +
   `local_mesh_2d.mojo` build the host-side mesh / reference element
   (validated by `make test-reference-2d` / `test-local-mesh-2d`) and
