@@ -513,7 +513,7 @@ test-all: test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d
 # physics constant-state preservation (euler-2d-gpu, euler-3d), the
 # 2D + 3D limiter pipelines, the P=3 round-trip parametrization, and
 # the 3D multi-field VTU writer (the visualization-output path).
-# Catches the broadest class of regressions in ~30s wall with cached
+# Catches the broadest class of regressions in ~13s wall with cached
 # binaries (~1-2 min cold), vs ~3 min for full test-all.
 test-quick: test-reference test-reference-2d test-euler-2d-gpu test-euler-3d \
             test-limiter-2d-gpu test-limiter-3d test-p3 test-vtu-3d-multi
