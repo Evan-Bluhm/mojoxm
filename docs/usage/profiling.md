@@ -129,8 +129,8 @@ On the current baseline:
 
 | Physics       | % of suite total |
 | ------------- | ---------------- |
-| Euler         | 55%              |
-| Two-Fluid     | 17%              |
+| Euler         | 56%              |
+| Two-Fluid     | 16%              |
 | MHD           | 14%              |
 | Advection     |  6%              |
 | Maxwell       |  4%              |
