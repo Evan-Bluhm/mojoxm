@@ -755,11 +755,11 @@ Sample output from `./euler_vortex` at 32³ (RTX 3090):
 === Step-loop throughput ===
   steps:                50
   DOF / step:           9830400
-  wall time:            388.8 ms
-  per-step wall:        7.8 ms
-  throughput:           1.3 GDOF/s
+  wall time:            429.0 ms
+  per-step wall:        8.6 ms
+  throughput:           1.1 GDOF/s
   state bytes / step:   300.0 MB
-  state bandwidth:      37.7 GB/s  (lower bound; excludes operator + mesh reads)
+  state bandwidth:      34.1 GB/s  (lower bound; excludes operator + mesh reads)
 ============================
 ```
 
