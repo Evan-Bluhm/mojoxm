@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
-# format_check.sh -- non-mutating check that every .mojo file matches
-# `mojo format` output.  Mirrors the pre-commit hook but covers the
-# *whole working tree* (not just staged files), so it can be run
-# standalone before pushing or as a CI gate.
+# format_check.sh [-q] -- non-mutating check that every .mojo file
+# matches `mojo format` output.  Mirrors the pre-commit hook but
+# covers the *whole working tree* (not just staged files), so it
+# can be run standalone before pushing or as a CI gate.
 #
-# Exits 0 if every file is already formatted, 1 if any file would be
-# rewritten (and prints the list).  Files are never modified.
+# Exits 0 if every file is already formatted, 1 if any file would
+# be rewritten (and prints the list on stderr).  Files are never
+# modified.
 #
-# Honours the same MOJO override env var as the Makefile + pre-commit
-# hook: set MOJO=<path> if `mojo` isn't on PATH.
+# Flags:
+#   -q, --quiet     Suppress the trailing success summary line.
+#                   Errors still print on stderr.  Useful in CI
+#                   scripts where "no output = OK" is the convention.
+#
+# Honours the same MOJO override env var as the Makefile + pre-
+# commit hook: set MOJO=<path> if `mojo` isn't on PATH.
 
 set -euo pipefail
+
+quiet=0
+case "${1:-}" in
+    -q|--quiet) quiet=1 ;;
+    -h|--help) sed -n '2,16p' "$0" | cut -c3-; exit 0 ;;
+    "") ;;
+    *) echo "format_check.sh: unknown flag '${1}' (try -h)" >&2; exit 2 ;;
+esac
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$repo_root"
@@ -69,4 +83,6 @@ if [[ ${#bad[@]} -gt 0 ]]; then
     exit 1
 fi
 
-echo "format_check: all ${#files[@]} .mojo files are formatter-clean."
+if (( quiet == 0 )); then
+    echo "format_check: all ${#files[@]} .mojo files are formatter-clean."
+fi
