@@ -237,7 +237,7 @@ multi-rank decomposition + halo-exchange machinery.
     `local_mesh_2d_test`, `diagnostics_test`.
 
 - **Benchmark harness** (`benchmarks/`, run via `make bench-all`):
-  125 analytic-solution gates tying schemes to closed-form reference
+  126 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
   10 explicit log2(e_N / e_2N) rate gates -- advection 2D + 3D at
@@ -257,7 +257,7 @@ multi-rank decomposition + halo-exchange machinery.
   `make bench-bcs` (27 BC + source-term gates, ~45s cached).  When iterating
   on a single physics module, the per-physics aggregators run only
   the gates exercising that module: `make bench-mhd` (33), `bench-euler`
-  (33), `bench-maxwell` (25), `bench-sw` (14), `bench-advection` (12),
+  (33), `bench-maxwell` (26), `bench-sw` (14), `bench-advection` (12),
   `bench-two-fluid` (8).  Or `make smoke` for a one-command
   `test-quick + bench-quick` combined sanity check (~45s cached).
   `make pre-push` chains the four gates a routine push wants to
@@ -266,7 +266,7 @@ multi-rank decomposition + halo-exchange machinery.
   cross-bench summary parser), `smoke` (~45s, test+bench-quick),
   and `test-vtu-meshio` (~1s, meshio-roundtrip + VTK_LAGRANGE_*
   spec compliance on the 3D P=2..5 fixtures).  Total ~50s cached.
-  * **2D smooth (42):** `bench_advection_translation_2d` (rate >= 2.0)
+  * **2D smooth (43):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
     `bench_advection_inflow_2d` (BC_INFLOW preservation gate with
@@ -320,8 +320,10 @@ multi-rank decomposition + halo-exchange machinery.
     kernel BJ limiter at the highest 2D-Euler NP shocked-flow
     config in the suite),
     `bench_shallow_water_dam_break_2d` (closed-pool conservation
-    invariants), `bench_maxwell_cavity_2d` (TM(1,1) standing wave in
-    PEC cavity, period sqrt(2), rel L2 ~3e-4),
+    invariants), `bench_maxwell_cavity_2d` + `_p3` (TM(1,1) standing
+    wave in PEC cavity, period sqrt(2), rel L2 ~3e-4 at P=2 / ~2.4e-5
+    at P=3; the P=3 variant closes the only 2D PEC-at-higher-P
+    coverage gap),
     `bench_maxwell_plane_wave_2d` (TM plane wave traveling in +x
     on a periodic box, one full period; gates actual wave
     propagation + zero-component leakage),
@@ -500,7 +502,7 @@ multi-rank decomposition + halo-exchange machinery.
 
   Profile measurements (smooth-flow benchmarks, NX=32-64 mesh):
   per-stage compute is **20-30%% smaller** depending on NC; launches
-  per stage **3 -> 2 (-33%%)**.  All 125 analytic-solution gates remain
+  per stage **3 -> 2 (-33%%)**.  All 126 analytic-solution gates remain
   bit-identical to the pre-fusion path.
 
   The 3D pipeline's `rk_stage_kernel` is already a single fused
@@ -881,7 +883,7 @@ benchmark.
 ### Cross-bench profile summary
 
 `make profile-summary` (or `scripts/profile_summary.py`) parses the
-125 cached profile reports and ranks every bench by dominant-kernel
+126 cached profile reports and ranks every bench by dominant-kernel
 cost.  Use the default `avg us/launch` view to spot kernel-level
 optimisation targets; switch to `--sort total` to see where the
 suite-wide kernel budget actually sits (top of the avg list isn't
@@ -912,7 +914,7 @@ Other useful flags:
 * `--by-physics` rolls up per-physics totals (Euler 56% / Two-Fluid
   16% / MHD 14% / Advection 6% / Maxwell 5% / SW 3% on the current
   baselines).  Useful for sizing where the suite-wide compute budget
-  actually sits across the 125 benches.
+  actually sits across the 126 benches.
 * `--show-cv` adds a CV% column (stddev / avg).  Distinguishes
   refinement-sweep benches (CV ~50-66%, expected) from single-
   resolution benches (CV <1%).  Combined with `--by-physics`, the

@@ -52,7 +52,7 @@ plasma model coupled to full Maxwell.
 
     ---
 
-    33 unit tests + 125 analytic-solution benchmark gates, including
+    33 unit tests + 126 analytic-solution benchmark gates, including
     10 explicit log₂ convergence-rate gates. Every BC dispatch arm in
     every physics has at least one direct gate.
 

@@ -201,7 +201,7 @@ See [Reference · Limiter](../reference/limiter.md) for the full math.
 | Level                       | What it gates                                       | Count |
 | --------------------------- | --------------------------------------------------- | ----- |
 | Unit tests                  | Constant-state preservation, operator round-trips   | 33    |
-| Analytic-gate benches       | Closed-form reference states, BC dispatch, sources  | 125   |
+| Analytic-gate benches       | Closed-form reference states, BC dispatch, sources  | 126   |
 | Convergence-rate benches    | Explicit \(\log_2(e_N / e_{2N})\) gates             | 10    |
 | Multi-physics gates         | Cross-component invariants (charge, energy, etc.)   | varies|
 

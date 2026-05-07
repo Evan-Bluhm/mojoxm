@@ -65,7 +65,7 @@ is the basis of the `bench_maxwell_uniform_{j,m}_*` gates.
 | Bench                                                  | What it gates                                                  |
 | ------------------------------------------------------ | -------------------------------------------------------------- |
 | `bench_maxwell_cavity_{2d,3d}`                         | TM(1,1) PEC standing wave, rel L2 ~2.8e-4 (2D P=2), ~3.5e-5 (3D P=2) |
-| `bench_maxwell_cavity_3d_p3`                           | Same TM(1,1) PEC cavity at P=3 (NP=20); closes the only PEC-at-higher-P coverage gap, rel L2 ~4.5e-5 |
+| `bench_maxwell_cavity_{2d,3d}_p3`                      | Same TM(1,1) PEC cavity at P=3 (2D NP=10 / 3D NP=20); closes the only PEC-at-higher-P coverage gaps, rel L2 ~2.4e-5 (2D), ~4.5e-5 (3D) |
 | `bench_maxwell_plane_wave_{2d,3d}_p{2..5}`             | TM plane wave on periodic box; 2D rel L2 floor ~5.8e-4 / 4.7e-5 / 1.8e-5 / 1.8e-5 at P=2/3/4/5 |
 | `bench_maxwell_te_plane_wave_{2d,3d}`                  | TE polarisation dual: gates Bz / Ey flux paths                 |
 | `bench_maxwell_outflow_{2d,3d}`                        | BC_OUTFLOW preservation on all faces                           |

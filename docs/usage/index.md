@@ -27,7 +27,7 @@ through the main workflows.
 
     ---
 
-    The 125-gate benchmark suite. Aggregators, per-physics slices, what
+    The 126-gate benchmark suite. Aggregators, per-physics slices, what
     each gate actually checks.
 
 -   :material-chart-areaspline:{ .lg .middle } **[Profiling](profiling.md)**
@@ -52,7 +52,7 @@ through the main workflows.
 | ------------ | -------------------------------------------------------------------- |
 | `make`       | Compile every binary the suite needs. ~2 min cold.                  |
 | `make test*` | Run unit tests (33 of them, gating compile-time invariants).         |
-| `make bench*`| Run analytic-solution gates (125 of them).                           |
+| `make bench*`| Run analytic-solution gates (126 of them).                           |
 | `make profile-bench-<n>` | Wrap one bench in `nsys profile --stats=true`.           |
 | `make smoke` | `test-quick + bench-quick`, ~45 s. The day-to-day green-bar.        |
 | `make pre-push` | Everything CI will run on push. ~50 s.                            |
