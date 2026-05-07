@@ -1,30 +1,38 @@
 #!/usr/bin/env python3
-"""validate_vtu.py -- meshio-roundtrip sanity check for VTU output.
+"""validate_vtu.py -- meshio-roundtrip + VTK_LAGRANGE_TETRAHEDRON
+spec validation for VTU output.
 
-Reads each VTU file passed on the command line, asserts that meshio
-can parse it cleanly, and verifies the cell type + connectivity
-structure matches what a P-th-order Lagrange tetrahedron mesh
-should produce:
+Reads each VTU file passed on the command line and verifies:
 
-    P=2  -> VTK_QUADRATIC_TETRA          (meshio name: tetra10), NP=10
-    P>=3 -> VTK_LAGRANGE_TETRAHEDRON,
-            NP = (P+1)(P+2)(P+3)/6  (20 / 35 / 56 / ...)
+  (1) meshio can parse the binary VTU.
+  (2) Cell type matches the expected Lagrange-tet kind:
+        P=2   -> VTK_QUADRATIC_TETRA       (meshio name: tetra10),  NP=10
+        P>=3  -> VTK_LAGRANGE_TETRAHEDRON, NP=(P+1)(P+2)(P+3)/6
+                                           (20 / 35 / 56 / ...)
+  (3) Per-cell connectivity is unique (no duplicate indices in a row).
+  (4) The 4 corner positions of each cell are distinct.
+  (5) The 4 corners form a non-degenerate tet (volume above floor).
+  (6) Edge interiors at P>=3: lie on the v0->v1, v1->v2, v2->v0,
+      v0->v3, v1->v3, v2->v3 segments at parametric position
+      (j+1)/P (equispaced Lagrange spec).
+  (7) Face interiors at P>=3: lie in the plane of one of the 4 face
+      triangles (face *index* convention is direction-agnostic
+      since VTK docs are themselves ambiguous).
+  (8) Volume interiors at P>=4: strictly inside the tet (every
+      barycentric coord > 0).
 
 Usage:
     scripts/validate_vtu.py file1.vtu [file2.vtu ...]
 
-Exits 0 if every file passes, 1 on the first failure (with a
-description on stderr).
+Exits 0 if every file passes, 1 on the first failure.
 
 Catches:
-  * binary VTU format regressions (mojo writer producing
-    bytes meshio can't parse -- the in-Mojo XML-string check
-    in vtu_3d_multi_test wouldn't see this).
-  * cell-type-71 dispatch regressions at P >= 3.
+  * binary VTU format regressions (the in-Mojo XML-string check in
+    vtu_3d_multi_test wouldn't see this).
+  * cell-type-71 dispatch regressions at P>=3.
   * point/cell count off-by-ones.
-
-Doesn't validate actual node-position ordering against the VTK
-spec -- that's a deeper TBD per project_p_propagation_scope.
+  * any node category drifting off its expected position class
+    (corner / edge / face / volume).
 """
 
 from __future__ import annotations
