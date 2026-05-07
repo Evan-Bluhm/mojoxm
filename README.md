@@ -364,8 +364,10 @@ multi-rank decomposition + halo-exchange machinery.
     NP=10/20/35/56),
     `bench_mhd_inflow_3d` (BC_INFLOW + BC_OUTFLOW preservation for
     NC=8 plain MHD; sub-Alfvenic uniform state preserved under the
-    GLM-disabled flux path -- see `project_glm_bc_coupling` memory
-    for why GLM and non-periodic BCs interact),
+    GLM-disabled flux path -- GLM is disabled here because Dedner
+    cleaning leaks ~1% drift through non-periodic BCs even from
+    psi=0 IC, while plain MHD on the same setup stays at Float32
+    noise),
     `bench_mhd_wall_3d` (BC_WALL slip preservation, plain NC=8 MHD),
     `bench_maxwell_cavity_3d`,
     `bench_maxwell_plane_wave_3d` + `_p3` + `_p4` + `_p5` (TM plane
@@ -430,7 +432,10 @@ multi-rank decomposition + halo-exchange machinery.
   genuinely needed -- the 2D Kuhn-triangle Rusanov flux produces
   ~16x faster transverse Bx error growth than the 3D split-tet
   pattern (Bx drift ~0.6 in 2D at T=0.005 vs ~0.3 in 3D at T=0.08).
-  See `project_2d_mhd_no_glm` memory for the full retry findings.
+  The 3D Brio-Wu gate (`bench_mhd_brio_wu_3d` + `_p3`) passes via
+  Rusanov + GLM + BJ on the split-tet pattern, so the gap is
+  geometric (transverse-flux quality at the tessellation), not
+  algorithmic.
 
 - **Profiling**: `make profile-bench-<name>` runs a benchmark under
   `nsys profile --stats=true` and saves a per-kernel time summary
@@ -803,10 +808,10 @@ proportionally tiny:
 
 This means: 2D limiter optimization has ~3-4x the ROI of the
 same effort in 3D, where the cooperative kernel is the real
-bottleneck.  Possible 2D paths (see `project_2d_limiter_perf`):
-pre-pack density for coalesced compute_theta reads (TRIED, was a
-regression because L2 absorbs the uncoalesced cost); fuse
-cell_mean into the rk_stage kernel.  See
+bottleneck.  Possible 2D paths: pre-pack density for coalesced
+compute_theta reads (tried 2026-04-26, was a regression because
+the L2 cache absorbed the nominally-uncoalesced cost; reverted);
+fuse cell_mean into the rk_stage kernel.  See
 `benchmarks/profile_reports/` for per-kernel measurements on every
 benchmark.
 
