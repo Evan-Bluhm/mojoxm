@@ -849,9 +849,11 @@ bench-quick: \
 	@echo '=== bench-quick: 13 representative gates PASSED ==='
 
 
-# Boundary-condition + source-term sweep -- 18 gates exercising
+# Boundary-condition + source-term sweep -- 26 gates exercising
 # every BC dispatch arm (BC_INTERIOR / BC_WALL / BC_OUTFLOW /
-# BC_INFLOW) across all physics, plus the Euler gravity source
+# BC_INFLOW) across all physics except FiveMomentTwoFluid's
+# BC_INFLOW arm (rare-in-practice; covered explicitly elsewhere
+# only via the J source-coupling), plus the Euler gravity source
 # (hydrostatic) and Euler channel steady-state (3 BC types in one
 # gate).  Run when iterating on BC routing, ghost-state assembly,
 # inflow_q wiring, or the source-term hook in rk_stage_kernel.

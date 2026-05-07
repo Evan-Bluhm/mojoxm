@@ -82,7 +82,9 @@ multi-rank decomposition + halo-exchange machinery.
   struct; the mesh builder allocates BC-side faces and routes them to
   a physics-provided `boundary_flux(q, bc_type, n)` hook.  Every BC
   dispatch arm in every physics has at least one direct gate in the
-  test/bench harness.
+  test/bench harness, with one known rare-in-practice gap:
+  FiveMomentTwoFluid's BC_INFLOW arm is unexercised (most plasma
+  applications drive the system through the J source-coupling).
 - **Source-term hook**: physics types provide a `source_term(q, x, s_out)`
   method evaluated per-node and added pointwise to the SSPRK3 RHS.
   Used for gravity (Euler), current / charge coupling (Maxwell,
@@ -397,10 +399,11 @@ multi-rank decomposition + halo-exchange machinery.
     BC_OUTFLOW on all six faces; the third dispatch arm in
     `Maxwell.boundary_flux` that the cavity / plane-wave gates
     didn't exercise),
-    `bench_maxwell_inflow_3d` (final BC dispatch arm: uniform
-    constant state matched to the inflow ghost on all six faces;
-    after this gate every BC arm in every physics has a direct
-    test),
+    `bench_maxwell_inflow_3d` (uniform constant state matched to
+    the inflow ghost on all six faces; together with the BC_INFLOW
+    gates for Advection / Euler / SW / IdealMHD plain+GLM,
+    completes the BC_INFLOW coverage in every physics module
+    except FiveMomentTwoFluid -- known rare-in-practice gap),
     `bench_shallow_water_wave_3d` + `_p3` + `_p4` + `_p5` (NP=20 /
     NP=35 / NP=56 SW gates; the `_p5` variant closes 3D SW P-parity
     sweep at NP=56 and sits at the same A/H=0.01 nonlinear floor as

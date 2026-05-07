@@ -2,18 +2,24 @@
 # bench_maxwell_inflow_3d -- 3D Maxwell BC_INFLOW preservation gate
 # ======================================================================
 #
-# Closes the last remaining BC dispatch arm in the project that
-# lacked a direct gate.  Maxwell.boundary_flux in src/maxwell.mojo
-# accepts (inflow_Ex, inflow_Ey, inflow_Ez, inflow_Bx, inflow_By,
-# inflow_Bz) but no bench / example passes non-zero values.
+# Closes the BC_INFLOW arm of Maxwell.boundary_flux in
+# src/maxwell.mojo, which accepts (inflow_Ex, inflow_Ey,
+# inflow_Ez, inflow_Bx, inflow_By, inflow_Bz) but had no bench /
+# example passing non-zero values.
 #
 # Cleanest test: uniform constant state matched to the inflow
 # ghost.  IC matches BC_INFLOW exactly so the analytic solution is
 # the IC unchanged for all time -- by the same divergence-theorem
 # argument as the BC_OUTFLOW gates.
 #
-# After this commit every BC dispatch arm in every physics has at
-# least one direct gate.
+# Together with the existing BC_INFLOW gates for Advection, Euler,
+# ShallowWater, and IdealMHD (plain + GLM), this brings every BC
+# dispatch arm in every physics to at least one direct gate
+# EXCEPT FiveMomentTwoFluid's BC_INFLOW arm (line 522 of
+# src/two_fluid.mojo) -- still untested.  Two-Fluid BC_INFLOW is
+# rare in practice (most plasma applications drive the system
+# through the J source-coupling exercised by the Langmuir bench)
+# so it's a known coverage gap, not a regression risk.
 #
 # Pass criteria (P=2, NX=NY=NZ=8, T=0.5):
 #   * max |q - q_IC| < 1e-3 (Float32 epsilon * step accumulation)
