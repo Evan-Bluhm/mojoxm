@@ -244,7 +244,7 @@ help:
 	@echo '  make gpu                 GPU-using drivers (3D + 2D + MPI helpers)'
 	@echo '  make <driver>            build a single driver by name'
 	@echo '  make shim                build just build/mpi_shim.o'
-	@echo '  make clean               remove driver binaries + $(BUILD_DIR)/'
+	@echo '  make clean               remove driver / test / bench binaries + $(BUILD_DIR)/ + output/ + test/dumps_*/'
 	@echo ''
 	@echo 'Test targets (validate kernels against analytic invariants):'
 	@echo '  make test                MPI correctness (np=1 vs np=4, periodic; ~10s cached)'
