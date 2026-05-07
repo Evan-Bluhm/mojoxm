@@ -1,5 +1,5 @@
 # ======================================================================
-# VTU XML writer for a P2 tetrahedral DG field (binary-appended format)
+# VTU XML writer for arbitrary-P tetrahedral DG fields (binary-appended)
 # ======================================================================
 #
 # Outputs a VTK UnstructuredGrid file with the "appended raw binary"
@@ -18,11 +18,18 @@
 #   * Everything below uses raw UnsafePointer + memcpy for the hot
 #     path; List[UInt8].append was previously dominating wall time.
 #
-# Each element contributes its own 10 nodes (no sharing between
-# elements) so DG discontinuities are preserved in ParaView.
-# Cell type: 24 (VTK_QUADRATIC_TETRA).  Node ordering: 4 vertices
-# then edge midpoints 0-1, 1-2, 2-0, 0-3, 1-3, 2-3 -- matches the
-# element-node ordering used throughout this project.
+# Each element contributes its own NP nodes (NP = (P+1)(P+2)(P+3)/6:
+# 10/20/35/56 at P=2/3/4/5) -- no sharing between elements so DG
+# discontinuities are preserved in ParaView.
+#
+# Cell type:
+#   * P=2 (NP=10): emits VTK_QUADRATIC_TETRA (24).  Node ordering is
+#     4 vertices then edge midpoints 0-1, 1-2, 2-0, 0-3, 1-3, 2-3.
+#   * P>=3 (NP=20/35/56): emits VTK_LAGRANGE_TETRAHEDRON (71).  Node
+#     ordering follows VTK's arbitrary-order Lagrange spec via
+#     `_lagrange_tet_exponents(P)` in src.local_mesh; gated end-to-
+#     end by `make test-vtu-meshio` (meshio-roundtrip + spec
+#     validation in scripts/validate_vtu.py).
 # ======================================================================
 
 from std.pathlib import Path
