@@ -210,7 +210,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help format format-check install-hooks profile-summary profile-summary-test pre-push test test-bc test-vtu-meshio test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help format format-check install-hooks docs-serve docs-build profile-summary profile-summary-test pre-push test test-bc test-vtu-meshio test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -321,6 +321,11 @@ help:
 	@echo '                           commit hook but covers the full working tree.'
 	@echo '  make install-hooks       enable the staged-file pre-commit format gate'
 	@echo '                           (sets git core.hooksPath; once per clone)'
+	@echo ''
+	@echo 'Documentation (Zensical static-site generator):'
+	@echo '  make docs-serve          live-reload preview at http://localhost:8000'
+	@echo '                           (requires `pip install zensical`)'
+	@echo '  make docs-build          build static site under ./site/ for hosting'
 	@echo ''
 	@echo 'Visualisation (after running an example driver):'
 	@echo '  scripts/animate_2d.py output/solution_X.pvd -o movie.mp4 -f rho'
@@ -1553,6 +1558,22 @@ install-hooks:
 profile-summary:
 	@scripts/profile_summary.py
 
+# ----------------------------------------------------------------------
+# Documentation site (Zensical static-site generator).
+#
+# `make docs-serve` runs a live-reload preview at http://localhost:8000.
+# `make docs-build` produces a static site under ./site/ for hosting.
+#
+# Zensical is a Python tool independent of the Mojo toolchain.  Install
+# it with `pip install zensical` (or via pixi / uv if you'd rather keep
+# it inside the project's managed env).
+# ----------------------------------------------------------------------
+docs-serve:
+	zensical serve
+
+docs-build:
+	zensical build
+
 clean:
 	rm -f $(ALL_DRIVERS) $(TEST_DRIVERS) $(BENCH_DRIVERS)
-	rm -rf $(BUILD_DIR) test/dumps_np1 test/dumps_np4 output
+	rm -rf $(BUILD_DIR) test/dumps_np1 test/dumps_np4 output site
