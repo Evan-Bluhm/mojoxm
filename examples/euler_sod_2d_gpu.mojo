@@ -10,9 +10,12 @@
 # Uses the HLLC Riemann solver (less dissipative than Rusanov on
 # contact waves) + the Barth-Jespersen / Venkat-smoothed limiter
 # between every SSPRK3 stage.  Together they keep Gibbs overshoots
-# bounded even with a discontinuous initial jump; the CPU driver has
-# to tanh-smooth the IC to stay stable because the CPU limiter wasn't
-# enabled by default.
+# bounded even on a near-discontinuous initial jump.  The IC is
+# additionally tanh-smoothed over ~8 cells to give the limiter
+# stencil a few well-resolved cells of transition rather than a
+# pure step -- the limiter alone could keep a pure step stable,
+# but the smoothed IC produces a noticeably cleaner shock at this
+# (NX=128) resolution.
 #
 # Writes 21 density VTU frames + `output/solution_sod2d_gpu.pvd`.
 # ======================================================================
