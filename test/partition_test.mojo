@@ -11,7 +11,7 @@
 # all 3D drivers; the failure mode would be subtle correctness drift
 # (data going to / coming from the wrong neighbour), not a crash.
 #
-# Three test cases:
+# Six test cases:
 #   (1) nprocs=1 single-rank: every neighbour must equal rank itself,
 #       the entire global grid must be owned.
 #   (2) nprocs=2 cubic mesh (4x4x4): expect a (1,1,2) split (smallest
@@ -20,6 +20,16 @@
 #   (3) nprocs=8 cubic mesh (4x4x4): expect a balanced (2,2,2) split
 #       with each rank owning 2x2x2 cubes; rank 0 (rx=0, ry=0, rz=0)
 #       has 6 distinct face-neighbours under periodic wrap.
+#   (3b) nprocs=4 cubic mesh: cost-tied (px,py,pz) options resolve
+#       to (1,2,2) via loop ordering; periodic neighbours wrap as
+#       expected.
+#   (4) Error path: nprocs=3 / 4x4x4 mesh has no axis-aligned
+#       integer factorisation; build_partition must raise.
+#   (5) Torus topology closure: for every rank r and direction d in
+#       {x, y, z} the (-d) neighbour's (+d) neighbour must be r
+#       itself (and vice versa).  Catches a regression in the
+#       wrap-around modulo math that the per-rank spot checks
+#       wouldn't see.  Sweeps nprocs in {1, 2, 4, 8}.
 #
 # No GPU / no MPI -- pure host integer math.
 # ======================================================================
