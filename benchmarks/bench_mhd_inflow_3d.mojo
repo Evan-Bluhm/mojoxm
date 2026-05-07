@@ -6,7 +6,8 @@
 # 2D + 3D, Brio-Wu, GLM psi damping / transport) uses periodic BCs.
 # The 3D MHD BC paths -- BC_INFLOW (prescribed 9-component ghost
 # state including B and psi) and BC_OUTFLOW (zero-gradient ghost) --
-# in `IdealMHD.boundary_flux` (src/mhd.mojo lines 329-359) have no
+# in `IdealMHD.boundary_flux` (src/mhd.mojo lines 417-426 BC_INFLOW
+# + 427-435 BC_OUTFLOW else branch) had no
 # bench coverage.  A regression in the 3D MHD BC ghost-state
 # assembly would not have tripped any gate.
 #

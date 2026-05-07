@@ -6,7 +6,7 @@
 # standalone operator-split damp kernel (`launch_mhd_glm_psi_damp_2d`)
 # applied once per timestep AFTER the 3 SSPRK3 stages.  The 3D path
 # instead bakes psi-damping into the cooperative `rk_stage_kernel`
-# via the `IdealMHD.source_term` hook (src/mhd.mojo line 374), which
+# via the `IdealMHD.source_term` hook (src/mhd.mojo line 445), which
 # writes `source_out[8] = -alpha_d * q[8]` directly into the RK rhs.
 # Different code path -- needs its own gate.
 #

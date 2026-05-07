@@ -3,7 +3,7 @@
 # ======================================================================
 #
 # Closes a coverage gap.  3D MHD's BC_WALL path (in
-# IdealMHD.boundary_flux at src/mhd.mojo lines 334-345) reflects
+# IdealMHD.boundary_flux at src/mhd.mojo lines 405-416) reflects
 # normal momentum, normal B-field, and negates psi.  It IS exercised
 # by bench_mhd_brio_wu_3d (which uses BC_WALL on the y/z walls), but
 # the Brio-Wu run mixes BC_WALL behaviour with a shocked 1D Riemann

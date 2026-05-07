@@ -7,7 +7,7 @@
 # alpha_d>0 / c_h=0 setup, same exact-exponential analytic decay
 # psi(T) = A0 * exp(-alpha_d * T), but routed through Mesh[3] /
 # Solver[IdealMHD, 3] / rk_stage_kernel[3] so the source-term
-# damping in `IdealMHD.source_term` (src/mhd.mojo line 374) is
+# damping in `IdealMHD.source_term` (src/mhd.mojo line 445) is
 # exercised at NP=20.
 #
 # Pairs with bench_mhd_glm_psi_transport_3d_p3 (transport-only) and
