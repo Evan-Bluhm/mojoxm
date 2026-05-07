@@ -25,7 +25,7 @@ ship today:
   17 components. Lorentz force + current coupling through the
   source-term hook.
 
-Nine reference drivers under `examples/`:
+Nine 3D reference drivers under `examples/`:
 
 - `advection_gaussian` — Gaussian pulse on `[0, 1]³` with `v = (1, 1, 1)`,
   triply periodic. After `T = 1` the exact solution returns to the IC.
@@ -45,6 +45,21 @@ Nine reference drivers under `examples/`:
 - `mhd_alfven` — linearly polarised Alfvén wave in a periodic box.
 - `two_fluid_langmuir` — electron plasma oscillation at the plasma
   frequency, analytic two-fluid period match.
+
+Plus ten 2D-triangle GPU drivers under `examples/*_2d_gpu.mojo`:
+`advection_gaussian_2d_gpu`, `advection_outflow_2d_gpu`,
+`euler_vortex_2d_gpu`, `euler_sod_2d_gpu`, `euler_channel_2d_gpu`,
+`shallow_water_drop_2d_gpu`, `shallow_water_dam_break_2d_gpu`,
+`maxwell_cavity_2d_gpu`, `mhd_alfven_2d_gpu`, plus the NC=7 GLM
+variant `mhd_alfven_glm_2d_gpu` -- covering periodic / non-periodic /
+shock-tube / GLM cleaning configurations on Kuhn-decomposition
+triangle meshes.  See [2D triangulated DG (GPU-only)](#system-architecture)
+below for the full list with measured periodic / non-periodic / shock
+benchmark numbers.
+
+Plus four MPI utility drivers (`mpi_hello`, `mpi_partition`,
+`mpi_patch_mesh`, `mpi_halo_pingpong`) for hands-on inspection of the
+multi-rank decomposition + halo-exchange machinery.
 
 ## Contents
 
