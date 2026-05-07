@@ -14,6 +14,22 @@ Welcome. Workflow notes for getting a change into mojoxm.
   for the current roadmap items. If your change overlaps with one of
   them, mention it in the PR description.
 
+## First-time setup
+
+Once per clone, wire up the pre-commit hook so staged `.mojo` files
+get format-checked automatically before each commit:
+
+```bash
+make install-hooks
+```
+
+This sets `core.hooksPath` to `scripts/git-hooks/`, which contains a
+`pre-commit` script that runs `mojo format` on every staged
+`.mojo` file (validating staged content directly, so partial-stage
+hunks are checked correctly).  The hook **never modifies files** —
+if any are out of conformance it lists them and aborts the commit.
+Run `make format` to fix.
+
 ## Local checks
 
 The pre-push gate is:
