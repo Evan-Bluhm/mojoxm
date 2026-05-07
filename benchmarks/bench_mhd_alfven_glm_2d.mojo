@@ -2,11 +2,12 @@
 # bench_mhd_alfven_glm_2d -- Alfven wave via GLM-enabled 2D MHD
 # ======================================================================
 #
-# Smoke test for the new GLM-enabled 2D MHD kernels (mhd_glm_*).  Same
-# Alfven wave IC as bench_mhd_alfven_2d, but routed through the
-# 7-component GLM path with c_h=0 (GLM transport off) and alpha_d=0
-# (no psi damping), so the answer should match the non-GLM path
-# almost exactly.  psi is initialised to 0 and should stay 0.
+# Smoke test for the GLM-enabled 2D MHD kernels (`mhd_glm_*` in
+# src/local_mesh_2d_gpu_mhd_glm.mojo).  Same Alfven wave IC as
+# bench_mhd_alfven_2d, but routed through the 7-component GLM path
+# with c_h=0 (GLM transport off) and alpha_d=0 (no psi damping),
+# so the answer should match the non-GLM path almost exactly.  psi
+# is initialised to 0 and should stay 0.
 #
 # Pass criteria (P=2, NX=64, thin y-strip):
 #   * rel L2(state, including psi) < 5e-3 (same scheme + same IC as

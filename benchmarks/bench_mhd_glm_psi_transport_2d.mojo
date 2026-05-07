@@ -2,7 +2,7 @@
 # bench_mhd_glm_psi_transport_2d -- GLM linear wave (psi/Bx coupling)
 # ======================================================================
 #
-# Direct test of the c_h transport in the new mhd_glm_* 2D kernels.
+# Direct test of the c_h transport in the 2D mhd_glm_* kernels.
 # Background: rho=1, p=1, u=v=0, By=Bz=0; only Bx and psi are non-
 # trivial.  IC perturbation: psi = A sin(2 pi x / Lx), Bx = 0, all
 # other components at rest values.

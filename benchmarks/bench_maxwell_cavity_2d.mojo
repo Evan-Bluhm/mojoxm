@@ -20,9 +20,10 @@
 #   * non-TM components (Ex, Ey, Bz) stay at machine eps
 #   * no NaN / Inf
 #
-# This is the only 2D Maxwell benchmark; together with the 3D
-# Maxwell cavity (`bench_maxwell_cavity_3d`) it confirms the new
-# 2D Maxwell physics path produces the same EM standing wave.
+# Pairs with bench_maxwell_cavity_3d (3D analog) and the propagating-
+# wave gates bench_maxwell_plane_wave_2d / _te_plane_wave_2d (TM and
+# TE modes on a periodic box) to cover the 2D Maxwell pipeline:
+# wall reflection at PEC + actual propagation across periodic faces.
 # ======================================================================
 
 from std.math import sqrt, sin, cos, pi, isnan, isinf
