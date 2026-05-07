@@ -21,7 +21,7 @@ set -euo pipefail
 quiet=0
 case "${1:-}" in
     -q|--quiet) quiet=1 ;;
-    -h|--help) sed -n '2,16p' "$0" | cut -c3-; exit 0 ;;
+    -h|--help) sed -n '2,17p' "$0" | cut -c3-; exit 0 ;;
     "") ;;
     *) echo "format_check.sh: unknown flag '${1}' (try -h)" >&2; exit 2 ;;
 esac
