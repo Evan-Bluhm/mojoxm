@@ -345,7 +345,7 @@ multi-rank decomposition + halo-exchange machinery.
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (57):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (58):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -391,7 +391,12 @@ multi-rank decomposition + halo-exchange machinery.
     at Float32 noise),
     `bench_mhd_wall_3d` (BC_WALL slip preservation under GLM-disabled
     3D NC=9 MHD),
-    `bench_maxwell_cavity_3d`,
+    `bench_maxwell_cavity_3d` + `_p3` (PEC TM(1,1) standing wave on
+    a 1 x 1 x thin-z cavity; the `_p3` variant at NP=20 closes the
+    only PEC-at-higher-P coverage gap -- every other P>=3 Maxwell
+    bench uses periodic BCs or BC_OUTFLOW, so a regression in the
+    PEC reflection lift coefficient at high P would not trip any
+    other gate),
     `bench_maxwell_plane_wave_3d` + `_p3` + `_p4` + `_p5` (TM plane
     wave on triply-periodic cube; NP=10 / NP=20 / NP=35 / NP=56;
     the `_p5` variant is the highest-order vacuum-Maxwell gate in

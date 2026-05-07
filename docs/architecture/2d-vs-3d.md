@@ -133,7 +133,7 @@ benchmark suite categorises:
 - **2D smooth (42 gates)** — see `bench-quick`, `bench-rates`, `bench-p5`,
   per-physics aggregators
 - **2D shocks + EM (18 gates)** — `bench-shocks`, `bench-bcs`
-- **3D smooth (57 gates)** — same shape, 3D versions
+- **3D smooth (58 gates)** — same shape, 3D versions
 - **3D shocks (7 gates)** — Sod, Brio–Wu, dam break
 
 See [Usage · Benchmarks](../usage/benchmarks.md) for how to run subsets.
