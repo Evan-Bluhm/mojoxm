@@ -48,9 +48,14 @@ from pathlib import Path
 import meshio
 
 
-# (P+1)(P+2)(P+3)/6 -- the number of nodes per Lagrange tet at order P.
+# (P+1)(P+2)(P+3)/6 -- nodes per Lagrange tet at order P.
 def num_tet_nodes(p: int) -> int:
     return (p + 1) * (p + 2) * (p + 3) // 6
+
+
+# (P+1)(P+2)/2 -- nodes per Lagrange triangle at order P.
+def num_tri_nodes(p: int) -> int:
+    return (p + 1) * (p + 2) // 2
 
 
 # Path stems like "vtu_3d_multi_test_p3.vtu" or "frame_00000.vtu"
@@ -64,6 +69,176 @@ def parse_p_from_path(path: Path) -> int | None:
     if not m:
         return None
     return int(m.group(1) or m.group(2))
+
+
+def _validate_2d_triangle(
+    path: Path, m, cells, failures: list[str]
+) -> list[str]:
+    """Per-cell spec validation for VTK_LAGRANGE_TRIANGLE / triangle6 /
+    triangle.  Mirrors the tet validator but with 3 corners + 3 edges
+    + 1 face interior region.
+
+    Cell type expectations:
+      P=2  -> triangle6                  (NP_p=6)
+      P>=3 -> VTK_LAGRANGE_TRIANGLE      (NP_p=(P+1)(P+2)/2: 10 / 15 / 21)
+
+    Edge ordering follows VTK convention:
+      Edge 0: v0 -> v1   Edge 1: v1 -> v2   Edge 2: v2 -> v0
+    """
+    import numpy as np
+
+    nodes_per = cells.data.shape[1]
+    p_from_path = parse_p_from_path(path)
+    p_from_data = None
+    for p in range(1, 8):
+        if num_tri_nodes(p) == nodes_per:
+            p_from_data = p
+            break
+    if p_from_data is None:
+        failures.append(
+            f"{path}: nodes_per_cell={nodes_per} doesn't match "
+            f"num_tri_nodes(P) for any P in 1..7"
+        )
+    if p_from_path is not None and p_from_data is not None:
+        if p_from_path != p_from_data:
+            failures.append(
+                f"{path}: P={p_from_path} from filename but data has "
+                f"NP_p={nodes_per} which corresponds to P={p_from_data}"
+            )
+    p_eff = p_from_data or p_from_path
+
+    # Cell type expectations.
+    if p_eff == 2:
+        expected_type = "triangle6"
+    elif p_eff is not None and p_eff >= 3:
+        expected_type = "VTK_LAGRANGE_TRIANGLE"
+    else:
+        expected_type = None
+    if expected_type is not None and cells.type != expected_type:
+        failures.append(
+            f"{path}: cell type {cells.type!r}, expected {expected_type!r} "
+            f"(P={p_eff}, NP_p={nodes_per})"
+        )
+
+    # Connectivity bounds.
+    n_points = m.points.shape[0]
+    if cells.data.min() < 0 or cells.data.max() >= n_points:
+        failures.append(
+            f"{path}: connectivity index out of [0, {n_points}) range"
+        )
+
+    # Finite values.
+    if not np.isfinite(m.points).all():
+        failures.append(
+            f"{path}: non-finite value(s) in point coordinates"
+        )
+    for name, arr in m.point_data.items():
+        if not np.isfinite(arr).all():
+            failures.append(
+                f"{path}: non-finite value(s) in point_data[{name!r}]"
+            )
+
+    # Per-cell invariants.
+    n_cells_check = min(32, cells.data.shape[0])
+    for ci in range(n_cells_check):
+        row = cells.data[ci]
+        if len(set(int(x) for x in row)) != len(row):
+            failures.append(
+                f"{path}: cell {ci} has duplicate connectivity indices"
+            )
+            break
+        # 3 corners distinct.
+        corners = m.points[row[:3]]
+        for a in range(3):
+            for b in range(a + 1, 3):
+                if np.allclose(corners[a], corners[b], atol=1e-9):
+                    failures.append(
+                        f"{path}: cell {ci} corner nodes {a} and {b} "
+                        f"coincide"
+                    )
+                    break
+        # Non-degenerate triangle: 2D area = 0.5 * |edge1 x edge2|_z
+        # (z is just a sentinel here -- 2D writer puts z=0 on every
+        # node).  In 3D embed, area = 0.5 * |cross(e1, e2)|.
+        v0 = corners[0]
+        e1 = corners[1] - v0
+        e2 = corners[2] - v0
+        area2 = float(np.linalg.norm(np.cross(e1, e2)))
+        if area2 < 1e-12:
+            failures.append(
+                f"{path}: cell {ci} corners are colinear "
+                f"(area = {0.5 * area2:g}); degenerate triangle"
+            )
+            break
+
+        # Edge interiors at P >= 3.  3 edges, (P-1) interiors each.
+        if p_eff is not None and p_eff >= 3:
+            n_edge_interior = p_eff - 1
+            edge_pairs = [(0, 1), (1, 2), (2, 0)]
+            cell_edge_failed = False
+            for ek, (a, b) in enumerate(edge_pairs):
+                ca = corners[a]
+                cb = corners[b]
+                edge_vec = cb - ca
+                edge_len = float(np.linalg.norm(edge_vec))
+                base = 3 + ek * n_edge_interior
+                for j in range(n_edge_interior):
+                    interior = m.points[row[base + j]]
+                    rel = interior - ca
+                    proj = float(np.dot(rel, edge_vec)) / (edge_len * edge_len)
+                    perp = rel - proj * edge_vec
+                    perp_norm = float(np.linalg.norm(perp))
+                    if perp_norm > 1e-5 * edge_len:
+                        failures.append(
+                            f"{path}: cell {ci} edge {ek} interior {j} "
+                            f"is off the edge axis"
+                        )
+                        cell_edge_failed = True
+                        break
+                    expected_t = (j + 1) / p_eff
+                    if abs(proj - expected_t) > 1e-5:
+                        failures.append(
+                            f"{path}: cell {ci} edge {ek} interior {j} "
+                            f"at parametric t={proj:.4f}, expected "
+                            f"{expected_t:.4f}"
+                        )
+                        cell_edge_failed = True
+                        break
+                if cell_edge_failed:
+                    break
+
+        # Face-interior nodes (only at P >= 3): (P-1)(P-2)/2 nodes
+        # that should be STRICTLY inside the triangle, i.e. all 3
+        # barycentric coords > 0.  Solve T @ (b1, b2) = (X - v0) for
+        # 2D embedded in 3D; when the triangle is in the z=0 plane
+        # (which it is for our 2D writer), drop the z component.
+        if p_eff is not None and p_eff >= 3:
+            n_face_interior = (p_eff - 1) * (p_eff - 2) // 2
+            face_base = 3 + 3 * (p_eff - 1)
+            # 2D triangle inversion: project onto (e1, e2) basis.
+            T = np.column_stack([e1, e2])
+            cell_face_failed = False
+            for fk in range(n_face_interior):
+                interior = m.points[row[face_base + fk]]
+                rhs = interior - v0
+                # Least-squares solve (T is 3x2, full-rank for non-
+                # degenerate triangle); barys (b1, b2), b0 = 1-b1-b2.
+                bary12, _, _, _ = np.linalg.lstsq(T, rhs, rcond=None)
+                bary0 = 1.0 - float(bary12.sum())
+                bary = [bary0, float(bary12[0]), float(bary12[1])]
+                eps = 1e-6
+                if any(b <= eps for b in bary):
+                    failures.append(
+                        f"{path}: cell {ci} face-interior node {fk} "
+                        f"is not strictly inside triangle "
+                        f"(barycentric = {[f'{b:.4f}' for b in bary]})"
+                    )
+                    cell_face_failed = True
+                    break
+            if cell_face_failed:
+                break
+
+    return failures
 
 
 def validate_one(path: Path) -> list[str]:
@@ -81,17 +256,11 @@ def validate_one(path: Path) -> list[str]:
         )
 
     cells = m.cells[0]
-    # 2D triangles aren't validated by this script -- the spec
-    # checks below are tetrahedron-specific.  Surface a clear
-    # message rather than the confusing "expected tetra10" cascade.
+    # Dispatch by cell type: tet (3D) vs triangle (2D).  Each branch
+    # implements its own corner / edge / face / volume invariants.
     triangle_types = ("triangle", "triangle6", "VTK_LAGRANGE_TRIANGLE")
     if cells.type in triangle_types or cells.type.startswith("triangle"):
-        return [
-            f"{path}: 2D triangle VTU (cell type {cells.type!r}) -- "
-            f"validate_vtu only supports 3D tetrahedra (tetra10 / "
-            f"VTK_LAGRANGE_TETRAHEDRON).  The 2D writer is exercised "
-            f"by `make test-vtu-2d-multi` directly."
-        ]
+        return _validate_2d_triangle(path, m, cells, failures)
     nodes_per = cells.data.shape[1]
     p_from_path = parse_p_from_path(path)
 
@@ -393,15 +562,25 @@ def main() -> int:
             np_val = cells.data.shape[1]
             n_cells = cells.data.shape[0]
             n_points = mfile.points.shape[0]
+            # Try tet first, then triangle.
+            kind = "tet"
             for p in range(1, 8):
                 if num_tet_nodes(p) == np_val:
                     p_eff = p
                     break
             else:
-                p_eff = "?"
+                p_eff = None
+            if p_eff is None or "triangle" in cells.type.lower():
+                kind = "tri"
+                for p in range(1, 8):
+                    if num_tri_nodes(p) == np_val:
+                        p_eff = p
+                        break
+                else:
+                    p_eff = "?"
             print(
-                f"  {path}: P={p_eff} NP={np_val} cells={n_cells} "
-                f"points={n_points}"
+                f"  {path}: kind={kind} P={p_eff} NP={np_val} "
+                f"cells={n_cells} points={n_points}"
             )
         n_ok += 1
     if not args.quiet:
