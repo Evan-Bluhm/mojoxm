@@ -461,19 +461,22 @@ def main() -> int:
             "'inst' = number of kernel launches (a proxy for step count)."
         ),
     )
-    ap.add_argument(
+    fmt_group = ap.add_mutually_exclusive_group()
+    fmt_group.add_argument(
         "--csv",
         action="store_true",
         help=(
-            "Emit machine-readable CSV instead of the human-readable table."
+            "Emit machine-readable CSV instead of the human-readable table.  "
+            "Mutually exclusive with --markdown."
         ),
     )
-    ap.add_argument(
+    fmt_group.add_argument(
         "--markdown",
         action="store_true",
         help=(
             "Emit a markdown table instead of the human-readable text "
-            "table -- useful for pasting into PRs / issues / docs."
+            "table -- useful for pasting into PRs / issues / docs.  "
+            "Mutually exclusive with --csv."
         ),
     )
     ap.add_argument(
