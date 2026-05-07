@@ -213,7 +213,7 @@ help:
 	@echo 'mojoxm build targets'
 	@echo ''
 	@echo 'Quick start:'
-	@echo '  make gpu                 build all GPU drivers (~30s incremental on a hot cache)'
+	@echo '  make gpu                 build all GPU drivers (~30s incremental; ~5 min cold from zero)'
 	@echo '  make bench-euler-sod-2d  build + run one bench (~3s build + <1s run)'
 	@echo '  make test-quick          smoke 8 representative tests (~15s w/ cached binaries)'
 	@echo '  make bench-quick         smoke 13 representative benches (~30s cached)'
