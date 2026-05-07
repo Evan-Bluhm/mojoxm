@@ -14,7 +14,10 @@
 # bench_maxwell_plane_wave_2d (2D box) and bench_maxwell_cavity_3d
 # (PEC standing wave) to fully cover the 3D Maxwell GPU path:
 # periodic faces + actual propagation, in addition to wall reflection
-# + standing modes.
+# + standing modes.  TE-mode dual lives in
+# bench_maxwell_te_plane_wave_3d (Bz / Ey nonzero instead of
+# Ez / By); both polarizations together gate every flux path in
+# the 3D Maxwell volume + face-flux kernels.
 #
 # Pass criteria (P=2, NX=16, NY=NZ=4, single-rank):
 #   * rel L2(6-component state) < 1e-3
