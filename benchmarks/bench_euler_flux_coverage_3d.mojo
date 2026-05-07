@@ -2,17 +2,27 @@
 # bench_euler_flux_coverage_3d -- gates Rusanov, Roe, HLLE flux paths
 # ======================================================================
 #
-# Closes a real coverage gap: every existing 3D Euler benchmark uses
-# `FLUX_HLLEC`, so `FLUX_RUSANOV`, `FLUX_ROE`, and `FLUX_HLLE` paths
-# in `src/euler.mojo` are completely untested.  A regression in any
-# of those three solvers (or in `euler_roe_solver` / `euler_hlle_
-# solver` / Roe averages) would never trip the existing harness.
+# Closes a real coverage gap: every Euler benchmark outside this
+# file uses `FLUX_HLLEC`, so `FLUX_RUSANOV`, `FLUX_ROE`, and
+# `FLUX_HLLE` paths in `src/euler.mojo` -- plus the Harten-Hyman
+# entropy-fix branch in the wave-based (Roe / HLLE) solvers -- have
+# no other gate.  A regression in any of those three solvers (or in
+# `euler_roe_solver` / `euler_hlle_solver` / Roe averages / the
+# entropy-fix wavespeed flooring) would never trip the existing
+# harness.
 #
 # This bench runs the same smooth entropy-wave IC as bench_euler_
 # smooth_wave_3d under each of the three currently-untested flux
-# types and gates each independently.  It does NOT replace the
-# tighter HLLEC convergence-rate gate; it just gates that the other
-# three flux dispatch arms produce a finite, sensible answer.
+# types and gates each independently.  Roe and HLLE additionally
+# get a second pass with `entropy_fix=True` so the Harten-Hyman
+# branch in `src/euler.mojo` (lines ~398, ~463) sees test traffic.
+# Smooth IC + uniform background means no sonic transitions, so
+# entropy_fix on/off should agree to Float32 noise; the gate's job
+# is just to catch a finite-output / type-error regression in the
+# fix branch, not to test its correctness on near-sonic rarefactions.
+# It does NOT replace the tighter HLLEC convergence-rate gate; it
+# just gates that the four other flux dispatch arms produce a
+# finite, sensible answer.
 #
 # IC: rho = rho0 + A * sin(2 pi x) * sin(2 pi y) * sin(2 pi z),
 #     u = v = w = 1, p = const -- the entropy-wave that all four
@@ -107,8 +117,9 @@ def entropy_wave_ic_kernel(
     q[base + 4] = E
 
 
-def _run(flux_type: Int) raises -> Float64:
-    """Run one period under the specified flux_type; return rel L2."""
+def _run(flux_type: Int, entropy_fix: Bool = False) raises -> Float64:
+    """Run one period under the specified flux_type (and optional Harten-
+    Hyman entropy fix for the wave-based solvers); return rel L2."""
     var rank = mpi.world_rank()
     var size = mpi.world_size()
     var nvtx = NvtxContext()
@@ -134,7 +145,7 @@ def _run(flux_type: Int) raises -> Float64:
         Float32(1.0e-6),
         Float32(1.0e-6),
         flux_type,
-        False,
+        entropy_fix,
     )
     var solver = Solver[Euler](
         ctx^,
@@ -235,16 +246,25 @@ def main() raises:
         "  N=",
         N_RES,
         "  exercising FLUX_RUSANOV, FLUX_ROE, FLUX_HLLE",
+        " (each x {entropy_fix=False, True} for the wave-based solvers)",
     )
 
+    # Each flux type without entropy fix.  Smooth IC + uniform background
+    # flow -> no sonic transitions -> entropy_fix on/off should agree to
+    # Float32 noise.  Both arms gated independently so a regression in
+    # the entropy-fix path can't be hidden by the smooth IC.
     var err_rusanov = _run(FLUX_RUSANOV)
-    _gate("Rusanov", err_rusanov)
+    _gate("Rusanov                  ", err_rusanov)
 
     var err_roe = _run(FLUX_ROE)
-    _gate("Roe    ", err_roe)
+    _gate("Roe  (entropy_fix=False) ", err_roe)
+    var err_roe_efix = _run(FLUX_ROE, entropy_fix=True)
+    _gate("Roe  (entropy_fix=True)  ", err_roe_efix)
 
     var err_hlle = _run(FLUX_HLLE)
-    _gate("HLLE   ", err_hlle)
+    _gate("HLLE (entropy_fix=False) ", err_hlle)
+    var err_hlle_efix = _run(FLUX_HLLE, entropy_fix=True)
+    _gate("HLLE (entropy_fix=True)  ", err_hlle_efix)
 
     print("=== bench_euler_flux_coverage_3d PASSED ===")
     mpi.finalize()
