@@ -52,19 +52,20 @@ DOF survives**. The host keeps:
 - BC dispatch tables (small, host-side OK)
 - Solver scalar config (dt, T_FINAL, etc.)
 
-Everything else lives on the device:
+Everything else lives on the device.  Sample breakdown for an
+Euler vortex run at \(P=2, 32^3\) (NC=5, num_elements = 6 × 32³ =
+196,608) — the categories `Solver.memory_report()` actually prints:
 
-| Allocation                 | Size at \(P=2, 32^3\)         |
+| Category                   | Size at \(P=2, 32^3\)         |
 | -------------------------- | ----------------------------- |
-| `elem_node_xyz`            | ~31 MB (3 × N_P × num_elements × Float32) |
-| Inverse Jacobians          | ~6 MB                         |
-| Face indices + normals + areas | ~13 MB                    |
-| `D_ref[3][N_P][N_P]`       | 1.2 KB (P=2) — operators are tiny |
-| `Lift_ref[4][N_P][N_FP]`   | 960 B (P=2)                   |
-| `q` buffers (×3)           | ~96 MB at NC=5, P=2, 32³      |
+| `q` buffers (×3, RK stages)| 112.5 MB (`3 · num_elements · N_P · NC · Float32`) |
+| Mesh connectivity          | 84.8 MB (`elem_node_xyz` + Jacobians + face tables + permutations) |
+| Cell limiter scratch       | 4.5 MB                        |
+| DG operators               | 2.1 KB (`D_ref` + `Lift_ref` + `node_weights`) |
+| **Total device memory**    | **~202 MB**                   |
 
-`Solver.memory_report()` returns this breakdown as a struct;
-every example driver prints it at startup.
+Every example driver prints this as a startup banner via
+`Solver.memory_report().print()`.
 
 ## SSPRK3 step
 
