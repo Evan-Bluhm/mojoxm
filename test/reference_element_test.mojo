@@ -2,21 +2,33 @@
 # reference_element_test -- validate higher-order Lagrange operators
 # ======================================================================
 #
-# Three things we want to know about the general-order
-# `ReferenceElement[P]` machinery:
+# Six things we want to know about the general-order
+# `ReferenceElement[P]` machinery (each invariant runs at P=1..5):
 #
-#   1. P=2 matches the hand-coded P=2 operators we had before -- if
-#      it doesn't, the existing drivers' bit-identical test suites
-#      would already have caught it, but we test explicitly here for
-#      fail-fast signal during reference-element edits.
+#   1. Sizes (`num_tet_nodes` + `num_tri_nodes`) match the closed-
+#      form (P+1)(P+2)(P+3)/6 and (P+1)(P+2)/2 formulas.
 #
-#   2. Mass matrix is symmetric positive-definite at every supported
-#      order.  A singular or indefinite M means the Vandermonde
-#      inversion blew up or the node placement is degenerate.
+#   2. Mass matrix is symmetric positive-definite.  A singular or
+#      indefinite M means the Vandermonde inversion blew up or the
+#      node placement is degenerate.
 #
-#   3. Node positions sanity: node count matches N_P, positions are
+#   3. Node positions sanity: node count matches NP, positions are
 #      in [0, 1], and every pair of distinct nodes is at a distance
 #      >= 1 / (2P).
+#
+#   4. face_to_elem coverage: every (face, face-local-index) pair
+#      maps to a valid element-local node in [0, NP).
+#
+#   5. node_weights partition-of-unity: sum_i node_weights[i] == 1
+#      to Float64 noise.  At P=2 the weights have a closed-form
+#      spot check (vertex weight = -1/20, edge-midpoint = 1/5).
+#      This invariant is what makes the BJ limiter's cell-mean
+#      conservative -- a regression here would silently break
+#      shock stability.
+#
+#   6. mat_inv direct math: Gauss-Jordan inversion is correct
+#      against three closed-form 2x2 / 3x3 / pivoting cases (the
+#      helper underpins the Vandermonde basis inversion).
 #
 # Run with: `make test-reference` (hooked into the top-level Makefile).
 # ======================================================================
