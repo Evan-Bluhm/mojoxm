@@ -78,7 +78,10 @@ def load_frame(vtu_paths: list[str]) -> tuple[np.ndarray, np.ndarray]:
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     ap.add_argument("--output-dir", default="output")
     ap.add_argument("--rank-dirs", action="store_true",
                     help="glob output/rank_*/ for multi-rank runs")
