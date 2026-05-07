@@ -225,8 +225,9 @@ help:
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~30s cached)'
 	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~45s cached)'
 	@echo '  make bench-{mhd,euler,maxwell,sw,advection,two-fluid}'
-	@echo '                           run all gates for one physics module'
-	@echo '                           (33/33/23/14/12/6 gates resp., ~25-110s each)'
+	@echo '                           run all gates for one physics module (cached):'
+	@echo '                             mhd 33gates ~70s, euler 33 ~105s, maxwell 23 ~40s,'
+	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 6 ~20s'
 	@echo '  make bench-all           build + run every analytic-solution gate (121 benches)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -896,7 +897,7 @@ bench-shocks: \
 # GLM rate gates (transport + damp, 2D + 3D, full P-parity), Brio-Wu
 # shocks (3D P=2/3), BCs (inflow + wall, 2D plain + 2D GLM + 3D).
 # Run when iterating on any MHD code path: physics module, GLM stack,
-# BJ limiter on MHD, Riemann solver.  Run-time ~110s w/ cached
+# BJ limiter on MHD, Riemann solver.  Run-time ~70s w/ cached
 # binaries.
 bench-mhd: \
 		bench-mhd-alfven-2d bench-mhd-alfven-glm-2d \
@@ -924,7 +925,7 @@ bench-mhd: \
 # limited path), BCs (channel-steady, inflow), and the flux-coverage
 # 3D gate.  Run when iterating on Euler internals: physics module,
 # HLLC / HLLEC Riemann solvers, the BJ limiter on Euler, gravity
-# source.  Run-time ~110s w/ cached binaries.
+# source.  Run-time ~105s w/ cached binaries.
 bench-euler: \
 		bench-euler-vortex-2d bench-euler-vortex-2d-p3 \
 		bench-euler-vortex-3d bench-euler-vortex-3d-p3 \
@@ -951,7 +952,7 @@ bench-euler: \
 # TE plane wave (2D), uniform-J / uniform-M sources (2D + 3D, P=2/3),
 # inflow + outflow (2D + 3D).  Run when iterating on Maxwell internals:
 # linear-flux face kernel, J/M source coupling, BC dispatch.  Run-time
-# ~80s w/ cached binaries.
+# ~40s w/ cached binaries.
 bench-maxwell: \
 		bench-maxwell-cavity-2d bench-maxwell-cavity-3d \
 		bench-maxwell-plane-wave-2d bench-maxwell-plane-wave-2d-p3 \
@@ -972,7 +973,7 @@ bench-maxwell: \
 # SW bench: linear wave (2D + 3D, P=2-5 + Rusanov flux variant for
 # 2D), dam-break shocks (2D + 3D), inflow BCs (2D HLL + 2D Rusanov +
 # 3D).  Run when iterating on SW internals: HLL / Rusanov face flux,
-# wet/dry handling, inflow ghost.  Run-time ~50s w/ cached binaries.
+# wet/dry handling, inflow ghost.  Run-time ~30s w/ cached binaries.
 bench-sw: \
 		bench-shallow-water-wave-2d bench-shallow-water-wave-2d-p3 \
 		bench-shallow-water-wave-2d-p4 bench-shallow-water-wave-2d-p5 \
@@ -1005,7 +1006,7 @@ bench-advection: \
 # primary plasma test, validates the Maxwell-coupling J source),
 # wall + outflow BC preservation (P=2/3/4/5 for walls; P=2 outflow).
 # Run when iterating on the Two-Fluid module, the J/M-coupled
-# Maxwell stack, or BC dispatch on NC=17.  Run-time ~25s w/ cached
+# Maxwell stack, or BC dispatch on NC=17.  Run-time ~20s w/ cached
 # binaries.
 bench-two-fluid: \
 		bench-two-fluid-langmuir-3d \
