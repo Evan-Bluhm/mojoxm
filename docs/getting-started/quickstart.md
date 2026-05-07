@@ -63,15 +63,16 @@ the CI hooks will trip on.
 ## Profile
 
 ```bash
-make profile-bench-<name>           # Single bench under nsys --stats=true
-make profile-summary                # Cross-bench ranking by dominant kernel
-scripts/profile_summary.py --by-physics  # Roll up per-physics totals
+make profile-bench-<name>            # Single bench under nsys --stats=true
+make profile-summary                 # Cross-bench ranking by dominant kernel
+make profile-summary-by-physics      # Roll up per-physics totals
 ```
 
 Reports land in `benchmarks/profile_reports/`. Baselines are checked
 in.  Pass `--csv` / `--markdown` / `--filter <regex>` / `--show-cv` /
-`--sort total` to the script directly when you need any of those
-slices.
+`--sort total` to `scripts/profile_summary.py` directly when you need
+any of those slices — `make` only wires up the two most common
+shortcuts.
 
 ## Visualise
 

@@ -212,7 +212,7 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_brio_wu_3d \
                 bench_mhd_brio_wu_3d_p3
 
-.PHONY: all cpu gpu clean help format format-check install-hooks docs-serve docs-build profile-summary profile-summary-test pre-push test test-bc test-vtu-meshio test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
+.PHONY: all cpu gpu clean help format format-check install-hooks docs-serve docs-build profile-summary profile-summary-by-physics profile-summary-test pre-push test test-bc test-vtu-meshio test-reference test-reference-2d test-local-mesh-2d test-local-mesh-2d-gpu test-euler-2d-gpu test-sw-2d-gpu test-mhd-2d-gpu test-mhd-glm-2d-gpu test-maxwell-2d-gpu test-limiter-2d-gpu test-limiter-2d-gpu-p3 test-limiter-2d-gpu-p4 test-limiter-2d-gpu-p5 test-limiter-3d test-limiter-3d-p3 test-limiter-3d-p4 test-limiter-3d-p5 test-mhd-3d test-euler-3d test-maxwell-3d test-sw-3d test-two-fluid-3d test-vtu-2d-multi test-vtu-3d-multi test-memory-report test-ssprk3 test-partition test-sod-exact-riemann test-frame-writer-multi test-diagnostics test-p3 test-quick smoke test-utils test-limiter test-all test-klone bench-quick bench-p5 bench-rates bench-shocks bench-bcs bench-mhd bench-euler bench-maxwell bench-sw bench-advection bench-two-fluid bench-all bench-advection-translation-2d bench-euler-vortex-2d bench-mhd-alfven-2d bench-euler-sod-2d
 
 help:
 	@echo 'mojoxm build targets'
@@ -312,7 +312,10 @@ help:
 	@echo '  make profile-bench-all   profile every bench (slow; for baselining)'
 	@echo '  make profile-summary     rank every cached profile by us/launch'
 	@echo '                           (also: scripts/profile_summary.py --top N / --filter <s>'
-	@echo '                            / --by-physics / --show-cv / --csv / --self-test)'
+	@echo '                            / --show-cv / --csv / --self-test)'
+	@echo '  make profile-summary-by-physics'
+	@echo '                           per-physics rollup of suite total kernel time'
+	@echo '                           (Euler / MHD / Maxwell / SW / Advection / Two-Fluid)'
 	@echo '  make profile-summary-test'
 	@echo '                           run profile_summary.py --self-test (sub-second; CI gate)'
 	@echo ''
@@ -1568,6 +1571,16 @@ install-hooks:
 # .kern.txt baselines.
 profile-summary:
 	@scripts/profile_summary.py
+
+# Per-physics rollup -- same data as `make profile-summary` but
+# grouped by physics module (Euler / MHD / Maxwell / SW / Advection
+# / Two-Fluid).  Useful when sizing where the suite-wide compute
+# budget actually sits per module.  All other flags
+# (--filter / --csv / --markdown / --show-cv / --sort total)
+# require invoking the script directly:
+#   scripts/profile_summary.py --by-physics --show-cv
+profile-summary-by-physics:
+	@scripts/profile_summary.py --by-physics
 
 # ----------------------------------------------------------------------
 # Documentation site (Zensical static-site generator).
