@@ -556,7 +556,8 @@ profile-summary-test:
 # analytic Sod Riemann solver).  Three are host-only (test-ssprk3,
 # test-partition, test-sod-exact-riemann); two are GPU-using but
 # very small (test-memory-report builds a 4^3 mesh and runs ~10
-# SSPRK3 steps; test-frame-writer-multi writes 2 frames at NP=10).
+# SSPRK3 steps; test-frame-writer-multi writes 2 frames each at
+# NP=10/20/35/56 = P=2..5).
 # Use when touching any of the helper modules in `src/` to catch
 # regressions without paying for the 2D/3D physics-test compile
 # times (~5s wall total cached, vs ~30s for test-quick).
