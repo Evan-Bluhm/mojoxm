@@ -81,6 +81,17 @@ def validate_one(path: Path) -> list[str]:
         )
 
     cells = m.cells[0]
+    # 2D triangles aren't validated by this script -- the spec
+    # checks below are tetrahedron-specific.  Surface a clear
+    # message rather than the confusing "expected tetra10" cascade.
+    triangle_types = ("triangle", "triangle6", "VTK_LAGRANGE_TRIANGLE")
+    if cells.type in triangle_types or cells.type.startswith("triangle"):
+        return [
+            f"{path}: 2D triangle VTU (cell type {cells.type!r}) -- "
+            f"validate_vtu only supports 3D tetrahedra (tetra10 / "
+            f"VTK_LAGRANGE_TETRAHEDRON).  The 2D writer is exercised "
+            f"by `make test-vtu-2d-multi` directly."
+        ]
     nodes_per = cells.data.shape[1]
     p_from_path = parse_p_from_path(path)
 
