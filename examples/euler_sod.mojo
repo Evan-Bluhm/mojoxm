@@ -3,20 +3,22 @@
 # ======================================================================
 #
 # The Sod (1978) shock-tube Riemann problem with the jump at x = 0.5
-# smoothed into a tanh transition of width ~8 dx.  A sharp Sod jump
-# triggers Gibbs oscillations under unlimited DG that eventually blow
-# past the density / pressure floors (see the README "Limitations"
-# note: "Gibbs oscillations on discontinuous ICs grow without bound");
-# the tanh smoothing gets the unlimited P2 DG scheme to a clean
+# smoothed into a tanh transition of width ~8 dx, run through the
+# Venkat-smoothed Barth-Jespersen slope limiter for shock stability
+# (`solver.enable_cell_limiter(True)`).  Sod's discontinuous IC plus
+# Gibbs ringing on the unlimited DG scheme used to drive density to
+# ~1e18 before the per-node positivity floor could clamp it; the
+# tanh-smoothed IC + BJ limiter combination now gives a clean
 # shock / contact / rarefaction structure at this resolution.
 #
 #   initial state (after smoothing)
 #     left  (x << 0.5): rho ~ 1.000, u = 0, p ~ 1.000
 #     right (x >> 0.5): rho ~ 0.125, u = 0, p ~ 0.100
 #   gamma   = 1.4
-#   t_final = 0.10  (shorter than the classical 0.20 because the
-#                    unlimited scheme starts building runaway
-#                    oscillations after t ~ 0.15 on this mesh)
+#   t_final = 0.10  (kept short for fast iteration; longer T runs
+#                    fine with the limiter, e.g. T=0.20 matches
+#                    Toro's Test 1 reference values per
+#                    test/sod_exact_riemann_test.mojo)
 #
 # By t = 0.10 a left-moving rarefaction, a contact discontinuity, and
 # a right-moving shock have formed.  The shock sits near x ~ 0.7; no
@@ -33,9 +35,11 @@
 # state (OUTFLOW) to synthesise the ghost state that the HLLEC solver
 # then Riemann-solves against.
 #
-# Runs single-rank only today -- multi-rank non-periodic BCs are
-# pending (HaloExchange needs to skip the ghost ring on sides where
-# the partition touches a global non-periodic boundary).
+# Multi-rank: the underlying Mesh + HaloExchange + Solver pipeline
+# supports np>=2 with non-periodic BCs (gated by `make test-bc`,
+# np=1 vs np=4 bit-identical correctness on a periodic-vs-outflow
+# mix).  This driver runs at np=1 by default but works under
+# mpirun -np N with no code changes.
 #
 # Output: same VTU pipeline as euler_vortex; density is component 0.
 #         Also dumps output/sod_density_line.txt at the end, a plain
