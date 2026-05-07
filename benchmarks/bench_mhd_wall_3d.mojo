@@ -17,7 +17,11 @@
 # preserved exactly.  A regression that broke any of the wall-
 # reflection sign conventions would still inject spurious mass /
 # momentum / B-field at the walls.  GLM is disabled (c_h=alpha_d=0)
-# per project_glm_bc_coupling.md to isolate the BC_WALL path.
+# here because the Dedner GLM source path subtly couples to
+# non-periodic BCs at sub-Alfvenic flow, leaving ~1% drift on E
+# even from psi=0; plain MHD on the same setup stays at Float32
+# noise.  Disabling GLM isolates the BC_WALL path so a regression
+# in the wall reflection is what trips this gate.
 #
 # Pass criteria (P=2, NX=NY=NZ=4 single-rank, T=1):
 #   * max relative drift in any of the 9 components < 1e-3

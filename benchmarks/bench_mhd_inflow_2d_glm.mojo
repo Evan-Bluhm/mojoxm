@@ -13,10 +13,12 @@
 # Setup mirrors bench_mhd_inflow_3d: matched-state subsonic inflow
 # on -x with BC_OUTFLOW on +x and periodic in y.  IC = inflow ghost
 # so the analytic solution is the IC unchanged.  GLM is disabled
-# (c_h=0) per project memory `project_glm_bc_coupling.md` -- the
-# Dedner GLM source path subtly couples to BC_OUTFLOW at sub-Alfvenic
-# flow leaving ~1% drift on E even from psi=0.  Disabling GLM
-# isolates the BC path.
+# (c_h=0) here because the Dedner GLM source path subtly couples to
+# BC_OUTFLOW at sub-Alfvenic flow, leaving ~1% drift on E even from
+# psi=0; plain MHD on the same setup stays at Float32 noise.
+# Disabling GLM isolates the BC path so a regression in the
+# BC_INFLOW arm of mhd_glm_face_flux_kernel_2d is what trips this
+# gate, not GLM-BC coupling.
 #
 # Pass criteria (P=2, NX=32 NY=4, T=1):
 #   * max relative drift in any of the 7 components < 5e-3
