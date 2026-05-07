@@ -1089,16 +1089,23 @@ bench-all: \
 		bench-euler-smooth-wave-2d bench-euler-smooth-wave-2d-p3 \
 		bench-euler-smooth-wave-2d-p4 bench-euler-smooth-wave-2d-p5 \
 		bench-euler-channel-steady-2d \
+		bench-euler-inflow-2d \
 		bench-euler-hydrostatic-2d bench-euler-hydrostatic-2d-p3 \
+		bench-euler-hydrostatic-2d-p4 bench-euler-hydrostatic-2d-p5 \
 		bench-shallow-water-wave-2d bench-shallow-water-wave-2d-p3 \
 		bench-shallow-water-wave-2d-p4 bench-shallow-water-wave-2d-p5 \
 		bench-shallow-water-wave-2d-rusanov \
-		bench-shallow-water-inflow-2d bench-shallow-water-dam-break-2d \
+		bench-shallow-water-inflow-2d bench-shallow-water-inflow-2d-rusanov \
+		bench-shallow-water-dam-break-2d \
 		bench-mhd-alfven-2d \
 		bench-mhd-alfven-glm-2d bench-mhd-alfven-glm-2d-p3 \
 		bench-mhd-alfven-glm-2d-p4 bench-mhd-alfven-glm-2d-p5 \
 		bench-mhd-glm-psi-transport-2d bench-mhd-glm-psi-transport-2d-p3 \
+		bench-mhd-glm-psi-transport-2d-p4 bench-mhd-glm-psi-transport-2d-p5 \
 		bench-mhd-glm-psi-damp-2d bench-mhd-glm-psi-damp-2d-p3 \
+		bench-mhd-glm-psi-damp-2d-p4 bench-mhd-glm-psi-damp-2d-p5 \
+		bench-mhd-inflow-2d bench-mhd-inflow-2d-glm \
+		bench-mhd-wall-2d bench-mhd-wall-2d-glm \
 		bench-maxwell-cavity-2d \
 		bench-maxwell-plane-wave-2d bench-maxwell-te-plane-wave-2d \
 		bench-maxwell-plane-wave-2d-p3 bench-maxwell-plane-wave-2d-p4 \
@@ -1116,6 +1123,7 @@ bench-all: \
 		bench-euler-smooth-wave-3d-p4 bench-euler-smooth-wave-3d-p5 \
 		bench-euler-flux-coverage-3d \
 		bench-euler-hydrostatic-3d bench-euler-hydrostatic-3d-p3 \
+		bench-euler-hydrostatic-3d-p4 bench-euler-hydrostatic-3d-p5 \
 		bench-euler-inflow-3d \
 		bench-shallow-water-wave-3d bench-shallow-water-wave-3d-p3 \
 		bench-shallow-water-wave-3d-p4 bench-shallow-water-wave-3d-p5 \
@@ -1124,17 +1132,23 @@ bench-all: \
 		bench-mhd-alfven-3d bench-mhd-alfven-3d-p3 bench-mhd-alfven-3d-p4 \
 		bench-mhd-alfven-3d-p5 \
 		bench-mhd-glm-psi-damp-3d bench-mhd-glm-psi-damp-3d-p3 \
+		bench-mhd-glm-psi-damp-3d-p4 bench-mhd-glm-psi-damp-3d-p5 \
 		bench-mhd-glm-psi-transport-3d bench-mhd-glm-psi-transport-3d-p3 \
+		bench-mhd-glm-psi-transport-3d-p4 bench-mhd-glm-psi-transport-3d-p5 \
 		bench-mhd-brio-wu-3d bench-mhd-brio-wu-3d-p3 \
+		bench-mhd-inflow-3d bench-mhd-wall-3d \
 		bench-maxwell-cavity-3d \
 		bench-maxwell-plane-wave-3d bench-maxwell-plane-wave-3d-p3 \
 		bench-maxwell-plane-wave-3d-p4 bench-maxwell-plane-wave-3d-p5 \
+		bench-maxwell-te-plane-wave-3d \
 		bench-maxwell-uniform-j-3d bench-maxwell-uniform-j-3d-p3 \
 		bench-maxwell-uniform-m-3d bench-maxwell-uniform-m-3d-p3 \
 		bench-maxwell-outflow-3d bench-maxwell-inflow-3d \
-		bench-two-fluid-langmuir-3d bench-two-fluid-outflow-3d \
-		bench-two-fluid-walls-3d
-	@echo '=== ALL BENCHMARKS PASSED ==='
+		bench-two-fluid-langmuir-3d \
+		bench-two-fluid-outflow-3d bench-two-fluid-inflow-3d \
+		bench-two-fluid-walls-3d bench-two-fluid-walls-3d-p3 \
+		bench-two-fluid-walls-3d-p4 bench-two-fluid-walls-3d-p5
+	@echo '=== ALL 123 BENCHMARKS PASSED ==='
 
 # Profiling: run a benchmark under nsys with --stats=true and capture
 # the kernel-time summary to benchmarks/profile_reports/<name>.kern.txt.
