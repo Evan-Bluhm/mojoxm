@@ -1297,6 +1297,8 @@ profile-bench-two-fluid-langmuir-3d: bench_two_fluid_langmuir_3d
 	@bin=bench_two_fluid_langmuir_3d; $(PROFILE_BIN)
 profile-bench-two-fluid-outflow-3d: bench_two_fluid_outflow_3d
 	@bin=bench_two_fluid_outflow_3d; $(PROFILE_BIN)
+profile-bench-two-fluid-inflow-3d: bench_two_fluid_inflow_3d
+	@bin=bench_two_fluid_inflow_3d; $(PROFILE_BIN)
 profile-bench-two-fluid-walls-3d: bench_two_fluid_walls_3d
 	@bin=bench_two_fluid_walls_3d; $(PROFILE_BIN)
 profile-bench-euler-smooth-wave-3d: bench_euler_smooth_wave_3d
@@ -1471,6 +1473,7 @@ profile-bench-all: \
 		profile-bench-maxwell-uniform-m-3d profile-bench-maxwell-uniform-m-3d-p3 \
 		profile-bench-maxwell-outflow-3d profile-bench-maxwell-inflow-3d \
 		profile-bench-two-fluid-langmuir-3d profile-bench-two-fluid-outflow-3d \
+		profile-bench-two-fluid-inflow-3d \
 		profile-bench-two-fluid-walls-3d profile-bench-two-fluid-walls-3d-p3 \
 		profile-bench-two-fluid-walls-3d-p4 profile-bench-two-fluid-walls-3d-p5 \
 		profile-bench-euler-hydrostatic-2d-p4 profile-bench-euler-hydrostatic-2d-p5 \
