@@ -268,7 +268,7 @@ help:
 	@echo '  make test-sod-exact-riemann'
 	@echo '                           Toro 2009 reference values for the analytic Sod solver'
 	@echo '  make test-vtu-meshio     meshio-roundtrip + VTK_LAGRANGE_TETRAHEDRON spec'
-	@echo '                           validation on the P=2..5 fixtures (~2-3s incl. test-vtu-3d-multi)'
+	@echo '                           validation on the 3D P=2..5 fixtures (~3s incl. test-vtu-3d-multi)'
 	@echo '  make test-quick          run 8 representative tests (~15s with cached binaries)'
 	@echo '  make test-utils          run 5 helper-module tests (~5s; 3 host-only + 2 small GPU)'
 	@echo '  make test-limiter        run 8 BJ-limiter unit tests (2D + 3D, P=2/3/4/5; ~15s cached)'
@@ -409,15 +409,26 @@ test-vtu-2d-multi: vtu_2d_multi_test
 test-vtu-3d-multi: vtu_3d_multi_test
 	./vtu_3d_multi_test
 
-# meshio-roundtrip + VTK_LAGRANGE_TETRAHEDRON spec validation on the
-# P=2..5 VTU fixtures produced by vtu_3d_multi_test (which writes to
-# /tmp/vtu_3d_multi_test_pN.vtu at each P).  Catches regressions
-# where the binary VTU format breaks meshio's parser, or where the
-# writer's node positions drift off the equispaced-Lagrange spec.
-# The in-Mojo XML-string check in vtu_3d_multi_test would not see
-# either failure.  Depends on test-vtu-3d-multi to produce the
-# fixtures first.  Goes through `pixi run python` so meshio + numpy
-# come from the pixi-managed env (matches README convention).
+# meshio-roundtrip + VTK_LAGRANGE_TETRAHEDRON spec validation on
+# the P=2..5 VTU fixtures produced by vtu_3d_multi_test (which
+# writes to /tmp/vtu_3d_multi_test_pN.vtu at each P).  Catches
+# regressions where the binary VTU format breaks meshio's parser,
+# or where the writer's node positions drift off the
+# equispaced-Lagrange spec.  The in-Mojo XML-string check in
+# vtu_3d_multi_test would not see either failure.  Depends on
+# test-vtu-3d-multi to produce the fixtures first.  Goes through
+# `pixi run python` so meshio + numpy come from the pixi-managed
+# env (matches README convention).
+#
+# 2D fixtures are NOT included via this target -- they parse fine
+# under system Python's meshio 5.3.5 (system python3 + standalone
+# `scripts/validate_vtu.py /tmp/vtu_2d_multi_test_p*.vtu` works)
+# but the same meshio version inside the conda-forge pixi env hits
+# a base64 "Incorrect padding" error specifically on the P=2 2D
+# fixture.  The 2D writer is exercised by `make test-vtu-2d-multi`
+# directly (XML-string assertions); the standalone validator
+# script supports 2D triangles too if invoked outside the pixi
+# env.
 test-vtu-meshio: test-vtu-3d-multi
 	@$(PYTHON) scripts/validate_vtu.py \
 		/tmp/vtu_3d_multi_test_p2.vtu \
