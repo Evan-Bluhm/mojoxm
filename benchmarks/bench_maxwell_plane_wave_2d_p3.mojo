@@ -50,9 +50,13 @@ comptime C_LIGHT: Float32 = 1.0
 comptime CFL = 0.10
 comptime T_FINAL: Float64 = 1.0  # one period at c = 1
 
-# Empirical at P=3, NX=NY=12: rel L2 ~3e-4 (Kuhn-triangulation
+# Empirical at P=3, NX=NY=12: rel L2 ~5e-5 (Kuhn-triangulation
 # asymmetry under Rusanov, not P=3 dispersion -- the dispersion
-# error is well below this).  5e-4 is ~1.7x the empirical floor.
+# error is well below this).  5e-4 leaves ~10x margin above the
+# empirical floor; tight enough to catch a meaningful regression
+# (the P=2 bench at the same comptime config sits at ~5.8e-4, so
+# a regression that pushed P=3 above 5e-4 would have lost the
+# expected dispersion improvement of going from NP=6 to NP=10).
 comptime L2_MAX_REL: Float64 = 5.0e-4
 comptime ZERO_COMPONENT_MAX: Float64 = 5.0e-4
 
