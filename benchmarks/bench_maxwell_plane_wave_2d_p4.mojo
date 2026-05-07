@@ -52,10 +52,11 @@ comptime C_LIGHT: Float32 = 1.0
 comptime CFL = 0.10
 comptime T_FINAL: Float64 = 1.0  # one period at c = 1
 
-# Empirical at P=4, NX=NY=8: rel L2 sits at the Float32 floor
-# (~5e-5 with same Kuhn-asymmetry term as P=2/P=3).  2e-4 is ~4x
-# the empirical floor and catches any P=4 Maxwell regression
-# without false-firing on Float32 jitter.
+# Empirical at P=4, NX=NY=8: rel L2 ~1.8e-5 (Float32 floor; same
+# Kuhn-asymmetry source as P=2/P=3 but the higher-order DG
+# dispersion error has dropped well below the asymmetry term).
+# 2e-4 is ~10x the empirical floor and catches any P=4 Maxwell
+# regression without false-firing on Float32 jitter.
 comptime L2_MAX_REL: Float64 = 2.0e-4
 comptime ZERO_COMPONENT_MAX: Float64 = 2.0e-4
 
