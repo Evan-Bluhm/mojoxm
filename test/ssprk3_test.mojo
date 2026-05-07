@@ -10,7 +10,7 @@
 # point at the physics path, not the time integrator.  This file
 # unit-tests the helper directly.
 #
-# Three checks:
+# Five checks:
 #   (1) The helper returns exactly three stages.
 #   (2) Buffer routing per stage matches the Shu-Osher recipe:
 #         stage 0: q_in=q,  q_a=q,  q_b=q,  q_out=q1
@@ -20,6 +20,13 @@
 #         stage 0: a=1.0,   b=0.0,   c=1.0
 #         stage 1: a=0.75,  b=0.25,  c=0.25
 #         stage 2: a=1/3,   b=2/3,   c=2/3
+#   (4) Conservation invariant a + b == 1 in each stage -- the
+#       strong-stability-preserving property (each stage state is a
+#       convex combination of two SSP states).
+#   (5) SSP-coefficient invariant c_k == b_k for stages where b_k > 0.
+#       This is what makes Gottlieb-Shu SSPRK3 the OPTIMAL third-order
+#       SSP scheme (CFL-equivalent to forward Euler).  Stage 0 has
+#       b=0 so the relation is vacuous there.
 #
 # No GPU device is touched -- the helper is pure data plumbing.
 # ======================================================================
