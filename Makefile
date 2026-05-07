@@ -228,7 +228,7 @@ help:
 	@echo '  make bench-{mhd,euler,maxwell,sw,advection,two-fluid}'
 	@echo '                           run all gates for one physics module (cached):'
 	@echo '                             mhd 33 gates ~70s, euler 33 ~105s, maxwell 23 ~40s,'
-	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 6 ~20s'
+	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 7 ~22s'
 	@echo '  make bench-all           build + run every analytic-solution gate (122 benches; ~4 min cached)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
