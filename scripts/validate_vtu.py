@@ -9,16 +9,19 @@ Reads each VTU file passed on the command line and verifies:
         P=2   -> VTK_QUADRATIC_TETRA       (meshio name: tetra10),  NP=10
         P>=3  -> VTK_LAGRANGE_TETRAHEDRON, NP=(P+1)(P+2)(P+3)/6
                                            (20 / 35 / 56 / ...)
-  (3) Per-cell connectivity is unique (no duplicate indices in a row).
-  (4) The 4 corner positions of each cell are distinct.
-  (5) The 4 corners form a non-degenerate tet (volume above floor).
-  (6) Edge interiors at P>=3: lie on the v0->v1, v1->v2, v2->v0,
+  (3) Every point coordinate and point_data scalar is finite (not
+      NaN, not Inf) -- a non-finite would render as a black hole in
+      ParaView or crash some importers.
+  (4) Per-cell connectivity is unique (no duplicate indices in a row).
+  (5) The 4 corner positions of each cell are distinct.
+  (6) The 4 corners form a non-degenerate tet (volume above floor).
+  (7) Edge interiors at P>=3: lie on the v0->v1, v1->v2, v2->v0,
       v0->v3, v1->v3, v2->v3 segments at parametric position
       (j+1)/P (equispaced Lagrange spec).
-  (7) Face interiors at P>=3: lie in the plane of one of the 4 face
+  (8) Face interiors at P>=3: lie in the plane of one of the 4 face
       triangles (face *index* convention is direction-agnostic
       since VTK docs are themselves ambiguous).
-  (8) Volume interiors at P>=4: strictly inside the tet (every
+  (9) Volume interiors at P>=4: strictly inside the tet (every
       barycentric coord > 0).
 
 Usage:
