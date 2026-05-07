@@ -1,5 +1,5 @@
 # ======================================================================
-# FrameWriter -- per-rank single-field VTU frame output
+# FrameWriter -- per-rank VTU frame output (single-field async + multi-field sync)
 # ======================================================================
 #
 # Pulls together the three objects every driver used to build by hand
@@ -7,10 +7,25 @@
 # plus the per-frame and shutdown logic, into one type that a driver
 # instantiates once and hands to the time integrator.
 #
+# Two write paths share the same per-rank output-dir + PVD machinery:
+#
+#   * `write_frame(solver, t, nvtx)`        -- single-field async path,
+#     one scalar per frame (named "density" in the VTU regardless of
+#     what `component` was passed at construction); uses VtuWriter +
+#     AsyncWriter for `writev` overlap with compute.
+#   * `write_frame_multi(solver, t, names, fields, nvtx)`  -- sync
+#     multi-field path, N named scalars per frame.  No async overlap
+#     (one blocking `dump_vtu_3d_frame_multi` per call), but lets
+#     drivers compute derived fields (rho/p/|v| for Euler, By/|B|/psi
+#     for MHD, etc.) and ship them in a single VTU.
+#
+# Both share `finalize(pvd_path)` for the PVD collection emit.
+#
 # Usage:
 #   var writer = FrameWriter[Euler](solver, nvtx, component=0)
-#   writer.write_frame(solver, t=0.0, nvtx)
+#   writer.write_frame(solver, t=0.0, nvtx)         # single-field async
 #   ...
+#   writer.write_frame_multi(solver, t, names, fields, nvtx)  # multi-field sync
 #   writer.finalize("output/solution.pvd", nvtx)
 #
 # Multi-rank runs
