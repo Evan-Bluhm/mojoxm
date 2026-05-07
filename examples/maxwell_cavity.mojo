@@ -318,13 +318,7 @@ def main() raises:
         var l2_rel = sqrt(err2 / ref2) if ref2 > 0.0 else sqrt(err2)
         print("  relative L2(Ex) vs IC after one period:", Float32(l2_rel))
     if rank == 0:
-        print(
-            "  total steps:",
-            result.total_steps,
-            " wall time:",
-            result.wall_sec,
-            "s",
-        )
+        result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
     var tput = solver.bench_step_loop(dt, nvtx)

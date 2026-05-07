@@ -293,24 +293,7 @@ def main() raises:
     writer.finalize("output/solution.pvd", nvtx)
 
     if rank == 0:
-        print("  final sync:", result.final_sync_sec, "s")
-        print(
-            "  total steps:",
-            result.total_steps,
-            " wall time:",
-            result.wall_sec,
-            "s",
-        )
-        print(
-            "    step-loop time (enqueue only, no sync):",
-            result.step_loop_sec,
-            "s",
-        )
-        print(
-            "    frame-write time (download + VTU):",
-            result.frame_write_sec,
-            "s",
-        )
+        result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
     var tput = solver.bench_step_loop(dt, nvtx)

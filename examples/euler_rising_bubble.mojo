@@ -350,13 +350,7 @@ def main() raises:
         var y_bubble_final = _bubble_centroid_y(solver, nvtx)
         print("  bubble centroid y at t=", T_FINAL, ":", y_bubble_final)
     if rank == 0:
-        print(
-            "  total steps:",
-            result.total_steps,
-            " wall time:",
-            result.wall_sec,
-            "s",
-        )
+        result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
     var tput = solver.bench_step_loop(dt, nvtx)

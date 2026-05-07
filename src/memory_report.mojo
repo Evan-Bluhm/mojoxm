@@ -194,10 +194,9 @@ struct ThroughputReport(Movable):
         print("=== Step-loop throughput ===")
         print("  steps:                " + String(self.num_steps))
         print("  DOF / step:           " + String(self.dof_count))
-        print("  wall time:            " + _format_seconds(self.wall_seconds))
+        print("  wall time:            " + format_seconds(self.wall_seconds))
         print(
-            "  per-step wall:        "
-            + _format_seconds(self.per_step_seconds())
+            "  per-step wall:        " + format_seconds(self.per_step_seconds())
         )
         print(
             "  throughput:           "
@@ -216,8 +215,10 @@ struct ThroughputReport(Movable):
         print("============================")
 
 
-def _format_seconds(s: Float64) raises -> String:
-    """Auto-scale wall-time to a readable unit: ns / us / ms / s."""
+def format_seconds(s: Float64) raises -> String:
+    """Auto-scale wall-time to a readable unit: ns / us / ms / s.  Public
+    so any module (drivers, time_integrator, etc.) can produce the
+    same readable timings."""
     if s < 1.0e-6:
         return _round1(s * 1.0e9) + " ns"
     if s < 1.0e-3:

@@ -363,13 +363,7 @@ def main() raises:
         print("  max |psi| (GLM monopole tracer) :", max_psi)
 
     if rank == 0:
-        print(
-            "  total steps:",
-            result.total_steps,
-            " wall time:",
-            result.wall_sec,
-            "s",
-        )
+        result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
     var tput = solver.bench_step_loop(dt, nvtx)

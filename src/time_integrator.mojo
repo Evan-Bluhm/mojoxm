@@ -21,6 +21,7 @@
 from src.solver import Solver, Physics
 from src.frame_writer import FrameWriter
 from src.diagnostics import DiagnosticsWriter
+from src.memory_report import format_seconds
 from src.nvtx import NvtxContext
 from std.time import perf_counter_ns
 
@@ -38,6 +39,37 @@ struct TimeLoopResult(Copyable, Movable):
     var step_loop_sec: Float64
     var frame_write_sec: Float64
     var final_sync_sec: Float64
+
+    def print_summary(self) raises:
+        """Print a human-readable run summary using auto-scaled units
+        (ns / us / ms / s).  Drivers use this in place of hand-rolling
+        4 print() calls; the seconds fields are still publicly readable
+        for ad-hoc reporting.  Output shape:
+
+            final sync:                       234 ms
+            total steps: 2080  wall time:     6.0 s
+              step-loop time (enqueue only):  65.1 ms
+              frame-write time (download +    5.7 s
+                VTU):
+        """
+        print(
+            "  final sync:                     "
+            + format_seconds(self.final_sync_sec)
+        )
+        print(
+            "  total steps:",
+            self.total_steps,
+            " wall time:                ",
+            format_seconds(self.wall_sec),
+        )
+        print(
+            "    step-loop time (enqueue only): ",
+            format_seconds(self.step_loop_sec),
+        )
+        print(
+            "    frame-write time (D2H + VTU): ",
+            format_seconds(self.frame_write_sec),
+        )
 
 
 def run_ssprk3_loop[
