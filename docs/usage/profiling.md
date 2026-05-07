@@ -133,7 +133,7 @@ On the current baseline:
 | Two-Fluid     | 16%              |
 | MHD           | 14%              |
 | Advection     |  6%              |
-| Maxwell       |  4%              |
+| Maxwell       |  5%              |
 | ShallowWater  |  3%              |
 
 3D dominates 2D by ~18× of total suite time.

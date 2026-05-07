@@ -36,14 +36,14 @@ Mojo has to compile.
 | `make bench-shocks`      | 13 Sod / dam-break / Brio–Wu gates                             | ~40 s  |
 | `make bench-rates`       | 10 explicit log₂ convergence-rate gates                        | ~30 s  |
 | `make bench-bcs`         | 27 BC + source-term gates                                      | ~45 s  |
-| `make bench-all`         | All 124 analytic-solution gates                                | ~5 min |
+| `make bench-all`         | All 125 analytic-solution gates                                | ~5 min |
 
 ## Per-physics aggregators
 
 ```bash
 make bench-mhd          # 33 gates touching IdealMHD / GLM
 make bench-euler        # 33 gates touching Euler (smooth + shocked)
-make bench-maxwell      # 24 vacuum-EM + J/M source gates
+make bench-maxwell      # 25 vacuum-EM + J/M source gates
 make bench-sw           # 14 ShallowWater gates
 make bench-advection    # 12 scalar-advection gates
 make bench-two-fluid    #  8 FiveMomentTwoFluid gates

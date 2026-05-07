@@ -74,7 +74,7 @@ mojoxm/
 │   ├── vtu.mojo / vtu_2d.mojo # zero-copy binary VTU writer
 │   └── ...
 ├── examples/                  # 23 reference drivers
-├── benchmarks/                # 124 analytic-gate benches
+├── benchmarks/                # 125 analytic-gate benches
 ├── test/                      # 33 unit tests
 └── scripts/                   # Python: validate_vtu, animate_dashboard, ...
 ```

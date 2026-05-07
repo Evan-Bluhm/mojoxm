@@ -4,7 +4,7 @@ icon: lucide/gauge
 
 # Benchmarks
 
-mojoxm has a 124-gate benchmark suite under `benchmarks/` that ties every
+mojoxm has a 125-gate benchmark suite under `benchmarks/` that ties every
 scheme to closed-form analytic reference states. Every BC dispatch arm in
 every physics has at least one direct gate, every supported polynomial
 order has parity coverage across all 5 smooth physics in 2D + 3D, and
@@ -26,7 +26,7 @@ This page is the user-facing tour. For the per-bench inventory see the
 | Convergence-rate gates only             | `make bench-rates`           | ~30 s  |
 | Boundary-condition + source-term gates  | `make bench-bcs`             | ~45 s  |
 | One specific physics                    | `make bench-<physics>`       | varies |
-| The full suite                          | `make bench-all`             | ~5 min |
+| The full suite (125 gates)              | `make bench-all`             | ~5 min |
 
 Times are *cached* wall clocks — first run is slower because Mojo has to
 compile every bench binary.
@@ -36,7 +36,7 @@ compile every bench binary.
 ```bash
 make bench-mhd          # 33 gates, IdealMHD (plain + GLM, 2D + 3D)
 make bench-euler        # 33 gates, Euler smooth + shocked
-make bench-maxwell      # 24 gates, vacuum EM + J/M sources
+make bench-maxwell      # 25 gates, vacuum EM + J/M sources
 make bench-sw           # 14 gates, ShallowWater
 make bench-advection    # 12 gates, scalar advection
 make bench-two-fluid    #  8 gates, FiveMomentTwoFluid

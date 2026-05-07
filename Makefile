@@ -178,7 +178,8 @@ BENCH_DRIVERS = bench_advection_translation_2d \
                 bench_mhd_glm_psi_transport_3d_p3 \
                 bench_mhd_glm_psi_transport_3d_p4 \
                 bench_mhd_glm_psi_transport_3d_p5 \
-                bench_maxwell_cavity_3d bench_maxwell_plane_wave_3d \
+                bench_maxwell_cavity_3d bench_maxwell_cavity_3d_p3 \
+                bench_maxwell_plane_wave_3d \
                 bench_maxwell_te_plane_wave_3d \
                 bench_maxwell_plane_wave_3d_p3 \
                 bench_maxwell_plane_wave_3d_p4 \
@@ -231,7 +232,7 @@ help:
 	@echo '                           run all gates for one physics module (cached):'
 	@echo '                             mhd 33 gates ~70s, euler 33 ~105s, maxwell 24 ~42s,'
 	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 8 ~26s'
-	@echo '  make bench-all           build + run every analytic-solution gate (124 benches; ~4 min cached)'
+	@echo '  make bench-all           build + run every analytic-solution gate (125 benches; ~4 min cached)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
 	@echo '      compile; -j contention makes parallel builds 1.5-2x slower'
@@ -298,7 +299,7 @@ help:
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
 	@echo '                           the source-term hook in rk_stage_kernel (~45s w/ cached binaries).'
-	@echo '  make bench-all           build + run every gate (124 benches; ~4 min cached, ~14 min cold)'
+	@echo '  make bench-all           build + run every gate (125 benches; ~4 min cached, ~14 min cold)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
 	@echo ''
@@ -753,6 +754,8 @@ bench-mhd-glm-psi-transport-3d-p5: bench_mhd_glm_psi_transport_3d_p5
 	./bench_mhd_glm_psi_transport_3d_p5
 bench-maxwell-cavity-3d: bench_maxwell_cavity_3d
 	./bench_maxwell_cavity_3d
+bench-maxwell-cavity-3d-p3: bench_maxwell_cavity_3d_p3
+	./bench_maxwell_cavity_3d_p3
 bench-maxwell-plane-wave-3d: bench_maxwell_plane_wave_3d
 	./bench_maxwell_plane_wave_3d
 bench-maxwell-te-plane-wave-3d: bench_maxwell_te_plane_wave_3d
@@ -980,14 +983,15 @@ bench-euler: \
 	@echo '=== bench-euler: 33 Euler-focused gates PASSED ==='
 
 
-# Maxwell-focused regression suite -- 23 gates covering every Maxwell
-# bench in the suite: cavity (2D + 3D), plane wave (2D + 3D, P=2-5),
-# TE plane wave (2D), uniform-J / uniform-M sources (2D + 3D, P=2/3),
-# inflow + outflow (2D + 3D).  Run when iterating on Maxwell internals:
-# linear-flux face kernel, J/M source coupling, BC dispatch.  Run-time
-# ~40s w/ cached binaries.
+# Maxwell-focused regression suite -- 25 gates covering every Maxwell
+# bench in the suite: cavity (2D + 3D + 3D P=3), plane wave (2D + 3D,
+# P=2-5), TE plane wave (2D), uniform-J / uniform-M sources (2D + 3D,
+# P=2/3), inflow + outflow (2D + 3D).  Run when iterating on Maxwell
+# internals: linear-flux face kernel, J/M source coupling, BC dispatch.
+# Run-time ~42s w/ cached binaries.
 bench-maxwell: \
 		bench-maxwell-cavity-2d bench-maxwell-cavity-3d \
+		bench-maxwell-cavity-3d-p3 \
 		bench-maxwell-plane-wave-2d bench-maxwell-plane-wave-2d-p3 \
 		bench-maxwell-plane-wave-2d-p4 bench-maxwell-plane-wave-2d-p5 \
 		bench-maxwell-plane-wave-3d bench-maxwell-plane-wave-3d-p3 \
@@ -999,7 +1003,7 @@ bench-maxwell: \
 		bench-maxwell-uniform-m-3d bench-maxwell-uniform-m-3d-p3 \
 		bench-maxwell-inflow-2d bench-maxwell-inflow-3d \
 		bench-maxwell-outflow-2d bench-maxwell-outflow-3d
-	@echo '=== bench-maxwell: 24 Maxwell-focused gates PASSED ==='
+	@echo '=== bench-maxwell: 25 Maxwell-focused gates PASSED ==='
 
 
 # ShallowWater-focused regression suite -- 14 gates covering every
@@ -1145,7 +1149,7 @@ bench-all: \
 		bench-mhd-glm-psi-transport-3d-p4 bench-mhd-glm-psi-transport-3d-p5 \
 		bench-mhd-brio-wu-3d bench-mhd-brio-wu-3d-p3 \
 		bench-mhd-inflow-3d bench-mhd-wall-3d \
-		bench-maxwell-cavity-3d \
+		bench-maxwell-cavity-3d bench-maxwell-cavity-3d-p3 \
 		bench-maxwell-plane-wave-3d bench-maxwell-plane-wave-3d-p3 \
 		bench-maxwell-plane-wave-3d-p4 bench-maxwell-plane-wave-3d-p5 \
 		bench-maxwell-te-plane-wave-3d \
@@ -1156,7 +1160,7 @@ bench-all: \
 		bench-two-fluid-outflow-3d bench-two-fluid-inflow-3d \
 		bench-two-fluid-walls-3d bench-two-fluid-walls-3d-p3 \
 		bench-two-fluid-walls-3d-p4 bench-two-fluid-walls-3d-p5
-	@echo '=== ALL 124 BENCHMARKS PASSED ==='
+	@echo '=== ALL 125 BENCHMARKS PASSED ==='
 
 # Profiling: run a benchmark under nsys with --stats=true and capture
 # the kernel-time summary to benchmarks/profile_reports/<name>.kern.txt.
@@ -1298,6 +1302,8 @@ profile-bench-mhd-glm-psi-transport-3d-p3: bench_mhd_glm_psi_transport_3d_p3
 	@bin=bench_mhd_glm_psi_transport_3d_p3; $(PROFILE_BIN)
 profile-bench-maxwell-cavity-3d: bench_maxwell_cavity_3d
 	@bin=bench_maxwell_cavity_3d; $(PROFILE_BIN)
+profile-bench-maxwell-cavity-3d-p3: bench_maxwell_cavity_3d_p3
+	@bin=bench_maxwell_cavity_3d_p3; $(PROFILE_BIN)
 profile-bench-maxwell-plane-wave-3d: bench_maxwell_plane_wave_3d
 	@bin=bench_maxwell_plane_wave_3d; $(PROFILE_BIN)
 profile-bench-maxwell-te-plane-wave-3d: bench_maxwell_te_plane_wave_3d
@@ -1425,7 +1431,7 @@ profile-bench-two-fluid-walls-3d-p5: bench_two_fluid_walls_3d_p5
 # 13 bench-quick gates -- one representative bench per physics per
 # dim + the 2D limited Sod gate.  Use after a kernel-level change
 # to refresh the most-used profile baselines without paying for the
-# full 124-bench `profile-bench-all` sweep.  Run-time scales as
+# full 125-bench `profile-bench-all` sweep.  Run-time scales as
 # 13 * (~30-60 s nsys-profile overhead per bench), so ~10-15 min
 # wall vs ~90 min for the full all-bench sweep.
 profile-bench-quick: \
@@ -1495,7 +1501,7 @@ profile-bench-all: \
 		profile-bench-mhd-glm-psi-damp-3d profile-bench-mhd-glm-psi-damp-3d-p3 \
 		profile-bench-mhd-glm-psi-transport-3d profile-bench-mhd-glm-psi-transport-3d-p3 \
 		profile-bench-mhd-brio-wu-3d profile-bench-mhd-brio-wu-3d-p3 \
-		profile-bench-maxwell-cavity-3d \
+		profile-bench-maxwell-cavity-3d profile-bench-maxwell-cavity-3d-p3 \
 		profile-bench-maxwell-plane-wave-3d profile-bench-maxwell-plane-wave-3d-p3 \
 		profile-bench-maxwell-plane-wave-3d-p4 profile-bench-maxwell-plane-wave-3d-p5 \
 		profile-bench-maxwell-te-plane-wave-3d \
