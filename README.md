@@ -383,13 +383,14 @@ multi-rank decomposition + halo-exchange machinery.
     `bench_mhd_glm_psi_transport_3d` + `_p3` + `_p4` + `_p5` (3D
     GLM psi/Bx linear-wave coupling; full P-parity sweep at
     NP=10/20/35/56),
-    `bench_mhd_inflow_3d` (BC_INFLOW + BC_OUTFLOW preservation for
-    NC=8 plain MHD; sub-Alfvenic uniform state preserved under the
-    GLM-disabled flux path -- GLM is disabled here because Dedner
+    `bench_mhd_inflow_3d` (BC_INFLOW + BC_OUTFLOW preservation under
+    the GLM-disabled flux path; sub-Alfvenic uniform state preserved
+    with c_h=alpha_d=0 -- GLM is disabled here because Dedner
     cleaning leaks ~1% drift through non-periodic BCs even from
-    psi=0 IC, while plain MHD on the same setup stays at Float32
-    noise),
-    `bench_mhd_wall_3d` (BC_WALL slip preservation, plain NC=8 MHD),
+    psi=0 IC, while the GLM-disabled path on the same setup stays
+    at Float32 noise),
+    `bench_mhd_wall_3d` (BC_WALL slip preservation under GLM-disabled
+    3D NC=9 MHD),
     `bench_maxwell_cavity_3d`,
     `bench_maxwell_plane_wave_3d` + `_p3` + `_p4` + `_p5` (TM plane
     wave on triply-periodic cube; NP=10 / NP=20 / NP=35 / NP=56;

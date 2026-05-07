@@ -36,7 +36,7 @@ already contains the volume + lift contributions. There is no separate
 | Euler               | Optional uniform gravity \(\mathbf{g}\)                         |
 | ShallowWater        | None                                                            |
 | Maxwell             | Optional uniform \(\mathbf{J}, \mathbf{M}\)                     |
-| IdealMHD            | None at NC=8; GLM damping \(-\alpha_d \psi\) at NC=9             |
+| IdealMHD            | None when c_h=α_d=0; GLM damping \(-\alpha_d \psi\) when α_d>0   |
 | FiveMomentTwoFluid  | Lorentz on each fluid + Joule heating + Ampère current + GLM    |
 
 ## Worked examples

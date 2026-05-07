@@ -25,19 +25,23 @@ divergence cleaning.
 with closure
 \(p = (\gamma - 1)(E - \tfrac{1}{2}\rho|\mathbf{u}|^2 - \tfrac{1}{2}|\mathbf{B}|^2)\).
 
-| Variant       | NC | State layout                                          |
-| ------------- | -- | ----------------------------------------------------- |
-| `IdealMHD`    | 8  | `[rho, rho·u, rho·v, rho·w, Bx, By, Bz, E]`          |
-| `IdealMHDGLM` | 9  | `[rho, rho·u, rho·v, rho·w, Bx, By, Bz, E, psi]`     |
+| Pipeline / module                                      | NC | State layout                                              |
+| ------------------------------------------------------ | -- | --------------------------------------------------------- |
+| 3D — `IdealMHD` (`src/mhd.mojo`)                       | 9  | `[rho, rho·u, rho·v, rho·w, Bx, By, Bz, E, psi]`         |
+| 2D plain — `src/local_mesh_2d_gpu_mhd.mojo`            | 6  | `[rho, rho·u, rho·v, Bx, By, E]`                          |
+| 2D GLM — `src/local_mesh_2d_gpu_mhd_glm.mojo`          | 7  | `[rho, rho·u, rho·v, Bx, By, E, psi]`                     |
 
-Source: `src/mhd.mojo` (461 lines, 3D); `src/local_mesh_2d_gpu_mhd.mojo`
-(NC=6 plain) and `src/local_mesh_2d_gpu_mhd_glm.mojo` (NC=7 GLM) for the
-2D path.
+The 3D pipeline ships a single `IdealMHD` struct (NC=9). To run plain
+MHD without GLM cleaning, construct it with `c_h = alpha_d = 0` — the
+psi component stays at zero throughout and the `(c_h, alpha_d)`
+parameters short-circuit the GLM coupling terms in the flux.
+The 2D pipeline keeps plain (NC=6) and GLM (NC=7) as separate modules
+since the NC difference matters at compile time.
 
 ## Dedner GLM divergence cleaning
 
-The `IdealMHDGLM` variant adds a hyperbolic scalar \(\psi\) coupled to
-\(\nabla \cdot \mathbf{B}\) via
+The 3D `IdealMHD` struct (and the 2D NC=7 stack) carries a hyperbolic
+scalar \(\psi\) coupled to \(\nabla \cdot \mathbf{B}\) via
 
 \[
 \frac{\partial \mathbf{B}}{\partial t} + \nabla \cdot (\ldots) + \nabla \psi = 0
@@ -62,7 +66,7 @@ unphysical states.
     enabled drift ~1.6% on E over T=1, even from psi=0. The same setup
     with GLM **disabled** sits at Float32 noise. Disable GLM for
     non-periodic MHD BC gates. `bench_mhd_inflow_3d` is the sentinel —
-    it gates the plain (NC=8) path specifically.
+    it gates the GLM-disabled (c_h=α_d=0) path specifically.
 
 ## Riemann solver
 
@@ -84,7 +88,7 @@ tessellation), not algorithmic.
 | -------------- | ------------------------------------------------------------------ |
 | `BC_WALL`      | Slip wall: mirror normal velocity, identical pressure / B         |
 | `BC_OUTFLOW`   | Transmissive                                                       |
-| `BC_INFLOW`    | Riemann against prescribed inflow ghost (NC=8 plain only — GLM disabled here, see warning above) |
+| `BC_INFLOW`    | Riemann against prescribed inflow ghost (GLM-disabled / 2D NC=6 plain only — see warning above) |
 
 ## Reference drivers
 
@@ -103,5 +107,5 @@ tessellation), not algorithmic.
 | `bench_mhd_glm_psi_transport_{2d,3d}_p{2..5}`          | \(c_h>0\) ψ/Bx wave coupling                                   |
 | `bench_mhd_glm_psi_damp_{2d,3d}_p{2..5}`               | \(\alpha_d>0\) ψ decay matches \(A_0/e\) via operator splitting |
 | `bench_mhd_brio_wu_3d{,_p3}`                           | Canonical 1D MHD Riemann embedded in 3D, GLM + BJ; first analytic-Riemann 3D MHD shocked gate |
-| `bench_mhd_inflow_{2d,3d}`                             | BC_INFLOW + BC_OUTFLOW preservation, plain NC=8                |
+| `bench_mhd_inflow_{2d,3d}`                             | BC_INFLOW + BC_OUTFLOW preservation, GLM-disabled (2D NC=6 plain / 3D NC=9 with c_h=α_d=0) |
 | `bench_mhd_inflow_2d_glm` / `_wall_2d_glm`             | Same on GLM NC=7 path (periodic-equivalent IC)                 |
