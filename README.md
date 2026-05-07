@@ -885,22 +885,20 @@ top 5 benches, sorted by avg us/launch:
   bench_mhd_brio_wu_3d_p3          rk_stage       408.9    3807     1556.8
   bench_euler_vortex_3d_p3         rk_stage       392.3   11403     4473.2
   -> shown 5 benches: 14.39 s of dominant-kernel time;
-     full suite (76.55 s across all benches dominant-kernel-only)
+     full suite (68.29 s across all benches dominant-kernel-only)
 ```
 
-The full-suite footer (`76.55 s`) is the irreducible compute budget
+The full-suite footer (`68.29 s`) is the irreducible compute budget
 for `make profile-bench-all` (excluding nsys profile + launch
-overhead which dominates wall time).  3D dominates (73.0 s) over 2D
-(3.6 s) by ~20x.
+overhead which dominates wall time).  3D dominates (64.7 s) over 2D
+(3.6 s) by ~18x.
 
 Other useful flags:
 
-* `--by-physics` rolls up per-physics totals (Euler 49% / Two-Fluid
-  26% / MHD 12% / Advection 6% / Maxwell 4% / SW 3% on the current
-  baselines -- the Langmuir P=3 plasma-oscillation bench dominates
-  Two-Fluid's share with ~14 s of dominant-kernel time on its own).
-  Useful for sizing where the suite-wide compute budget actually
-  sits across the 124 benches.
+* `--by-physics` rolls up per-physics totals (Euler 55% / Two-Fluid
+  17% / MHD 14% / Advection 6% / Maxwell 4% / SW 3% on the current
+  baselines).  Useful for sizing where the suite-wide compute budget
+  actually sits across the 124 benches.
 * `--show-cv` adds a CV% column (stddev / avg).  Distinguishes
   refinement-sweep benches (CV ~50-66%, expected) from single-
   resolution benches (CV <1%).  Combined with `--by-physics`, the

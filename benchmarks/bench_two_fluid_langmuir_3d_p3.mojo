@@ -50,12 +50,19 @@ comptime P = 3
 comptime NP = num_tet_nodes(P)  # 20 at P=3
 comptime NC = 17
 
-comptime NX = 16
+# NX=8 (vs P=2's NX=16) is half-resolution but the IC is spatially
+# uniform (zero-mode k=0 plasma oscillation), so mesh resolution
+# doesn't affect the analytic prediction.  Halving NX ~= 4x speedup
+# (steps halve via 2x dt, per-step compute halves via half the
+# elements) -- keeps the P=3 bench's contribution to bench-two-fluid
+# in the same range as the other Two-Fluid gates rather than
+# dominating it 5:1.
+comptime NX = 8
 comptime NY = 2
 comptime NZ = 2
 comptime LX = 1.0
-comptime LY = Float64(2.0 / 16.0)
-comptime LZ = Float64(2.0 / 16.0)
+comptime LY = Float64(2.0 / 8.0)
+comptime LZ = Float64(2.0 / 8.0)
 
 comptime GAMMA_E: Float32 = Float32(5.0 / 3.0)
 comptime GAMMA_I: Float32 = Float32(5.0 / 3.0)
