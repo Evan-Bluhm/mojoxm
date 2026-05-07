@@ -222,7 +222,10 @@ multi-rank decomposition + halo-exchange machinery.
   121 analytic-solution gates tying schemes to closed-form reference
   states.  Coverage is parity across dimensions for every core
   physics, plus shocked-flow gates wherever a stable scheme exists,
-  P=3 rate gates for advection (2D + 3D) and Euler (2D + 3D),
+  10 explicit log2(e_N / e_2N) rate gates -- advection 2D + 3D at
+  P=2/3/4/5 (8) and Euler smooth-wave 3D at P=2 + P=3 (2; the 2D
+  Euler smooth-wave bench saturates at the Float32 round-off floor
+  so it gates absolute L2 instead),
   P=4 absolute-L2 sentinels for every core physics in 2D + 3D
   (Euler / Maxwell / SW / MHD-GLM), and full P=5 P-parity coverage
   across all 5 smooth physics in both dimensions (advection / Euler
