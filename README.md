@@ -245,7 +245,7 @@ multi-rank decomposition + halo-exchange machinery.
   `make pre-push` adds the working-tree `format-check` (~3s) and
   the VTK_LAGRANGE_TETRAHEDRON spec validation in front + after
   so the standard pre-push gate is one command (~50s cached).
-  * **2D smooth (31):** `bench_advection_translation_2d` (rate >= 2.0)
+  * **2D smooth (42):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`
     (rate ~5.83, P+1=6), `bench_advection_outflow_2d` (BC_OUTFLOW drainage gate),
     `bench_advection_inflow_2d` (BC_INFLOW preservation gate with
@@ -262,29 +262,31 @@ multi-rank decomposition + halo-exchange machinery.
     closes the 2D MHD-GLM P-parity sweep P=2/3/4/5 at the same
     A^2~0.01 nonlinear floor as the lower P -- highest-NC 2D physics
     gate at NC=7 / NP=21 = 147 q values per element),
-    `bench_mhd_glm_psi_transport_2d` + `_p3` (c_h>0 psi/Bx wave
-    coupling at NP=6 and NP=10),
-    `bench_mhd_glm_psi_damp_2d` + `_p3` (alpha_d>0 decay matches A0/e
-    via the 2D operator-splitting damp kernel; gated at NP=6 and
-    NP=10),
+    `bench_mhd_glm_psi_transport_2d` + `_p3` + `_p4` + `_p5` (c_h>0
+    psi/Bx wave coupling, full P-parity sweep at NP=6/10/15/21),
+    `bench_mhd_glm_psi_damp_2d` + `_p3` + `_p4` + `_p5` (alpha_d>0
+    decay matches A0/e via the 2D operator-splitting damp kernel;
+    full P-parity sweep at NP=6/10/15/21),
+    `bench_mhd_inflow_2d` + `_glm` (uniform-state preservation under
+    BC_INFLOW + BC_OUTFLOW for both NC=6 plain and NC=7 GLM MHD),
+    `bench_mhd_wall_2d` + `_glm` (BC_WALL slip preservation, both
+    plain and GLM),
     `bench_shallow_water_wave_2d` + `_p3` + `_p4` + `_p5` (NP=10 /
     NP=15 / NP=21 SW HLL gate; closes the 2D SW P-parity sweep
     P=2/3/4/5 at the same A/H=0.01 nonlinear floor across all P) +
     `_rusanov` (gates the Rusanov-flux SW path used by
     `examples/shallow_water_dam_break_2d_gpu`),
-    `bench_shallow_water_inflow_2d` (BC_INFLOW + BC_OUTFLOW preservation
-    gate; uniform subcritical state matched to inflow ghost stays
+    `bench_shallow_water_inflow_2d` + `_rusanov` (BC_INFLOW +
+    BC_OUTFLOW preservation gate on both HLL and Rusanov paths;
+    uniform subcritical state matched to inflow ghost stays
     unchanged to ~Float32 epsilon),
     `bench_euler_channel_steady_2d`,
-    `bench_euler_hydrostatic_2d` + `_p3` (closes a 2D gravity
-    source-term parity gap with the 3D path: 3D Euler had
-    `Euler.source_term` plumbing for (gx, gy, gz) and was gated
-    by bench_euler_hydrostatic_3d, but the 2D Euler vol+lift
-    kernel had no source-term path at all.  Now both dimensions
-    exercise the same physics at NP=6 and NP=10.  Hydrostatic
-    equilibrium preserves the rest state to ~Float32 epsilon
-    over T=1).
-  * **2D shocks + EM (17):** `bench_euler_sod_2d`,
+    `bench_euler_inflow_2d` (BC_INFLOW arm of `Euler.boundary_flux`
+    in 2D; mirror of the 3D inflow gate at NP=6),
+    `bench_euler_hydrostatic_2d` + `_p3` + `_p4` + `_p5` (closes a 2D
+    gravity source-term parity gap with the 3D path; full P-parity
+    at NP=6/10/15/21).
+  * **2D shocks + EM (18):** `bench_euler_sod_2d`,
     `bench_euler_sod_limited_2d` + `_p3` + `_p4` + `_p5` (HLLC + BJ
     limiter at P=2 / P=3 / P=4 / P=5; the P=2 variant lands the
     shock within 0.2 cells of Rankine-Hugoniot, the P=3 variant
@@ -322,7 +324,7 @@ multi-rank decomposition + halo-exchange machinery.
     source-term plumbing at all.  Now both paths exercise the same
     physics, with full P-parity on both J and M arms at NP=6 and
     NP=10).
-  * **3D smooth (43):** `bench_advection_3d` + `_p3` (rate ~3.7) +
+  * **3D smooth (54):** `bench_advection_3d` + `_p3` (rate ~3.7) +
     `_p4` (rate ~4.65, NP=35) + `_p5` (rate ~5.33, NP=56),
     `bench_advection_outflow_3d` (BC_OUTFLOW x6 drainage),
     `bench_advection_inflow_3d` (BC_INFLOW + BC_OUTFLOW + BC_WALL
@@ -353,14 +355,18 @@ multi-rank decomposition + halo-exchange machinery.
     element -- the largest per-element working set in the suite --
     and closes the 3D MHD P-parity sweep P=2/3/4/5 at the same
     A^2~0.01 nonlinear floor as the lower P),
-    `bench_mhd_glm_psi_damp_3d` + `_p3` (3D GLM psi-damping via
-    the source_term hook in rk_stage_kernel; analytic decay match
-    to Float32 epsilon at both NP=10 and NP=20),
-    `bench_mhd_glm_psi_transport_3d` + `_p3` (3D GLM psi/Bx
-    linear-wave coupling via the regular flux kernel; rel L2 ~4e-5
-    over one period at c_h=1, at NP=10 and NP=20).  Together the
-    `_p3` damp + transport pair completes 3D GLM P-parity at P=3
-    with the existing 2D _p3 analogs,
+    `bench_mhd_glm_psi_damp_3d` + `_p3` + `_p4` + `_p5` (3D GLM
+    psi-damping via the source_term hook in rk_stage_kernel;
+    analytic decay match to Float32 epsilon, full P-parity sweep
+    at NP=10/20/35/56),
+    `bench_mhd_glm_psi_transport_3d` + `_p3` + `_p4` + `_p5` (3D
+    GLM psi/Bx linear-wave coupling; full P-parity sweep at
+    NP=10/20/35/56),
+    `bench_mhd_inflow_3d` (BC_INFLOW + BC_OUTFLOW preservation for
+    NC=8 plain MHD; sub-Alfvenic uniform state preserved under the
+    GLM-disabled flux path -- see `project_glm_bc_coupling` memory
+    for why GLM and non-periodic BCs interact),
+    `bench_mhd_wall_3d` (BC_WALL slip preservation, plain NC=8 MHD),
     `bench_maxwell_cavity_3d`,
     `bench_maxwell_plane_wave_3d` + `_p3` + `_p4` + `_p5` (TM plane
     wave on triply-periodic cube; NP=10 / NP=20 / NP=35 / NP=56;
@@ -385,9 +391,11 @@ multi-rank decomposition + halo-exchange machinery.
     NP=35 / NP=56 SW gates; the `_p5` variant closes 3D SW P-parity
     sweep at NP=56 and sits at the same A/H=0.01 nonlinear floor as
     P=3/P=4) + `_inflow` (BC_INFLOW + BC_OUTFLOW preservation),
-    `bench_two_fluid_outflow_3d` + `_walls` (charge-balanced
-    17-component rest state preserved under BC_OUTFLOW / BC_WALL
-    on all 6 faces),
+    `bench_two_fluid_outflow_3d` + `_walls` + `_walls_p3` +
+    `_walls_p4` + `_walls_p5` (charge-balanced 17-component rest
+    state preserved under BC_OUTFLOW / BC_WALL on all 6 faces; the
+    `_walls` variant runs full P-parity at NP=10/20/35/56, exercising
+    the highest-NC physics at every supported P),
     `bench_two_fluid_langmuir_3d`.
   * **3D shocks (7):** `bench_euler_sod_3d` + `_p3` + `_p4` + `_p5`
     (BJ-limited, bounds + mass conservation; the `_p5` / NP=56
