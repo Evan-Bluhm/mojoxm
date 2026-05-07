@@ -331,6 +331,7 @@ help:
 	@echo "  MOJO='apptainer exec --nv --bind /sw --bind /gscratch mojo.sif mojo'"
 	@echo '  MPICC=/sw/ompi/4.1.6-2/bin/mpicc'
 	@echo '  MPI_LIBDIR=/sw/ompi/4.1.6-2/lib'
+	@echo '  PYTHON=.pixi/envs/default/bin/python   # if pixi CLI not on PATH'
 
 all: $(ALL_DRIVERS)
 cpu: $(CPU_DRIVERS)
