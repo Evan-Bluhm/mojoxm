@@ -318,7 +318,7 @@ help:
 	@echo ''
 	@echo 'Code style:'
 	@echo '  make format              run `mojo format` on every .mojo file (in-place)'
-	@echo '  make format-check        non-mutating CI gate (~3s on 215 files): fail if any'
+	@echo '  make format-check        non-mutating CI gate (~3s on 218 files): fail if any'
 	@echo '                           .mojo file is out of conformance.  Mirrors the pre-'
 	@echo '                           commit hook but covers the full working tree.'
 	@echo '  make install-hooks       enable the staged-file pre-commit format gate'
