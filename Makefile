@@ -220,7 +220,7 @@ help:
 	@echo '  make smoke               test-utils + test-quick + bench-quick combined (~45s cached; one-command sanity check)'
 	@echo '  make pre-push            format-check + profile-summary-test + smoke +'
 	@echo '                           test-vtu-meshio (~50s cached; routine pre-push gate)'
-	@echo '  make bench-p5            run 19 P=5 P-parity gates at NP=21/56 (~95s)'
+	@echo '  make bench-p5            run 19 P=5 P-parity gates at NP=21/56 (~65s cached)'
 	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~70s)'
 	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~50s)'
 	@echo '  make bench-bcs           run 26 BC + source-term gates -- inflow / outflow / wall / gravity (~95s cached)'
@@ -1023,7 +1023,7 @@ bench-two-fluid: \
 # rate gates) + 2D and 3D GLM psi transport (psi advection at c_h)).
 # High-P regressions tend to surface here first since these stress
 # the comptime template + shared-memory rk_stage_kernel + the BJ
-# limiter pipeline hardest.  Run-time ~95s wall.
+# limiter pipeline hardest.  Run-time ~65s wall (cached binaries).
 bench-p5: \
 		bench-advection-translation-2d-p5 \
 		bench-advection-3d-p5 \
