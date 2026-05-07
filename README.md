@@ -216,9 +216,9 @@ Nine reference drivers under `examples/`:
   iterating, pick the slice that matches what's changing:
   `make bench-quick` (13 representative gates, ~30s cached),
   `make bench-p5` (19 P=5 high-order gates, ~65s cached),
-  `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~70s),
-  `make bench-rates` (10 explicit convergence-rate gates, ~50s),
-  `make bench-bcs` (26 BC + source-term gates, ~95s).  When iterating
+  `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~40s cached),
+  `make bench-rates` (10 explicit convergence-rate gates, ~30s cached),
+  `make bench-bcs` (26 BC + source-term gates, ~45s cached).  When iterating
   on a single physics module, the per-physics aggregators run only
   the gates exercising that module: `make bench-mhd` (33), `bench-euler`
   (33), `bench-maxwell` (23), `bench-sw` (14), `bench-advection` (12),
