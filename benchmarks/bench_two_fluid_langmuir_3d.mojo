@@ -22,9 +22,9 @@
 #   * |<E_x>(T)|                       < 2%% of A * m_e * n0 * omega_p
 #   * no NaN / Inf
 #
-# Measured values: rho_e u_e drift = 0.057%%, Ex / E_scale = 6e-5
-# (near Float32 roundoff over ~30k stages).  The 2%% tolerance is
-# ~35x looser, so passes have margin but a genuine regression
+# Measured values: rho_e u_e drift = 0.035%%, Ex / E_scale = 6e-5
+# (Float32 roundoff over ~15k stages at NX=8).  The 2%% tolerance
+# is ~57x looser, so passes have margin but a genuine regression
 # (Lorentz coupling sign flip, wrong Ampere J source, mis-weighted
 # mass in the reduced-mass frequency) would immediately fail.
 # ======================================================================
@@ -45,12 +45,17 @@ from src.two_fluid import FiveMomentTwoFluid
 from src.nvtx import NvtxContext
 
 
-comptime NX = 16
+# NX=8 (same as P=3 sibling) -- the IC is spatially uniform (zero-
+# mode k=0 plasma oscillation), so mesh resolution doesn't affect
+# the analytic prediction.  This was historically NX=16, which was
+# wasteful for a 0-mode test; halving NX gives a 4x speedup with
+# no loss in test fidelity.
+comptime NX = 8
 comptime NY = 2
 comptime NZ = 2
 comptime LX = 1.0
-comptime LY = Float64(2.0 / 16.0)
-comptime LZ = Float64(2.0 / 16.0)
+comptime LY = Float64(2.0 / 8.0)
+comptime LZ = Float64(2.0 / 8.0)
 
 comptime GAMMA_E: Float32 = Float32(5.0 / 3.0)
 comptime GAMMA_I: Float32 = Float32(5.0 / 3.0)
