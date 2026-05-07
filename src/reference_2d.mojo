@@ -18,10 +18,15 @@
 # elsewhere: 3 vertex nodes, then 3 edge-interior blocks ((0,1), (1,2),
 # (2,0)), then face-interior nodes (for P >= 3).
 #
-# This module only exposes the math; meshing, solver, and VTU output
-# in 2D are future work.  `make test-reference-2d` validates the math
-# foundation at P=1..4 (SPD mass matrix, nodes inside the reference
-# simplex, edge-to-element coverage).
+# This module only exposes the math.  The 2D meshing, GPU solver,
+# and VTU output paths that consume it are now fully landed:
+#   src/local_mesh_2d.mojo            -- host-side Kuhn-2-tri mesh
+#   src/local_mesh_2d_gpu*.mojo       -- per-physics 2D GPU kernels
+#   src/vtu_2d.mojo                   -- 2D VTU frame writer
+#
+# `make test-reference-2d` validates the math foundation at P=1..5
+# (size sanity, SPD mass matrix, nodes inside the reference simplex,
+# edge-to-element coverage, node_weights partition-of-unity).
 # ======================================================================
 
 from src.reference import (
