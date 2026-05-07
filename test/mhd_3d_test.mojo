@@ -3,11 +3,12 @@
 # ======================================================================
 #
 # Constant-state preservation on a periodic 3D mesh through the
-# unified Solver[IdealMHD, 2] pipeline.  With a uniform (rho, u, v, w,
-# Bx, By, Bz, psi, E) state the volume flux divergence cancels
-# exactly, face fluxes cancel pairwise, and the GLM transport leaves
-# Bx and psi alone (both spatially constant).  After several SSPRK3
-# steps the state must equal the IC to Float32 roundoff.
+# unified Solver[IdealMHD, P] pipeline, parameterised over P in
+# {2, 3, 4, 5}.  With a uniform (rho, u, v, w, Bx, By, Bz, psi, E)
+# state the volume flux divergence cancels exactly, face fluxes
+# cancel pairwise, and the GLM transport leaves Bx and psi alone
+# (both spatially constant).  After several SSPRK3 steps the state
+# must equal the IC to Float32 roundoff at every P.
 #
 # What this catches:
 #   * MHD flux bug: any component-c flux that isn't translation

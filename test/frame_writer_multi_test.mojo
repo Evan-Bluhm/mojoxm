@@ -2,10 +2,12 @@
 # frame_writer_multi_test -- FrameWriter.write_frame_multi smoke test
 # ======================================================================
 #
-# Tests the new sync multi-field 3D output path on a real Solver:
-#   (1) Build a tiny Solver[Advection, 2] (P=2, NX=NY=NZ=2).
-#   (2) Construct a FrameWriter and call write_frame_multi twice with
-#       two synthetic constant scalar fields.
+# Tests the new sync multi-field 3D output path on a real Solver,
+# parameterised over P in {2, 3, 4, 5}:
+#   (1) Build a tiny Solver[Advection, P] (NX=NY=NZ=2 cubes).
+#   (2) Construct a FrameWriter[Advection, P] and call
+#       write_frame_multi twice with two synthetic constant scalar
+#       fields.
 #   (3) Call finalize() to emit the PVD collection.
 #   (4) Check that both frame VTUs and the PVD file exist and have
 #       non-zero bytes; check the PVD references both frames in
