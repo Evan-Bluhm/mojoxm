@@ -864,9 +864,12 @@ sanity-check re-rank after a kernel-level change.
   (`meshio`, `scipy`).
 - A C toolchain (linker). On Linux, `libm` and `libpthread` via the
   system `glibc`.
-- For the MPI examples (`mpi_hello`, `mpi_partition`, future
-  multi-rank drivers): OpenMPI 4.x (`apt install openmpi-bin
-  libopenmpi-dev` on Ubuntu) and `mpicc` on PATH.
+- For multi-rank runs (`mpi_hello`, `mpi_partition`,
+  `mpi_patch_mesh`, `mpi_halo_pingpong`, plus every 3D physics
+  driver under `examples/*.mojo` -- they all support np>=2 via
+  the 3D Mesh + HaloExchange + Solver path): OpenMPI 4.x
+  (`apt install openmpi-bin libopenmpi-dev` on Ubuntu) and
+  `mpicc` on PATH.
 
 ### Install Mojo
 
