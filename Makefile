@@ -230,7 +230,7 @@ help:
 	@echo '  make bench-{mhd,euler,maxwell,sw,advection,two-fluid}'
 	@echo '                           run all gates for one physics module (cached):'
 	@echo '                             mhd 33 gates ~70s, euler 33 ~105s, maxwell 24 ~42s,'
-	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 8 ~27s'
+	@echo '                             sw 14 ~30s, advection 12 ~25s, two-fluid 8 ~26s'
 	@echo '  make bench-all           build + run every analytic-solution gate (124 benches; ~4 min cached)'
 	@echo ''
 	@echo 'Note: do NOT use make -j.  Mojo already runs multi-threaded per'
@@ -1036,7 +1036,7 @@ bench-advection: \
 # P=2 outflow; P=2 inflow).  After this set every BC dispatch arm
 # in FiveMomentTwoFluid.boundary_flux has a direct gate.  Run when
 # iterating on the Two-Fluid module, the J/M-coupled Maxwell stack,
-# or BC dispatch on NC=17.  Run-time ~27s w/ cached binaries
+# or BC dispatch on NC=17.  Run-time ~26s w/ cached binaries
 bench-two-fluid: \
 		bench-two-fluid-langmuir-3d bench-two-fluid-langmuir-3d-p3 \
 		bench-two-fluid-outflow-3d bench-two-fluid-inflow-3d \
