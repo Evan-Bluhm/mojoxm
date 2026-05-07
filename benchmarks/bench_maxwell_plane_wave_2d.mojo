@@ -24,6 +24,10 @@
 #     the upwind symmetry of the Rusanov flux at non-PEC boundaries,
 #     show up here but not in the cavity test.
 #
+# TE-mode dual lives in bench_maxwell_te_plane_wave_2d (Bz / Ey
+# nonzero instead of Ez / By); both polarizations together gate
+# every flux path in the 2D Maxwell volume + face-flux kernels.
+#
 # Pass criteria (P=2, NX=NY=16, single-rank):
 #   * rel L2(state, all 6 components) < 1e-3
 #   * leakage into the analytically-zero components (Ex, Ey, Bx, Bz)
