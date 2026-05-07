@@ -952,9 +952,13 @@ End-to-end correctness is verified by three tests:
   domain faces, so every rank sees a different mix of periodic peer
   boundaries vs non-periodic global boundaries. Also **bit-identical**.
 - `make test-reference` — host-side unit test of the arbitrary-order
-  Lagrange reference element at P=1, 2, 3, 4: mass matrix SPD, node
-  positions inside the reference simplex with correct pairwise
-  separation, face-to-element lookup covers every face-local index.
+  Lagrange reference element at P=1..5.  Six invariants per P: size
+  closed-forms, mass matrix SPD, node positions inside the reference
+  simplex with pairwise separation >= 1/(2P), face-to-element lookup
+  coverage, `node_weights` partition-of-unity (load-bearing for the
+  BJ limiter's cell-mean conservation; closed-form spot check at
+  P=2), and a direct math check on the `mat_inv` Gauss-Jordan helper
+  that underpins the Vandermonde inversion.
 
 At np>1 each SSPRK3 stage runs in **split-kernel / MPI-overlap mode**:
 
