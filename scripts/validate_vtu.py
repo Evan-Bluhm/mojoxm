@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""validate_vtu.py -- meshio-roundtrip + VTK_LAGRANGE_TETRAHEDRON
-spec validation for VTU output.
+"""validate_vtu.py -- meshio-roundtrip + VTK_LAGRANGE spec
+validation for VTU output (3D tetrahedra and 2D triangles).
 
-Reads each VTU file passed on the command line and verifies:
+Reads each VTU file passed on the command line and dispatches by
+cell type:
 
-  (1) meshio can parse the binary VTU.
-  (2) Cell type matches the expected Lagrange-tet kind:
-        P=2   -> VTK_QUADRATIC_TETRA       (meshio name: tetra10),  NP=10
-        P>=3  -> VTK_LAGRANGE_TETRAHEDRON, NP=(P+1)(P+2)(P+3)/6
-                                           (20 / 35 / 56 / ...)
-  (3) Every point coordinate and point_data scalar is finite (not
-      NaN, not Inf) -- a non-finite would render as a black hole in
-      ParaView or crash some importers.
-  (4) Per-cell connectivity is unique (no duplicate indices in a row).
-  (5) The 4 corner positions of each cell are distinct.
-  (6) The 4 corners form a non-degenerate tet (volume above floor).
-  (7) Edge interiors at P>=3: lie on the v0->v1, v1->v2, v2->v0,
-      v0->v3, v1->v3, v2->v3 segments at parametric position
-      (j+1)/P (equispaced Lagrange spec).
-  (8) Face interiors at P>=3: lie in the plane of one of the 4 face
-      triangles (face *index* convention is direction-agnostic
-      since VTK docs are themselves ambiguous).
-  (9) Volume interiors at P>=4: strictly inside the tet (every
-      barycentric coord > 0).
+  * 3D tetrahedra (tetra10 / VTK_LAGRANGE_TETRAHEDRON):
+      NP = (P+1)(P+2)(P+3)/6  (10/20/35/56 at P=2/3/4/5).
+      Checks: meshio-parse, cell-type, finite values, connectivity
+      uniqueness, 4 corners distinct, non-degenerate tet, edge
+      interiors on segment at (j+1)/P, face interiors on face
+      planes, volume interiors strictly inside (P>=4).
+
+  * 2D triangles (triangle6 / VTK_LAGRANGE_TRIANGLE):
+      NP_p = (P+1)(P+2)/2  (6/10/15/21 at P=2/3/4/5).
+      Checks: meshio-parse, cell-type, finite values, connectivity
+      uniqueness, 3 corners distinct, non-degenerate triangle, edge
+      interiors on segment at (j+1)/P, face interiors strictly
+      inside the triangle (P>=3).
+
+The face *index* convention (which face is face 0) is direction-
+agnostic in both branches -- VTK docs are ambiguous between
+sources, and ParaView accepts either.  Position-class compliance
+(corner/edge/face/volume) is what gets validated.
 
 Usage:
     scripts/validate_vtu.py file1.vtu [file2.vtu ...]
@@ -31,11 +31,17 @@ Exits 0 if every file passes, 1 on the first failure.
 
 Catches:
   * binary VTU format regressions (the in-Mojo XML-string check in
-    vtu_3d_multi_test wouldn't see this).
-  * cell-type-71 dispatch regressions at P>=3.
+    vtu_{2d,3d}_multi_test wouldn't see this).
+  * cell-type dispatch regressions at P>=3 (cell type 69 / 71).
   * point/cell count off-by-ones.
-  * any node category drifting off its expected position class
-    (corner / edge / face / volume).
+  * any node category drifting off its expected position class.
+
+Known compatibility notes:
+  meshio 5.3.5 inside a conda-forge pixi env has a base64-padding
+  issue specifically reading the 2D P=2 fixture; system python's
+  meshio 5.3.5 reads it cleanly.  See `make test-vtu-meshio`
+  comment for details.  Standalone CLI invocation outside the
+  pixi env validates 2D VTUs without issue.
 """
 
 from __future__ import annotations
