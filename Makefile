@@ -236,7 +236,7 @@ help:
 	@echo '      for 4 independent benches).'
 	@echo ''
 	@echo 'Build targets:'
-	@echo '  make                     build every driver (needs GPU for most)'
+	@echo '  make                     build every driver (needs GPU for most; ~5 min cold)'
 	@echo '  make cpu                 CPU-only smoke tests (login-node safe)'
 	@echo '                           drivers: $(CPU_DRIVERS)'
 	@echo '  make gpu                 GPU-using drivers (3D + 2D + MPI helpers)'
