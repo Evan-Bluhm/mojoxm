@@ -1251,6 +1251,13 @@ buffer. `cuMemAllocHost` is avoided on the device→host path too.
 - **2D MPI not implemented.** The 2D triangular GPU stack runs at
   np=1 only; the 3D Mesh + HaloExchange + Solver path supports np>=2
   via `make test`/`test-bc`.
+- **2D `FiveMomentTwoFluid` not implemented.** The 2D pipeline
+  ships 6 of the 7 physics modules (Advection / Euler /
+  ShallowWater / Maxwell / IdealMHD plain NC=6 / IdealMHD GLM
+  NC=7).  `FiveMomentTwoFluid` is 3D-only -- adding the 2D path
+  would be a `local_mesh_2d_gpu_two_fluid.mojo` mirroring the
+  3D kernel structure (NC=17 fluid + EM + GLM coupling).  Tracked
+  on the [near-term roadmap](docs/architecture/index.md#limitations-and-roadmap).
 - **2D MHD shocked-Riemann problems are unsupported.** The
   `mhd_glm_*` kernels in `src/local_mesh_2d_gpu_mhd_glm.mojo` add
   GLM as an opt-in NC=7 path (gated by alfven-via-GLM at P=2/3/4/5,
