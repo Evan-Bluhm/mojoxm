@@ -29,21 +29,17 @@
 
 from std.sys import has_accelerator
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, sin, cos
 
 from src import mpi
-from src.partition import build_partition
-from src.reference import N_P, build_reference_operators
-from src.mesh import Mesh
+from src.reference import N_P
 from src.boundary import BoundaryConditions
-from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.mhd import IdealMHD
-from src.nvtx import NvtxContext
-from src.frame_writer import FrameWriter, write_snapshot_3d_multi
+from src.driver3d import Driver3D
+from src.frame_writer import FrameWriter, DownloadedSnapshot
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
-from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.diagnostics import DiagnosticsWriter, DiagComponents
 
 
 comptime NX = 32
@@ -138,82 +134,79 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var rank = mpi.world_rank()
-    var size = mpi.world_size()
 
-    if rank == 0:
-        print("mhd_alfven: GPU DG ideal MHD + GLM, P2 tet, Rusanov,", size, "rank(s)")
-        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
+    var physics = IdealMHD(GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D)
+    var d = Driver3D[IdealMHD](
+        problem_name="mhd_alfven: GPU DG ideal MHD + GLM, P2 tet, Rusanov",
+        nx=NX,
+        ny=NY,
+        nz=NZ,
+        lx=LX,
+        ly=LY,
+        lz=LZ,
+        bcs=BoundaryConditions.periodic(),
+        physics=physics^,
+    )
+    if d.rank == 0:
         print("  c_h =", C_H, "  alpha_d =", ALPHA_D)
 
-    var nvtx = NvtxContext()
-    var refs = build_reference_operators(nvtx)
-    var ctx = DeviceContext()
-
-    var bcs = BoundaryConditions.periodic()
-    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
-    var halo = HaloExchange(ctx, mesh.part, IdealMHD.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
-    var physics = IdealMHD(GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D)
-    var solver = Solver[IdealMHD](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
-
-    solver.ctx.enqueue_function[alfven_ic_kernel](
-        solver.d_q.unsafe_ptr(),
-        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
-        solver.num_owned_elements,
+    d.solver.ctx.enqueue_function[alfven_ic_kernel](
+        d.solver.d_q.unsafe_ptr(),
+        d.solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        d.solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        d.solver.num_owned_elements,
         Float32(LX),
         AMPLITUDE,
         B0,
         RHO0,
         P0,
         GAMMA,
-        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
+        grid_dim=ceildiv(d.solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
-    solver.ctx.synchronize()
+    d.solver.ctx.synchronize()
 
     # Save IC for By (component 6) for round-trip L2 comparison.
     var by_ic = List[Float32]()
-    for _ in range(solver.num_owned_elements * N_P):
+    for _ in range(d.solver.num_owned_elements * N_P):
         by_ic.append(Float32(0.0))
-    solver.download_owned_component(6, by_ic, nvtx)
+    d.solver.download_owned_component(6, by_ic, d.nvtx)
 
     # density writer (component 0) -- watching the wave is more useful
     # via By, but the VTU writer only emits one scalar; density is the
     # conventional "density" slot.  Use ParaView's Calculator filter
     # to see By if curious.
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
-    if rank == 0:
-        solver.memory_report().print()
+    if d.rank == 0:
+        d.solver.memory_report().print()
 
-    var writer = FrameWriter[IdealMHD](solver, nvtx, component=6)
+    var writer = FrameWriter[IdealMHD](d.solver, d.nvtx, component=6)
 
     # Diagnostics.  Fluid invariants: mass, 3 momenta, total energy.
     # Magnetic energy int(|B|^2) dV is conserved too (via the squared
     # components).  `max_abs_psi` tracks the GLM cleaner's progress --
     # for a divergence-free IC this stays at roundoff the whole run.
-    var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass", 0))
-    diag_linear.append(NamedComponent("momentum_x", 1))
-    diag_linear.append(NamedComponent("momentum_y", 2))
-    diag_linear.append(NamedComponent("momentum_z", 3))
-    diag_linear.append(NamedComponent("total_energy", 4))
-    var diag_squared = List[NamedComponent]()
-    diag_squared.append(NamedComponent("Bx_sq", 5))
-    diag_squared.append(NamedComponent("By_sq", 6))
-    diag_squared.append(NamedComponent("Bz_sq", 7))
-    var diag_maxabs = List[NamedComponent]()
-    diag_maxabs.append(NamedComponent("max_abs_psi", 8))
-    var diag = DiagnosticsWriter[IdealMHD](solver, "output/diagnostics.csv", diag_linear, diag_squared, diag_maxabs, LX, LY, LZ)
+    var components = (
+        DiagComponents()
+        .linear("mass", 0)
+        .linear("momentum_x", 1)
+        .linear("momentum_y", 2)
+        .linear("momentum_z", 3)
+        .linear("total_energy", 4)
+        .squared("Bx_sq", 5)
+        .squared("By_sq", 6)
+        .squared("Bz_sq", 7)
+        .maxabs("max_abs_psi", 8)
+    )
+    var diag = DiagnosticsWriter[IdealMHD](d.solver, "output/diagnostics.csv", components.linear_list, components.squared_list, components.maxabs_list, LX, LY, LZ)
 
     var dt = choose_dt()
-    if rank == 0:
+    if d.rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[IdealMHD](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
+    var result = run_ssprk3_loop_with_diagnostics[IdealMHD](d.solver, writer, diag, dt, T_FINAL, NUM_FRAMES, d.nvtx)
 
-    writer.finalize("output/solution.pvd", nvtx)
+    writer.finalize("output/solution.pvd", d.nvtx)
 
     # Final-state multi-field snapshot for richer ParaView inspection
     # (the per-frame async pipeline above writes one psi field per
@@ -222,67 +215,48 @@ def main() raises:
     # magnetic-field magnitude, and psi exposes any GLM cleaning
     # residual.  Gated on np=1 since each rank dumps only its
     # owned slab.
-    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
-    if nprocs == 1:
-        var n_owned_dof = solver.num_owned_elements * N_P
-        var snap_bx = List[Float32]()
-        var snap_by = List[Float32]()
-        var snap_bz = List[Float32]()
-        var snap_psi = List[Float32]()
-        for _ in range(n_owned_dof):
-            snap_bx.append(Float32(0.0))
-            snap_by.append(Float32(0.0))
-            snap_bz.append(Float32(0.0))
-            snap_psi.append(Float32(0.0))
-        solver.download_owned_component(5, snap_bx, nvtx)
-        solver.download_owned_component(6, snap_by, nvtx)
-        solver.download_owned_component(7, snap_bz, nvtx)
-        solver.download_owned_component(8, snap_psi, nvtx)
-        var f_by = List[Float64]()
-        var f_bmag = List[Float64]()
-        var f_psi = List[Float64]()
-        for k in range(n_owned_dof):
-            var bx = snap_bx[k]
-            var by = snap_by[k]
-            var bz = snap_bz[k]
-            f_by.append(Float64(by))
-            f_bmag.append(Float64(sqrt(bx * bx + by * by + bz * bz)))
-            f_psi.append(Float64(snap_psi[k]))
-        var fields = List[List[Float64]]()
-        fields.append(f_by^)
-        fields.append(f_bmag^)
-        fields.append(f_psi^)
-        var names = List[String]()
-        names.append(String("By"))
-        names.append(String("|B|"))
-        names.append(String("psi"))
-        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
-        if rank == 0:
+    if d.is_single_rank():
+        var snap = DownloadedSnapshot[IdealMHD](d.solver, d.nvtx, components=[5, 6, 7, 8])
+        var f_by = snap.alloc_field()
+        var f_bmag = snap.alloc_field()
+        var f_psi = snap.alloc_field()
+        for k in range(snap.n_owned_dof):
+            var bx = snap.snaps[0][k]
+            var by = snap.snaps[1][k]
+            var bz = snap.snaps[2][k]
+            f_by[k] = Float64(by)
+            f_bmag[k] = Float64(sqrt(bx * bx + by * by + bz * bz))
+            f_psi[k] = Float64(snap.snaps[3][k])
+        snap.add_field("By", f_by^)
+        snap.add_field("|B|", f_bmag^)
+        snap.add_field("psi", f_psi^)
+        snap.write(d.solver, d.nvtx, "output/snapshot_t_final.vtu")
+        if d.rank == 0:
             print("  wrote output/snapshot_t_final.vtu (By + |B| + psi, t=", T_FINAL, ")")
 
     # The round-trip L2 and max-|psi| diagnostics below sum over this
     # rank's owned elements only; at np>1 the globally-correct numbers
     # would need an allreduce, which isn't worth adding for this demo
     # -- gate on np=1 so we don't print misleading partial sums.
-    if size == 1:
+    if d.size == 1:
         var by_fin = List[Float32]()
-        for _ in range(solver.num_owned_elements * N_P):
+        for _ in range(d.solver.num_owned_elements * N_P):
             by_fin.append(Float32(0.0))
-        solver.download_owned_component(6, by_fin, nvtx)
+        d.solver.download_owned_component(6, by_fin, d.nvtx)
         var err2: Float64 = 0.0
         var ref2: Float64 = 0.0
         for i in range(len(by_ic)):
-            var d = Float64(by_fin[i] - by_ic[i])
+            var dd = Float64(by_fin[i] - by_ic[i])
             var r = Float64(by_ic[i])
-            err2 += d * d
+            err2 += dd * dd
             ref2 += r * r
         var rel_l2 = sqrt(err2 / ref2) if ref2 > 0.0 else sqrt(err2)
         print("  relative L2(By) vs IC after one period:", Float32(rel_l2))
 
         var psi_fin = List[Float32]()
-        for _ in range(solver.num_owned_elements * N_P):
+        for _ in range(d.solver.num_owned_elements * N_P):
             psi_fin.append(Float32(0.0))
-        solver.download_owned_component(8, psi_fin, nvtx)
+        d.solver.download_owned_component(8, psi_fin, d.nvtx)
         var max_psi: Float32 = 0.0
         for i in range(len(psi_fin)):
             var p = psi_fin[i] if psi_fin[i] >= Float32(0.0) else -psi_fin[i]
@@ -290,12 +264,12 @@ def main() raises:
                 max_psi = p
         print("  max |psi| (GLM monopole tracer) :", max_psi)
 
-    if rank == 0:
+    if d.rank == 0:
         result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
-    var tput = solver.bench_step_loop(dt, nvtx)
-    if rank == 0:
+    var tput = d.solver.bench_step_loop(dt, d.nvtx)
+    if d.rank == 0:
         tput.print()
 
     mpi.finalize()

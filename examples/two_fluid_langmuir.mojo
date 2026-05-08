@@ -35,21 +35,17 @@
 
 from std.sys import has_accelerator
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv
 
 from src import mpi
-from src.partition import build_partition
-from src.reference import N_P, build_reference_operators
-from src.mesh import Mesh
+from src.reference import N_P
 from src.boundary import BoundaryConditions
-from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.two_fluid import FiveMomentTwoFluid
-from src.nvtx import NvtxContext
-from src.frame_writer import FrameWriter, write_snapshot_3d_multi
+from src.driver3d import Driver3D
+from src.frame_writer import FrameWriter, DownloadedSnapshot
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
-from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.diagnostics import DiagnosticsWriter, DiagComponents
 
 
 comptime NX = 16
@@ -148,31 +144,28 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var rank = mpi.world_rank()
-    var size = mpi.world_size()
 
-    if rank == 0:
-        print("two_fluid_langmuir: GPU DG 5-moment two-fluid + Maxwell, P2 tet,", size, "rank(s)")
-        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
+    var physics = FiveMomentTwoFluid(GAMMA_E, GAMMA_I, Q_E, M_E, Q_I, M_I, EPS0, C_LIGHT, C_H, ALPHA_D, MIN_DENSITY, MIN_PRESSURE)
+    var d = Driver3D[FiveMomentTwoFluid](
+        problem_name="two_fluid_langmuir: GPU DG 5-moment two-fluid + Maxwell, P2 tet",
+        nx=NX,
+        ny=NY,
+        nz=NZ,
+        lx=LX,
+        ly=LY,
+        lz=LZ,
+        bcs=BoundaryConditions.periodic(),
+        physics=physics^,
+    )
+    if d.rank == 0:
         var omega_p = sqrt(N0 * Q_E * Q_E / (EPS0 * M_E))
         print("  omega_p =", omega_p, "  T_period =", Float32(6.283185307179586) / omega_p, "  T_FINAL = ~0.5 period")
 
-    var nvtx = NvtxContext()
-    var refs = build_reference_operators(nvtx)
-    var ctx = DeviceContext()
-
-    var bcs = BoundaryConditions.periodic()
-    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
-    var halo = HaloExchange(ctx, mesh.part, FiveMomentTwoFluid.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
-    var physics = FiveMomentTwoFluid(GAMMA_E, GAMMA_I, Q_E, M_E, Q_I, M_I, EPS0, C_LIGHT, C_H, ALPHA_D, MIN_DENSITY, MIN_PRESSURE)
-    var solver = Solver[FiveMomentTwoFluid](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
-
-    solver.ctx.enqueue_function[langmuir_ic_kernel](
-        solver.d_q.unsafe_ptr(),
-        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
-        solver.num_owned_elements,
+    d.solver.ctx.enqueue_function[langmuir_ic_kernel](
+        d.solver.d_q.unsafe_ptr(),
+        d.solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        d.solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        d.solver.num_owned_elements,
         M_E * N0,
         M_I * N0,
         U_PERTURB,
@@ -180,48 +173,44 @@ def main() raises:
         P_I0,
         GAMMA_E,
         GAMMA_I,
-        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
+        grid_dim=ceildiv(d.solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
-    solver.ctx.synchronize()
+    d.solver.ctx.synchronize()
 
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
-    if rank == 0:
-        solver.memory_report().print()
+    if d.rank == 0:
+        d.solver.memory_report().print()
 
-    var writer = FrameWriter[FiveMomentTwoFluid](
-        solver,
-        nvtx,
-        component=10,  # Ex as the output scalar
-    )
+    var writer = FrameWriter[FiveMomentTwoFluid](d.solver, d.nvtx, component=10)  # Ex as the output scalar
 
     # Diagnostics: per-species mass + x-momentum (the relevant one for
     # a 1D Langmuir oscillation), total fluid energies, and EM energy
     # via the squared components.  Conservation of total momentum
     # `rho_e u_e + rho_i u_i` is the clearest signature that the
     # Lorentz coupling is symmetric between the two fluids.
-    var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass_e", 0))
-    diag_linear.append(NamedComponent("mom_e_x", 1))
-    diag_linear.append(NamedComponent("energy_e", 4))
-    diag_linear.append(NamedComponent("mass_i", 5))
-    diag_linear.append(NamedComponent("mom_i_x", 6))
-    diag_linear.append(NamedComponent("energy_i", 9))
-    var diag_squared = List[NamedComponent]()
-    diag_squared.append(NamedComponent("Ex_sq", 10))
-    diag_squared.append(NamedComponent("Ey_sq", 11))
-    diag_squared.append(NamedComponent("Ez_sq", 12))
-    var diag_maxabs = List[NamedComponent]()
-    diag_maxabs.append(NamedComponent("max_abs_psi", 16))
-    var diag = DiagnosticsWriter[FiveMomentTwoFluid](solver, "output/diagnostics.csv", diag_linear, diag_squared, diag_maxabs, LX, LY, LZ)
+    var components = (
+        DiagComponents()
+        .linear("mass_e", 0)
+        .linear("mom_e_x", 1)
+        .linear("energy_e", 4)
+        .linear("mass_i", 5)
+        .linear("mom_i_x", 6)
+        .linear("energy_i", 9)
+        .squared("Ex_sq", 10)
+        .squared("Ey_sq", 11)
+        .squared("Ez_sq", 12)
+        .maxabs("max_abs_psi", 16)
+    )
+    var diag = DiagnosticsWriter[FiveMomentTwoFluid](d.solver, "output/diagnostics.csv", components.linear_list, components.squared_list, components.maxabs_list, LX, LY, LZ)
 
     var dt = choose_dt()
-    if rank == 0:
+    if d.rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[FiveMomentTwoFluid](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
+    var result = run_ssprk3_loop_with_diagnostics[FiveMomentTwoFluid](d.solver, writer, diag, dt, T_FINAL, NUM_FRAMES, d.nvtx)
 
-    writer.finalize("output/solution.pvd", nvtx)
+    writer.finalize("output/solution.pvd", d.nvtx)
 
     # Final-state multi-field snapshot for richer ParaView inspection.
     # Two-Fluid is NC=17; emits four physically meaningful scalars:
@@ -230,59 +219,42 @@ def main() raises:
     # component), and charge_density (Q_E*n_e + Q_I*n_i, which oscillates
     # 90 degrees out of phase with Ex per the cold-plasma dispersion
     # relation).  Gated on np=1.
-    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
-    if nprocs == 1:
-        var n_owned_dof = solver.num_owned_elements * N_P
-        var snap_rho_e = List[Float32]()
-        var snap_rho_i = List[Float32]()
-        var snap_ex = List[Float32]()
-        for _ in range(n_owned_dof):
-            snap_rho_e.append(Float32(0.0))
-            snap_rho_i.append(Float32(0.0))
-            snap_ex.append(Float32(0.0))
-        solver.download_owned_component(0, snap_rho_e, nvtx)  # electron rho
-        solver.download_owned_component(5, snap_rho_i, nvtx)  # ion rho
-        solver.download_owned_component(10, snap_ex, nvtx)  # Ex
-        var f_n_e = List[Float64]()
-        var f_n_i = List[Float64]()
-        var f_ex = List[Float64]()
-        var f_chg = List[Float64]()
-        for k in range(n_owned_dof):
-            var n_e = snap_rho_e[k] / M_E
-            var n_i = snap_rho_i[k] / M_I
-            f_n_e.append(Float64(n_e))
-            f_n_i.append(Float64(n_i))
-            f_ex.append(Float64(snap_ex[k]))
-            f_chg.append(Float64(Q_E * n_e + Q_I * n_i))
-        var fields = List[List[Float64]]()
-        fields.append(f_n_e^)
-        fields.append(f_n_i^)
-        fields.append(f_ex^)
-        fields.append(f_chg^)
-        var names = List[String]()
-        names.append(String("n_e"))
-        names.append(String("n_i"))
-        names.append(String("Ex"))
-        names.append(String("charge_density"))
-        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
-        if rank == 0:
+    if d.is_single_rank():
+        var snap = DownloadedSnapshot[FiveMomentTwoFluid](d.solver, d.nvtx, components=[0, 5, 10])
+        var f_n_e = snap.alloc_field()
+        var f_n_i = snap.alloc_field()
+        var f_ex = snap.alloc_field()
+        var f_chg = snap.alloc_field()
+        for k in range(snap.n_owned_dof):
+            var n_e = snap.snaps[0][k] / M_E
+            var n_i = snap.snaps[1][k] / M_I
+            f_n_e[k] = Float64(n_e)
+            f_n_i[k] = Float64(n_i)
+            f_ex[k] = Float64(snap.snaps[2][k])
+            f_chg[k] = Float64(Q_E * n_e + Q_I * n_i)
+        snap.add_field("n_e", f_n_e^)
+        snap.add_field("n_i", f_n_i^)
+        snap.add_field("Ex", f_ex^)
+        snap.add_field("charge_density", f_chg^)
+        snap.write(d.solver, d.nvtx, "output/snapshot_t_final.vtu")
+        if d.rank == 0:
             print("  wrote output/snapshot_t_final.vtu (n_e + n_i + Ex + charge, t=", T_FINAL, ")")
 
     # At np=1 sample a few diagnostics: the spatial mean of Ex and of
     # rho_e * u_e (electron x-momentum) should both be traces of the
     # same oscillation, 90 degrees apart in phase.
-    if size == 1:
-        var total_dof = solver.num_owned_elements * N_P
+    if d.size == 1:
+        var total_dof = d.solver.num_owned_elements * N_P
         var buf = List[Float32]()
         for _ in range(total_dof):
             buf.append(Float32(0.0))
-        solver.download_owned_component(10, buf, nvtx)  # Ex
+        d.solver.download_owned_component(10, buf, d.nvtx)  # Ex
         var sum_Ex: Float64 = 0.0
         for i in range(total_dof):
             sum_Ex += Float64(buf[i])
         var mean_Ex = Float32(sum_Ex / Float64(total_dof))
 
-        solver.download_owned_component(1, buf, nvtx)  # rho_e u_e
+        d.solver.download_owned_component(1, buf, d.nvtx)  # rho_e u_e
         var sum_mom: Float64 = 0.0
         for i in range(total_dof):
             sum_mom += Float64(buf[i])
@@ -295,12 +267,12 @@ def main() raises:
         #   rho_e u_e ~ -0.0092,  Ex ~ -0.0006
         # -- see the driver header for the derivation.
 
-    if rank == 0:
+    if d.rank == 0:
         result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
-    var tput = solver.bench_step_loop(dt, nvtx)
-    if rank == 0:
+    var tput = d.solver.bench_step_loop(dt, d.nvtx)
+    if d.rank == 0:
         tput.print()
 
     mpi.finalize()

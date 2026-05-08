@@ -21,21 +21,18 @@
 
 from std.sys import has_accelerator
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, exp
 
 from src import mpi
-from src.partition import build_partition
-from src.reference import N_P, build_reference_operators
-from src.mesh import Mesh
+from src.reference import N_P
 from src.boundary import BoundaryConditions, BC_INTERIOR, BC_WALL
-from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.shallow_water import ShallowWater
+from src.driver3d import Driver3D
 from src.nvtx import NvtxContext
-from src.frame_writer import FrameWriter, write_snapshot_3d_multi
+from src.frame_writer import FrameWriter, DownloadedSnapshot
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
-from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.diagnostics import DiagnosticsWriter, DiagComponents
 
 
 comptime NX = 32
@@ -101,133 +98,100 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var rank = mpi.world_rank()
-    var size = mpi.world_size()
-
-    if rank == 0:
-        print("shallow_water_drop: GPU DG shallow water, P2 tet, Rusanov,", size, "rank(s)")
-        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
-
-    var nvtx = NvtxContext()
-
-    var refs = build_reference_operators(nvtx)
-
-    var ctx = DeviceContext()
 
     # Slip walls on x and y; z is periodic (z-direction is trivial for
     # pure 2D shallow water).
-    var bcs = BoundaryConditions(
-        BC_WALL,
-        BC_WALL,  # -x, +x
-        BC_WALL,
-        BC_WALL,  # -y, +y
-        BC_INTERIOR,
-        BC_INTERIOR,  # -z, +z
+    var bcs = BoundaryConditions(BC_WALL, BC_WALL, BC_WALL, BC_WALL, BC_INTERIOR, BC_INTERIOR)
+    var physics = ShallowWater(GRAVITY, H_MIN)
+    var d = Driver3D[ShallowWater](
+        problem_name="shallow_water_drop: GPU DG shallow water, P2 tet, Rusanov",
+        nx=NX,
+        ny=NY,
+        nz=NZ,
+        lx=LX,
+        ly=LY,
+        lz=LZ,
+        bcs=bcs,
+        physics=physics^,
     )
 
-    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
-    var halo = HaloExchange(ctx, mesh.part, ShallowWater.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
-    var physics = ShallowWater(GRAVITY, H_MIN)
-    var solver = Solver[ShallowWater](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
-
-    solver.ctx.enqueue_function[drop_ic_kernel](
-        solver.d_q.unsafe_ptr(),
-        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
-        solver.num_owned_elements,
+    d.solver.ctx.enqueue_function[drop_ic_kernel](
+        d.solver.d_q.unsafe_ptr(),
+        d.solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        d.solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        d.solver.num_owned_elements,
         H_REST,
         DROP_AMPLITUDE,
         DROP_SIGMA,
         DROP_X0,
         DROP_Y0,
-        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
+        grid_dim=ceildiv(d.solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
-    solver.ctx.synchronize()
+    d.solver.ctx.synchronize()
 
     # Mass diagnostic sums over this rank's owned elements only; at
     # np>1 the correct global number would need an allreduce, which
     # isn't worth adding here -- suppress outside np=1 rather than
     # print misleading partial sums.
     var mass_ic = Float32(0.0)
-    if size == 1:
-        mass_ic = _total_mass(solver, nvtx)
+    if d.size == 1:
+        mass_ic = _total_mass(d.solver, d.nvtx)
         print("  integrated mass at t=0     :", mass_ic)
 
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
-    if rank == 0:
-        solver.memory_report().print()
+    if d.rank == 0:
+        d.solver.memory_report().print()
 
-    var writer = FrameWriter[ShallowWater](solver, nvtx, component=0)
+    var writer = FrameWriter[ShallowWater](d.solver, d.nvtx, component=0)
 
     # Diagnostics.  Slip walls conserve mass exactly; normal momentum
     # flips on impact so x-momentum and y-momentum oscillate around
     # zero as the radial wave hits and rebounds.  max|h| shows the
     # peak amplitude decay (Rusanov dissipation smooths the ring).
-    var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass", 0))
-    diag_linear.append(NamedComponent("momentum_x", 1))
-    diag_linear.append(NamedComponent("momentum_y", 2))
-    var diag_maxabs = List[NamedComponent]()
-    diag_maxabs.append(NamedComponent("max_h", 0))
-    var diag = DiagnosticsWriter[ShallowWater](solver, "output/diagnostics.csv", diag_linear, List[NamedComponent](), diag_maxabs, LX, LY, LZ)
+    var components = DiagComponents().linear("mass", 0).linear("momentum_x", 1).linear("momentum_y", 2).maxabs("max_h", 0)
+    var diag = DiagnosticsWriter[ShallowWater](d.solver, "output/diagnostics.csv", components.linear_list, components.squared_list, components.maxabs_list, LX, LY, LZ)
 
     var dt = choose_dt()
-    if rank == 0:
+    if d.rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[ShallowWater](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
+    var result = run_ssprk3_loop_with_diagnostics[ShallowWater](d.solver, writer, diag, dt, T_FINAL, NUM_FRAMES, d.nvtx)
 
-    writer.finalize("output/solution.pvd", nvtx)
+    writer.finalize("output/solution.pvd", d.nvtx)
 
     # Final-state multi-field snapshot for richer ParaView inspection
     # (the per-frame async pipeline writes one h field per frame).
     # Emits h + |u| at t=T_FINAL: h is the surface elevation, |u| is
     # the depth-averaged velocity magnitude.  Gated on np=1 since
     # each rank dumps only its owned slab.
-    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
-    if nprocs == 1:
-        var n_owned_dof = solver.num_owned_elements * N_P
-        var snap_h = List[Float32]()
-        var snap_hu = List[Float32]()
-        var snap_hv = List[Float32]()
-        for _ in range(n_owned_dof):
-            snap_h.append(Float32(0.0))
-            snap_hu.append(Float32(0.0))
-            snap_hv.append(Float32(0.0))
-        solver.download_owned_component(0, snap_h, nvtx)
-        solver.download_owned_component(1, snap_hu, nvtx)
-        solver.download_owned_component(2, snap_hv, nvtx)
-        var f_h = List[Float64]()
-        var f_umag = List[Float64]()
-        for k in range(n_owned_dof):
-            var h = snap_h[k]
-            var u = snap_hu[k] / h
-            var v = snap_hv[k] / h
-            f_h.append(Float64(h))
-            f_umag.append(Float64(sqrt(u * u + v * v)))
-        var fields = List[List[Float64]]()
-        fields.append(f_h^)
-        fields.append(f_umag^)
-        var names = List[String]()
-        names.append(String("h"))
-        names.append(String("|u|"))
-        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
-        if rank == 0:
+    if d.is_single_rank():
+        var snap = DownloadedSnapshot[ShallowWater](d.solver, d.nvtx, components=[0, 1, 2])
+        var f_h = snap.alloc_field()
+        var f_umag = snap.alloc_field()
+        for k in range(snap.n_owned_dof):
+            var h = snap.snaps[0][k]
+            var u = snap.snaps[1][k] / h
+            var v = snap.snaps[2][k] / h
+            f_h[k] = Float64(h)
+            f_umag[k] = Float64(sqrt(u * u + v * v))
+        snap.add_field("h", f_h^)
+        snap.add_field("|u|", f_umag^)
+        snap.write(d.solver, d.nvtx, "output/snapshot_t_final.vtu")
+        if d.rank == 0:
             print("  wrote output/snapshot_t_final.vtu (h + |u|, t=", T_FINAL, ")")
 
-    if size == 1:
-        var mass_final = _total_mass(solver, nvtx)
+    if d.size == 1:
+        var mass_final = _total_mass(d.solver, d.nvtx)
         var mass_drift = mass_final - mass_ic
         print("  integrated mass at t=", T_FINAL, " :", mass_final)
         print("  mass drift                   :", mass_drift, "  (relative:", mass_drift / mass_ic, ")")
-    if rank == 0:
+    if d.rank == 0:
         result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
-    var tput = solver.bench_step_loop(dt, nvtx)
-    if rank == 0:
+    var tput = d.solver.bench_step_loop(dt, d.nvtx)
+    if d.rank == 0:
         tput.print()
 
     mpi.finalize()

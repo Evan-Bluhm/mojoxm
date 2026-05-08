@@ -26,21 +26,18 @@
 
 from std.sys import has_accelerator
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, exp
 
 from src import mpi
-from src.partition import build_partition
-from src.reference import N_P, build_reference_operators
-from src.mesh import Mesh
+from src.reference import N_P
 from src.boundary import BoundaryConditions, BC_WALL
-from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
+from src.driver3d import Driver3D
 from src.nvtx import NvtxContext
-from src.frame_writer import FrameWriter, write_snapshot_3d_multi
+from src.frame_writer import FrameWriter, DownloadedSnapshot
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
-from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.diagnostics import DiagnosticsWriter, DiagComponents
 
 
 # Thin 3D box; the bubble physics is essentially 2D in the (x, y)
@@ -135,43 +132,27 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var rank = mpi.world_rank()
-    var size = mpi.world_size()
-
-    if rank == 0:
-        print("euler_rising_bubble: GPU DG Euler + gravity,", size, "rank(s)")
-        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
-
-    var nvtx = NvtxContext()
-
-    var refs = build_reference_operators(nvtx)
-
-    var ctx = DeviceContext()
 
     # All walls.
-    var bcs = BoundaryConditions(
-        BC_WALL,
-        BC_WALL,  # -x, +x
-        BC_WALL,
-        BC_WALL,  # -y, +y
-        BC_WALL,
-        BC_WALL,  # -z, +z
+    var bcs = BoundaryConditions(BC_WALL, BC_WALL, BC_WALL, BC_WALL, BC_WALL, BC_WALL)
+    var physics = Euler(GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True, GX, GY, GZ)
+    var d = Driver3D[Euler](
+        problem_name="euler_rising_bubble: GPU DG Euler + gravity",
+        nx=NX,
+        ny=NY,
+        nz=NZ,
+        lx=LX,
+        ly=LY,
+        lz=LZ,
+        bcs=bcs,
+        physics=physics^,
     )
 
-    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
-
-    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
-
-    var physics = Euler(GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True, GX, GY, GZ)
-
-    var solver = Solver[Euler](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
-
-    solver.ctx.enqueue_function[bubble_ic_kernel](
-        solver.d_q.unsafe_ptr(),
-        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
-        solver.num_owned_elements,
+    d.solver.ctx.enqueue_function[bubble_ic_kernel](
+        d.solver.d_q.unsafe_ptr(),
+        d.solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        d.solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        d.solver.num_owned_elements,
         GAMMA,
         SCALE_H,
         BUBBLE_X0,
@@ -179,24 +160,24 @@ def main() raises:
         Float32(LZ) * Float32(0.5),
         BUBBLE_RADIUS,
         BUBBLE_RHO_FACTOR,
-        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
+        grid_dim=ceildiv(d.solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
-    solver.ctx.synchronize()
+    d.solver.ctx.synchronize()
 
     # IC-time centroid of the density deficit (where the bubble is).
     # At np>1 each rank computes the centroid of ITS owned subset,
     # which is not globally meaningful without an allreduce -- so the
     # diagnostic prints are suppressed outside np=1.
-    if size == 1:
-        var y_bubble_ic = _bubble_centroid_y(solver, nvtx)
+    if d.size == 1:
+        var y_bubble_ic = _bubble_centroid_y(d.solver, d.nvtx)
         print("  bubble centroid y at t=0 :", y_bubble_ic, " (expected ~", BUBBLE_Y0, ")")
 
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
-    if rank == 0:
-        solver.memory_report().print()
+    if d.rank == 0:
+        d.solver.memory_report().print()
 
-    var writer = FrameWriter[Euler](solver, nvtx, component=0)
+    var writer = FrameWriter[Euler](d.solver, d.nvtx, component=0)
 
     # Conserved-quantity time series for the animated dashboard.
     # Euler's state layout: q[0]=rho, q[1..3]=rho u_{x,y,z}, q[4]=E.
@@ -205,77 +186,50 @@ def main() raises:
     # conserved to the flux scheme's precision (walls on all sides
     # carry no net momentum or energy transport, gravity source shifts
     # y-momentum and energy as expected).
-    var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass", 0))
-    diag_linear.append(NamedComponent("momentum_x", 1))
-    diag_linear.append(NamedComponent("momentum_y", 2))
-    diag_linear.append(NamedComponent("momentum_z", 3))
-    diag_linear.append(NamedComponent("total_energy", 4))
-    var diag = DiagnosticsWriter[Euler](solver, "output/diagnostics.csv", diag_linear, List[NamedComponent](), List[NamedComponent](), LX, LY, LZ)
+    var components = DiagComponents().linear("mass", 0).linear("momentum_x", 1).linear("momentum_y", 2).linear("momentum_z", 3).linear("total_energy", 4)
+    var diag = DiagnosticsWriter[Euler](d.solver, "output/diagnostics.csv", components.linear_list, components.squared_list, components.maxabs_list, LX, LY, LZ)
 
     var dt = choose_dt()
-    if rank == 0:
+    if d.rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Euler](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
+    var result = run_ssprk3_loop_with_diagnostics[Euler](d.solver, writer, diag, dt, T_FINAL, NUM_FRAMES, d.nvtx)
 
-    writer.finalize("output/solution.pvd", nvtx)
+    writer.finalize("output/solution.pvd", d.nvtx)
 
     # Final-state multi-field snapshot (rho + p + |v|) for richer
     # ParaView inspection.  Independent of the per-frame async pipeline.
-    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
-    if nprocs == 1:
-        var n_owned_dof = solver.num_owned_elements * N_P
-        var snap_rho = List[Float32]()
-        var snap_rhou = List[Float32]()
-        var snap_rhov = List[Float32]()
-        var snap_rhow = List[Float32]()
-        var snap_E = List[Float32]()
-        for _ in range(n_owned_dof):
-            snap_rho.append(Float32(0.0))
-            snap_rhou.append(Float32(0.0))
-            snap_rhov.append(Float32(0.0))
-            snap_rhow.append(Float32(0.0))
-            snap_E.append(Float32(0.0))
-        solver.download_owned_component(0, snap_rho, nvtx)
-        solver.download_owned_component(1, snap_rhou, nvtx)
-        solver.download_owned_component(2, snap_rhov, nvtx)
-        solver.download_owned_component(3, snap_rhow, nvtx)
-        solver.download_owned_component(4, snap_E, nvtx)
-        var f_rho = List[Float64]()
-        var f_p = List[Float64]()
-        var f_vmag = List[Float64]()
-        for k in range(n_owned_dof):
-            var rho = snap_rho[k]
-            var u = snap_rhou[k] / rho
-            var v = snap_rhov[k] / rho
-            var w = snap_rhow[k] / rho
+    if d.is_single_rank():
+        var snap = DownloadedSnapshot[Euler](d.solver, d.nvtx, components=[0, 1, 2, 3, 4])
+        var f_rho = snap.alloc_field()
+        var f_p = snap.alloc_field()
+        var f_vmag = snap.alloc_field()
+        for k in range(snap.n_owned_dof):
+            var rho = snap.snaps[0][k]
+            var u = snap.snaps[1][k] / rho
+            var v = snap.snaps[2][k] / rho
+            var w = snap.snaps[3][k] / rho
             var ke = Float32(0.5) * rho * (u * u + v * v + w * w)
-            var p = (GAMMA - Float32(1.0)) * (snap_E[k] - ke)
-            f_rho.append(Float64(rho))
-            f_p.append(Float64(p))
-            f_vmag.append(Float64(sqrt(u * u + v * v + w * w)))
-        var fields = List[List[Float64]]()
-        fields.append(f_rho^)
-        fields.append(f_p^)
-        fields.append(f_vmag^)
-        var names = List[String]()
-        names.append(String("rho"))
-        names.append(String("p"))
-        names.append(String("|v|"))
-        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
-        if rank == 0:
+            var p = (GAMMA - Float32(1.0)) * (snap.snaps[4][k] - ke)
+            f_rho[k] = Float64(rho)
+            f_p[k] = Float64(p)
+            f_vmag[k] = Float64(sqrt(u * u + v * v + w * w))
+        snap.add_field("rho", f_rho^)
+        snap.add_field("p", f_p^)
+        snap.add_field("|v|", f_vmag^)
+        snap.write(d.solver, d.nvtx, "output/snapshot_t_final.vtu")
+        if d.rank == 0:
             print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
 
-    if size == 1:
-        var y_bubble_final = _bubble_centroid_y(solver, nvtx)
+    if d.size == 1:
+        var y_bubble_final = _bubble_centroid_y(d.solver, d.nvtx)
         print("  bubble centroid y at t=", T_FINAL, ":", y_bubble_final)
-    if rank == 0:
+    if d.rank == 0:
         result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
-    var tput = solver.bench_step_loop(dt, nvtx)
-    if rank == 0:
+    var tput = d.solver.bench_step_loop(dt, d.nvtx)
+    if d.rank == 0:
         tput.print()
 
     mpi.finalize()

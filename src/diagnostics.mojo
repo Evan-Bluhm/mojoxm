@@ -45,6 +45,54 @@ struct NamedComponent(Copyable, Movable):
     var component: Int
 
 
+# DiagComponents -- chainable builder for the three NamedComponent lists
+# that DiagnosticsWriter's constructor expects.  Replaces:
+#
+#   var diag_linear = List[NamedComponent]()
+#   diag_linear.append(NamedComponent("mass", 0))
+#   diag_linear.append(NamedComponent("mom_x", 1))
+#   ...
+#   var diag_squared = List[NamedComponent]()
+#   var diag_maxabs = List[NamedComponent]()
+#   diag_maxabs.append(NamedComponent("max_density", 0))
+#
+# with the more compact:
+#
+#   var components = (DiagComponents()
+#       .linear("mass", 0)
+#       .linear("mom_x", 1)
+#       .maxabs("max_density", 0))
+#
+# and then:
+#
+#   var diag = DiagnosticsWriter[Euler](
+#       solver, "output/diagnostics.csv",
+#       components.linear_list, components.squared_list, components.maxabs_list,
+#       LX, LY, LZ,
+#   )
+struct DiagComponents(Movable):
+    var linear_list: List[NamedComponent]
+    var squared_list: List[NamedComponent]
+    var maxabs_list: List[NamedComponent]
+
+    def __init__(out self):
+        self.linear_list = List[NamedComponent]()
+        self.squared_list = List[NamedComponent]()
+        self.maxabs_list = List[NamedComponent]()
+
+    def linear(var self, name: String, c: Int) -> Self:
+        self.linear_list.append(NamedComponent(name, c))
+        return self^
+
+    def squared(var self, name: String, c: Int) -> Self:
+        self.squared_list.append(NamedComponent(name, c))
+        return self^
+
+    def maxabs(var self, name: String, c: Int) -> Self:
+        self.maxabs_list.append(NamedComponent(name, c))
+        return self^
+
+
 struct DiagnosticsWriter[PhysT: Physics, P: Int = 2](Movable):
     comptime NP = num_tet_nodes(Self.P)
     # Cross-rank total number of owned DOFs (= global_nx*global_ny*

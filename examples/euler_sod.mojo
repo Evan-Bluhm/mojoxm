@@ -49,21 +49,18 @@
 
 from std.sys import has_accelerator
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, tanh
 
 from src import mpi
-from src.partition import build_partition
-from src.reference import N_P, build_reference_operators
-from src.mesh import Mesh
-from src.boundary import BoundaryConditions, BC_INTERIOR, BC_WALL, BC_OUTFLOW
-from src.halo_exchange import HaloExchange
+from src.reference import N_P
+from src.boundary import BoundaryConditions, BC_WALL, BC_OUTFLOW
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
+from src.driver3d import Driver3D
 from src.nvtx import NvtxContext
-from src.frame_writer import FrameWriter, write_snapshot_3d_multi
+from src.frame_writer import FrameWriter, DownloadedSnapshot
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
-from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.diagnostics import DiagnosticsWriter, DiagComponents
 
 # Mesh: long in x, short in y/z so the cells stay roughly cubic.
 # dx = LX/NX = 1/200 = 0.005; dy = dz = LY/NY = 0.04/8 = 0.005.
@@ -150,40 +147,23 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var rank = mpi.world_rank()
-    var size = mpi.world_size()
-
-    if rank == 0:
-        print("euler_sod: GPU DG Euler, P2 tet, HLLEC flux,", size, "rank(s)")
-        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
-        print("  BCs: x = transmissive outflow, y/z = slip walls")
-
-    var nvtx = NvtxContext()
-
-    var refs = build_reference_operators(nvtx)
-
-    var ctx = DeviceContext()
 
     # Sod BCs: transmissive outflow on x, slip walls on y and z.
-    var bcs = BoundaryConditions(
-        BC_OUTFLOW,
-        BC_OUTFLOW,  # -x, +x
-        BC_WALL,
-        BC_WALL,  # -y, +y
-        BC_WALL,
-        BC_WALL,  # -z, +z
-    )
-
-    nvtx.push_range("build_mesh")
-    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
-    nvtx.pop_range()
-
-    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
-
+    var bcs = BoundaryConditions(BC_OUTFLOW, BC_OUTFLOW, BC_WALL, BC_WALL, BC_WALL, BC_WALL)
     var physics = Euler(GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True, Float32(0.0), Float32(0.0), Float32(0.0))
-
-    var solver = Solver[Euler](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
+    var d = Driver3D[Euler](
+        problem_name="euler_sod: GPU DG Euler, P2 tet, HLLEC flux",
+        nx=NX,
+        ny=NY,
+        nz=NZ,
+        lx=LX,
+        ly=LY,
+        lz=LZ,
+        bcs=bcs,
+        physics=physics^,
+    )
+    if d.rank == 0:
+        print("  BCs: x = transmissive outflow, y/z = slip walls")
     # Shock stabilization: Barth-Jespersen slope limiter after every
     # RK stage.  Damps each element's nodal deviations by the tightest
     # theta that keeps every nodal value within the min/max cell
@@ -191,116 +171,87 @@ def main() raises:
     # exact; smooth regions are untouched.  Without this, Gibbs
     # oscillations around the shock drive density to ~1e18 before the
     # per-node positivity floor can clamp it back.
-    solver.enable_cell_limiter(True)
+    d.solver.enable_cell_limiter(True)
 
-    nvtx.push_range("initial_condition")
-    solver.ctx.enqueue_function[sod_ic_kernel](
-        solver.d_q.unsafe_ptr(),
-        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
-        solver.num_owned_elements,
+    d.nvtx.push_range("initial_condition")
+    d.solver.ctx.enqueue_function[sod_ic_kernel](
+        d.solver.d_q.unsafe_ptr(),
+        d.solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        d.solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        d.solver.num_owned_elements,
         GAMMA,
         RHO_L,
         P_L,
         RHO_R,
         P_R,
         SMOOTH_WIDTH,
-        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
+        grid_dim=ceildiv(d.solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
-    solver.ctx.synchronize()
-    nvtx.pop_range()
+    d.solver.ctx.synchronize()
+    d.nvtx.pop_range()
 
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
-    if rank == 0:
-        solver.memory_report().print()
+    if d.rank == 0:
+        d.solver.memory_report().print()
 
-    var writer = FrameWriter[Euler](solver, nvtx, component=0)
+    var writer = FrameWriter[Euler](d.solver, d.nvtx, component=0)
 
     # Diagnostics.  Mass is exactly conserved even with transmissive
     # outflow (no wave has reached either x-end by t=0.10).  Tracking
     # max|density| lets us see the right-plateau deplete from rho=1
     # only when the rarefaction head arrives; shocks later cause
     # density to peak above 1 transiently.
-    var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass", 0))
-    diag_linear.append(NamedComponent("momentum_x", 1))
-    diag_linear.append(NamedComponent("momentum_y", 2))
-    diag_linear.append(NamedComponent("momentum_z", 3))
-    diag_linear.append(NamedComponent("total_energy", 4))
-    var diag_maxabs = List[NamedComponent]()
-    diag_maxabs.append(NamedComponent("max_density", 0))
-    var diag = DiagnosticsWriter[Euler](solver, "output/diagnostics.csv", diag_linear, List[NamedComponent](), diag_maxabs, LX, LY, LZ)
+    var components = DiagComponents().linear("mass", 0).linear("momentum_x", 1).linear("momentum_y", 2).linear("momentum_z", 3).linear("total_energy", 4).maxabs("max_density", 0)
+    var diag = DiagnosticsWriter[Euler](d.solver, "output/diagnostics.csv", components.linear_list, components.squared_list, components.maxabs_list, LX, LY, LZ)
 
     var dt = choose_dt()
-    if rank == 0:
+    if d.rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Euler](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
+    var result = run_ssprk3_loop_with_diagnostics[Euler](d.solver, writer, diag, dt, T_FINAL, NUM_FRAMES, d.nvtx)
 
-    writer.finalize("output/solution.pvd", nvtx)
+    writer.finalize("output/solution.pvd", d.nvtx)
 
     # Final-state multi-field snapshot (rho + p + |v|) for richer
     # ParaView inspection.  Independent of the per-frame async pipeline.
-    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
-    if nprocs == 1:
-        var n_owned_dof = solver.num_owned_elements * N_P
-        var snap_rho = List[Float32]()
-        var snap_rhou = List[Float32]()
-        var snap_rhov = List[Float32]()
-        var snap_rhow = List[Float32]()
-        var snap_E = List[Float32]()
-        for _ in range(n_owned_dof):
-            snap_rho.append(Float32(0.0))
-            snap_rhou.append(Float32(0.0))
-            snap_rhov.append(Float32(0.0))
-            snap_rhow.append(Float32(0.0))
-            snap_E.append(Float32(0.0))
-        solver.download_owned_component(0, snap_rho, nvtx)
-        solver.download_owned_component(1, snap_rhou, nvtx)
-        solver.download_owned_component(2, snap_rhov, nvtx)
-        solver.download_owned_component(3, snap_rhow, nvtx)
-        solver.download_owned_component(4, snap_E, nvtx)
-        var f_rho = List[Float64]()
-        var f_p = List[Float64]()
-        var f_vmag = List[Float64]()
-        for k in range(n_owned_dof):
-            var rho = snap_rho[k]
-            var u = snap_rhou[k] / rho
-            var v = snap_rhov[k] / rho
-            var w = snap_rhow[k] / rho
+    if d.is_single_rank():
+        var snap = DownloadedSnapshot[Euler](d.solver, d.nvtx, components=[0, 1, 2, 3, 4])
+        var f_rho = snap.alloc_field()
+        var f_p = snap.alloc_field()
+        var f_vmag = snap.alloc_field()
+        for k in range(snap.n_owned_dof):
+            var rho = snap.snaps[0][k]
+            var u = snap.snaps[1][k] / rho
+            var v = snap.snaps[2][k] / rho
+            var w = snap.snaps[3][k] / rho
             var ke = Float32(0.5) * rho * (u * u + v * v + w * w)
-            var p = (GAMMA - Float32(1.0)) * (snap_E[k] - ke)
-            f_rho.append(Float64(rho))
-            f_p.append(Float64(p))
-            f_vmag.append(Float64(sqrt(u * u + v * v + w * w)))
-        var fields = List[List[Float64]]()
-        fields.append(f_rho^)
-        fields.append(f_p^)
-        fields.append(f_vmag^)
-        var names = List[String]()
-        names.append(String("rho"))
-        names.append(String("p"))
-        names.append(String("|v|"))
-        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
-        if rank == 0:
+            var p = (GAMMA - Float32(1.0)) * (snap.snaps[4][k] - ke)
+            f_rho[k] = Float64(rho)
+            f_p[k] = Float64(p)
+            f_vmag[k] = Float64(sqrt(u * u + v * v + w * w))
+        snap.add_field("rho", f_rho^)
+        snap.add_field("p", f_p^)
+        snap.add_field("|v|", f_vmag^)
+        snap.write(d.solver, d.nvtx, "output/snapshot_t_final.vtu")
+        if d.rank == 0:
             print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
 
-    if rank == 0:
+    if d.rank == 0:
         result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
-    var tput = solver.bench_step_loop(dt, nvtx)
-    if rank == 0:
+    var tput = d.solver.bench_step_loop(dt, d.nvtx)
+    if d.rank == 0:
         tput.print()
 
     # The density-line / boundary-state diagnostics below are single-rank
     # conveniences -- they'd need an all-gather (or a separate post-
     # process step) to be meaningful across rank counts, which isn't
     # worth the plumbing for this demo.
-    if size == 1:
-        _dump_density_line(solver, nvtx, "output/sod_density_line.txt")
-        _validate_boundary_states(solver, nvtx)
+    if d.size == 1:
+        _dump_density_line(d.solver, d.nvtx, "output/sod_density_line.txt")
+        _validate_boundary_states(d.solver, d.nvtx)
 
     mpi.finalize()
 

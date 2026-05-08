@@ -257,3 +257,65 @@ def write_snapshot_3d_multi[PhysT: Physics, P: Int = 2](mut solver: Solver[PhysT
         path=path,
     )
     nvtx.pop_range()
+
+
+# ----------------------------------------------------------------------
+# DownloadedSnapshot -- end-of-run multi-field snapshot pipeline
+# ----------------------------------------------------------------------
+# A one-shot helper that owns the alloc + download + pack + write
+# boilerplate that every Solver-pipeline driver duplicated around its
+# final-frame VTU.  The user's per-DOF derive math (the actual physics)
+# stays inline; everything mechanical is handled here.
+#
+# Caller is responsible for the np=1 gate (matches write_snapshot_3d_multi).
+#
+# Usage:
+#   if nprocs == 1:
+#       var snap = DownloadedSnapshot[Euler](solver, nvtx, components=[0, 1, 2, 3, 4])
+#       var f_rho = snap.alloc_field()
+#       var f_p = snap.alloc_field()
+#       var f_vmag = snap.alloc_field()
+#       for k in range(snap.n_owned_dof):
+#           var rho = snap.snaps[0][k]
+#           var u = snap.snaps[1][k] / rho
+#           ...
+#           f_rho[k] = Float64(rho)
+#           f_p[k] = Float64(p)
+#           f_vmag[k] = Float64(sqrt(u * u + v * v + w * w))
+#       snap.add_field("rho", f_rho^)
+#       snap.add_field("p", f_p^)
+#       snap.add_field("|v|", f_vmag^)
+#       snap.write(solver, nvtx, "output/snapshot_t_final.vtu")
+struct DownloadedSnapshot[PhysT: Physics, P: Int = 2](Movable):
+    comptime NP = num_tet_nodes(Self.P)
+    var n_owned_dof: Int
+    var snaps: List[List[Float32]]
+    var fields: List[List[Float64]]
+    var field_names: List[String]
+
+    def __init__(out self, mut solver: Solver[Self.PhysT, Self.P], mut nvtx: NvtxContext, components: List[Int]) raises:
+        self.n_owned_dof = solver.num_owned_elements * Self.NP
+        self.snaps = List[List[Float32]]()
+        for i in range(len(components)):
+            var buf = List[Float32]()
+            for _ in range(self.n_owned_dof):
+                buf.append(Float32(0.0))
+            solver.download_owned_component(components[i], buf, nvtx)
+            self.snaps.append(buf^)
+        self.fields = List[List[Float64]]()
+        self.field_names = List[String]()
+
+    def alloc_field(self) -> List[Float64]:
+        """Returns a zero-filled Float64 buffer of length n_owned_dof,
+        ready for the user to populate with derived values."""
+        var buf = List[Float64]()
+        for _ in range(self.n_owned_dof):
+            buf.append(0.0)
+        return buf^
+
+    def add_field(mut self, name: String, var data: List[Float64]):
+        self.field_names.append(name)
+        self.fields.append(data^)
+
+    def write(mut self, mut solver: Solver[Self.PhysT, Self.P], mut nvtx: NvtxContext, path: String) raises:
+        write_snapshot_3d_multi(solver=solver, field_names=self.field_names, field_data=self.fields, path=path, nvtx=nvtx)

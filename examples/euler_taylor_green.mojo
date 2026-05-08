@@ -30,21 +30,17 @@
 
 from std.sys import has_accelerator
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, sin, cos
 
 from src import mpi
-from src.partition import build_partition
-from src.reference import N_P, build_reference_operators
-from src.mesh import Mesh
+from src.reference import N_P
 from src.boundary import BoundaryConditions
-from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
-from src.nvtx import NvtxContext
-from src.frame_writer import FrameWriter, write_snapshot_3d_multi
+from src.driver3d import Driver3D
+from src.frame_writer import FrameWriter, DownloadedSnapshot
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
-from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.diagnostics import DiagnosticsWriter, DiagComponents
 
 # Domain is the natural 2 pi cube so sin/cos of coordinates are periodic
 # without any wrap-around algebra.
@@ -145,144 +141,100 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var rank = mpi.world_rank()
-    var size = mpi.world_size()
-
-    if rank == 0:
-        print("euler_taylor_green: GPU DG Euler, P2 tet, HLLEC flux,", size, "rank(s)")
-        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
-        print("  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P)
-
-    var nvtx = NvtxContext()
-    if rank == 0:
-        print("  NVTX:", "enabled" if nvtx.is_enabled() else "unavailable")
-
-    var refs = build_reference_operators(nvtx)
-
-    nvtx.push_range("device_context_create")
-    var ctx = DeviceContext()
-    nvtx.pop_range()
-
-    nvtx.push_range("build_mesh")
-    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, BoundaryConditions.periodic())
-    nvtx.pop_range()
-
-    nvtx.push_range("halo_setup")
-    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
-    nvtx.pop_range()
-
-    if rank == 0:
-        print("  proc-grid: ", mesh.part.px, "x", mesh.part.py, "x", mesh.part.pz, "  owned cubes per rank: ", mesh.part.nx, "x", mesh.part.ny, "x", mesh.part.nz)
-        print("  per-rank: ", mesh.num_owned_elements, "owned elements (halo=", mesh.num_halo_elements, ", interior=", mesh.num_interior_elements, ")")
 
     var physics = Euler(GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True, Float32(0.0), Float32(0.0), Float32(0.0))
+    var d = Driver3D[Euler](
+        problem_name="euler_taylor_green: GPU DG Euler, P2 tet, HLLEC flux",
+        nx=NX,
+        ny=NY,
+        nz=NZ,
+        lx=LX,
+        ly=LY,
+        lz=LZ,
+        bcs=BoundaryConditions.periodic(),
+        physics=physics^,
+    )
 
-    nvtx.push_range("solver_setup")
-    var solver = Solver[Euler](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
-    nvtx.pop_range()
-
-    nvtx.push_range("initial_condition")
-    solver.ctx.enqueue_function[taylor_green_ic_kernel](
-        solver.d_q.unsafe_ptr(),
-        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
-        solver.num_owned_elements,
+    d.nvtx.push_range("initial_condition")
+    d.solver.ctx.enqueue_function[taylor_green_ic_kernel](
+        d.solver.d_q.unsafe_ptr(),
+        d.solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        d.solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        d.solver.num_owned_elements,
         U0,
         RHO0,
         P0,
         GAMMA,
-        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
+        grid_dim=ceildiv(d.solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
-    solver.ctx.synchronize()
-    nvtx.pop_range()
+    d.solver.ctx.synchronize()
+    d.nvtx.pop_range()
 
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
-    if rank == 0:
-        solver.memory_report().print()
+    if d.rank == 0:
+        d.solver.memory_report().print()
 
     # Frame output (density is component 0 of the 5-component Euler state).
-    var writer = FrameWriter[Euler](solver, nvtx, component=0)
+    var writer = FrameWriter[Euler](d.solver, d.nvtx, component=0)
 
     # Diagnostics: Taylor-Green develops into turbulence, so we track
     # both the 5 linear conserved integrals AND the momentum L2^2
     # components -- the sum (0.5 / rho) * int|rho u|^2 approximates
     # kinetic energy (the enstrophy cascade's observable).
-    var diag_linear = List[NamedComponent]()
-    diag_linear.append(NamedComponent("mass", 0))
-    diag_linear.append(NamedComponent("momentum_x", 1))
-    diag_linear.append(NamedComponent("momentum_y", 2))
-    diag_linear.append(NamedComponent("momentum_z", 3))
-    diag_linear.append(NamedComponent("total_energy", 4))
-    var diag_squared = List[NamedComponent]()
-    diag_squared.append(NamedComponent("momentum_sq_x", 1))
-    diag_squared.append(NamedComponent("momentum_sq_y", 2))
-    diag_squared.append(NamedComponent("momentum_sq_z", 3))
-    var diag = DiagnosticsWriter[Euler](solver, "output/diagnostics.csv", diag_linear, diag_squared, List[NamedComponent](), LX, LY, LZ)
+    var components = (
+        DiagComponents()
+        .linear("mass", 0)
+        .linear("momentum_x", 1)
+        .linear("momentum_y", 2)
+        .linear("momentum_z", 3)
+        .linear("total_energy", 4)
+        .squared("momentum_sq_x", 1)
+        .squared("momentum_sq_y", 2)
+        .squared("momentum_sq_z", 3)
+    )
+    var diag = DiagnosticsWriter[Euler](d.solver, "output/diagnostics.csv", components.linear_list, components.squared_list, components.maxabs_list, LX, LY, LZ)
 
     var dt = choose_dt()
-    if rank == 0:
+    if d.rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Euler](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
+    var result = run_ssprk3_loop_with_diagnostics[Euler](d.solver, writer, diag, dt, T_FINAL, NUM_FRAMES, d.nvtx)
 
-    writer.finalize("output/solution.pvd", nvtx)
+    writer.finalize("output/solution.pvd", d.nvtx)
 
     # Final-state multi-field snapshot (rho + p + |v|) for richer
     # ParaView inspection.  Independent of the per-frame async pipeline.
-    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
-    if nprocs == 1:
-        var n_owned_dof = solver.num_owned_elements * N_P
-        var snap_rho = List[Float32]()
-        var snap_rhou = List[Float32]()
-        var snap_rhov = List[Float32]()
-        var snap_rhow = List[Float32]()
-        var snap_E = List[Float32]()
-        for _ in range(n_owned_dof):
-            snap_rho.append(Float32(0.0))
-            snap_rhou.append(Float32(0.0))
-            snap_rhov.append(Float32(0.0))
-            snap_rhow.append(Float32(0.0))
-            snap_E.append(Float32(0.0))
-        solver.download_owned_component(0, snap_rho, nvtx)
-        solver.download_owned_component(1, snap_rhou, nvtx)
-        solver.download_owned_component(2, snap_rhov, nvtx)
-        solver.download_owned_component(3, snap_rhow, nvtx)
-        solver.download_owned_component(4, snap_E, nvtx)
-        var f_rho = List[Float64]()
-        var f_p = List[Float64]()
-        var f_vmag = List[Float64]()
-        for k in range(n_owned_dof):
-            var rho = snap_rho[k]
-            var u = snap_rhou[k] / rho
-            var v = snap_rhov[k] / rho
-            var w = snap_rhow[k] / rho
+    if d.is_single_rank():
+        var snap = DownloadedSnapshot[Euler](d.solver, d.nvtx, components=[0, 1, 2, 3, 4])
+        var f_rho = snap.alloc_field()
+        var f_p = snap.alloc_field()
+        var f_vmag = snap.alloc_field()
+        for k in range(snap.n_owned_dof):
+            var rho = snap.snaps[0][k]
+            var u = snap.snaps[1][k] / rho
+            var v = snap.snaps[2][k] / rho
+            var w = snap.snaps[3][k] / rho
             var ke = Float32(0.5) * rho * (u * u + v * v + w * w)
-            var p = (GAMMA - Float32(1.0)) * (snap_E[k] - ke)
-            f_rho.append(Float64(rho))
-            f_p.append(Float64(p))
-            f_vmag.append(Float64(sqrt(u * u + v * v + w * w)))
-        var fields = List[List[Float64]]()
-        fields.append(f_rho^)
-        fields.append(f_p^)
-        fields.append(f_vmag^)
-        var names = List[String]()
-        names.append(String("rho"))
-        names.append(String("p"))
-        names.append(String("|v|"))
-        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
-        if rank == 0:
+            var p = (GAMMA - Float32(1.0)) * (snap.snaps[4][k] - ke)
+            f_rho[k] = Float64(rho)
+            f_p[k] = Float64(p)
+            f_vmag[k] = Float64(sqrt(u * u + v * v + w * w))
+        snap.add_field("rho", f_rho^)
+        snap.add_field("p", f_p^)
+        snap.add_field("|v|", f_vmag^)
+        snap.write(d.solver, d.nvtx, "output/snapshot_t_final.vtu")
+        if d.rank == 0:
             print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
 
-    if rank == 0:
+    if d.rank == 0:
         result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement (5-step warmup + 50-step
     # measure).  Run AFTER finalize so we don't pollute the production
     # state mid-simulation.
-    var tput = solver.bench_step_loop(dt, nvtx)
-    if rank == 0:
+    var tput = d.solver.bench_step_loop(dt, d.nvtx)
+    if d.rank == 0:
         tput.print()
 
     mpi.finalize()

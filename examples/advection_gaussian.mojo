@@ -27,21 +27,17 @@
 
 from std.sys import has_accelerator
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, exp
 
 from src import mpi
-from src.partition import build_partition
-from src.reference import N_P, build_reference_operators
-from src.mesh import Mesh
+from src.reference import N_P
 from src.boundary import BoundaryConditions
-from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.advection import Advection
-from src.nvtx import NvtxContext
+from src.driver3d import Driver3D
 from src.frame_writer import FrameWriter
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
-from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.diagnostics import DiagnosticsWriter, DiagComponents
 
 comptime NX = 48
 comptime NY = 48
@@ -137,51 +133,28 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var rank = mpi.world_rank()
-    var size = mpi.world_size()
-
-    if rank == 0:
-        print("advection_gaussian: GPU DG advection, P2 tet,", size, "rank(s)")
-        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
-        print("  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P)
-
-    var nvtx = NvtxContext()
-    if rank == 0:
-        print("  NVTX:", "enabled" if nvtx.is_enabled() else "unavailable")
-
-    var refs = build_reference_operators(nvtx)
-
-    nvtx.push_range("device_context_create")
-    var ctx = DeviceContext()
-    nvtx.pop_range()
-
-    nvtx.push_range("build_mesh")
-    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, BoundaryConditions.periodic())
-    nvtx.pop_range()
-
-    nvtx.push_range("halo_setup")
-    var halo = HaloExchange(ctx, mesh.part, Advection.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
-    nvtx.pop_range()
-
-    if rank == 0:
-        print("  proc-grid: ", mesh.part.px, "x", mesh.part.py, "x", mesh.part.pz, "  owned cubes per rank: ", mesh.part.nx, "x", mesh.part.ny, "x", mesh.part.nz)
-        print("  per-rank: ", mesh.num_owned_elements, "owned elements (halo=", mesh.num_halo_elements, ", interior=", mesh.num_interior_elements, ")")
 
     var physics = Advection(VX, VY, VZ)
-
-    nvtx.push_range("solver_setup")
-    var solver = Solver[Advection](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
-    nvtx.pop_range()
+    var d = Driver3D[Advection](
+        problem_name="advection_gaussian: GPU DG advection, P2 tet",
+        nx=NX,
+        ny=NY,
+        nz=NZ,
+        lx=LX,
+        ly=LY,
+        lz=LZ,
+        bcs=BoundaryConditions.periodic(),
+        physics=physics^,
+    )
 
     # Initial condition on owned elements.
-    nvtx.push_range("initial_condition")
+    d.nvtx.push_range("initial_condition")
     var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
-    solver.ctx.enqueue_function[gaussian_ic_kernel](
-        solver.d_q.unsafe_ptr(),
-        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
-        solver.num_owned_elements,
+    d.solver.ctx.enqueue_function[gaussian_ic_kernel](
+        d.solver.d_q.unsafe_ptr(),
+        d.solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        d.solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        d.solver.num_owned_elements,
         Float32(GAUSS_CX),
         Float32(GAUSS_CY),
         Float32(GAUSS_CZ),
@@ -189,43 +162,40 @@ def main() raises:
         Float32(LY),
         Float32(LZ),
         inv_two_sigma2,
-        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
+        grid_dim=ceildiv(d.solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
-    solver.ctx.synchronize()
-    nvtx.pop_range()
+    d.solver.ctx.synchronize()
+    d.nvtx.pop_range()
 
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
-    if rank == 0:
-        solver.memory_report().print()
+    if d.rank == 0:
+        d.solver.memory_report().print()
 
     # Per-rank VTU output (density == full scalar solution for Advection).
-    var writer = FrameWriter[Advection](solver, nvtx)
+    var writer = FrameWriter[Advection](d.solver, d.nvtx)
 
     # Diagnostics.  For a scalar conservation law the only conserved
     # integral is int(q) dV ("mass"); tracking int(q^2) dV (L2 norm
     # squared) gives a direct read-out of Rusanov dissipation, which
     # should decay slowly from the initial Gaussian's analytic value.
-    var diag_comps = List[NamedComponent]()
-    diag_comps.append(NamedComponent("mass", 0))
-    var diag_squared = List[NamedComponent]()
-    diag_squared.append(NamedComponent("l2_squared", 0))
-    var diag = DiagnosticsWriter[Advection](solver, "output/diagnostics.csv", diag_comps, diag_squared, List[NamedComponent](), LX, LY, LZ)
+    var components = DiagComponents().linear("mass", 0).squared("l2_squared", 0)
+    var diag = DiagnosticsWriter[Advection](d.solver, "output/diagnostics.csv", components.linear_list, components.squared_list, components.maxabs_list, LX, LY, LZ)
 
     var dt = choose_dt()
-    if rank == 0:
+    if d.rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Advection](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
+    var result = run_ssprk3_loop_with_diagnostics[Advection](d.solver, writer, diag, dt, T_FINAL, NUM_FRAMES, d.nvtx)
 
-    writer.finalize("output/solution.pvd", nvtx)
+    writer.finalize("output/solution.pvd", d.nvtx)
 
-    if rank == 0:
+    if d.rank == 0:
         result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
-    var tput = solver.bench_step_loop(dt, nvtx)
-    if rank == 0:
+    var tput = d.solver.bench_step_loop(dt, d.nvtx)
+    if d.rank == 0:
         tput.print()
 
     mpi.finalize()

@@ -24,21 +24,18 @@
 
 from std.sys import has_accelerator
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
 from std.math import sqrt, ceildiv, sin, cos
 
 from src import mpi
-from src.partition import build_partition
-from src.reference import N_P, build_reference_operators
-from src.mesh import Mesh
+from src.reference import N_P
 from src.boundary import BoundaryConditions, BC_INTERIOR, BC_WALL
-from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.maxwell import Maxwell
+from src.driver3d import Driver3D
 from src.nvtx import NvtxContext
-from src.frame_writer import FrameWriter, write_snapshot_3d_multi
+from src.frame_writer import FrameWriter, DownloadedSnapshot
 from src.time_integrator import run_ssprk3_loop_with_diagnostics
-from src.diagnostics import DiagnosticsWriter, NamedComponent
+from src.diagnostics import DiagnosticsWriter, DiagComponents
 
 
 comptime NX = 16
@@ -86,92 +83,65 @@ def choose_dt() raises -> Float32:
 
 def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
-    mpi.init()
-    var rank = mpi.world_rank()
-    var size = mpi.world_size()
-
-    if rank == 0:
-        print("maxwell_cavity: GPU DG Maxwell, P2 tet, Rusanov,", size, "rank(s)")
-        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
-
-    var nvtx = NvtxContext()
-
-    var refs = build_reference_operators(nvtx)
-
-    var ctx = DeviceContext()
 
     # PEC walls on y, periodic on x and z.
-    var bcs = BoundaryConditions(
-        BC_INTERIOR,
-        BC_INTERIOR,  # -x, +x
-        BC_WALL,
-        BC_WALL,  # -y, +y
-        BC_INTERIOR,
-        BC_INTERIOR,  # -z, +z
+    var bcs = BoundaryConditions(BC_INTERIOR, BC_INTERIOR, BC_WALL, BC_WALL, BC_INTERIOR, BC_INTERIOR)
+    var physics = Maxwell(C_LIGHT, Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0))
+    var d = Driver3D[Maxwell](
+        problem_name="maxwell_cavity: GPU DG Maxwell, P2 tet, Rusanov",
+        nx=NX,
+        ny=NY,
+        nz=NZ,
+        lx=LX,
+        ly=LY,
+        lz=LZ,
+        bcs=bcs,
+        physics=physics^,
     )
 
-    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
-    var halo = HaloExchange(ctx, mesh.part, Maxwell.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
-    var physics = Maxwell(
-        C_LIGHT,
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),  # J = 0
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),  # M = 0
-    )
-    var solver = Solver[Maxwell](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
-
-    solver.ctx.enqueue_function[cavity_ic_kernel](
-        solver.d_q.unsafe_ptr(),
-        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
-        solver.num_owned_elements,
+    d.solver.ctx.enqueue_function[cavity_ic_kernel](
+        d.solver.d_q.unsafe_ptr(),
+        d.solver.mesh.d_owned_elem_ids.unsafe_ptr(),
+        d.solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
+        d.solver.num_owned_elements,
         Float32(LY),
-        grid_dim=ceildiv(solver.num_owned_elements * N_P, IC_BLOCK),
+        grid_dim=ceildiv(d.solver.num_owned_elements * N_P, IC_BLOCK),
         block_dim=IC_BLOCK,
     )
-    solver.ctx.synchronize()
+    d.solver.ctx.synchronize()
 
     # Save the IC for the round-trip L2 comparison at T = one period.
     # (Only needed at size==1 where we print the diagnostic; gate the
     # whole save so np>1 doesn't pay the download cost for nothing.)
     var h_ic = List[Float32]()
-    if size == 1:
-        for _ in range(solver.num_owned_elements * N_P):
+    if d.size == 1:
+        for _ in range(d.solver.num_owned_elements * N_P):
             h_ic.append(Float32(0.0))
-        solver.download_owned_component(0, h_ic, nvtx)
-        var energy_ic = _em_energy(solver, nvtx)
+        d.solver.download_owned_component(0, h_ic, d.nvtx)
+        var energy_ic = _em_energy(d.solver, d.nvtx)
         print("  EM energy at t=0    :", energy_ic)
 
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
-    if rank == 0:
-        solver.memory_report().print()
+    if d.rank == 0:
+        d.solver.memory_report().print()
 
-    var writer = FrameWriter[Maxwell](solver, nvtx, component=0)
+    var writer = FrameWriter[Maxwell](d.solver, d.nvtx, component=0)
 
     # Diagnostics.  Maxwell has no linear conserved integrals (each E/B
     # component oscillates around zero), but the total EM energy
     #   U_EM = 0.5 * int(|E|^2 + c^2 |B|^2) dV
     # is conserved to scheme precision.  We record each quadratic
     # component separately; the postprocessor sums them.
-    var diag_squared = List[NamedComponent]()
-    diag_squared.append(NamedComponent("Ex_sq", 0))
-    diag_squared.append(NamedComponent("Ey_sq", 1))
-    diag_squared.append(NamedComponent("Ez_sq", 2))
-    diag_squared.append(NamedComponent("Bx_sq", 3))
-    diag_squared.append(NamedComponent("By_sq", 4))
-    diag_squared.append(NamedComponent("Bz_sq", 5))
-    var diag = DiagnosticsWriter[Maxwell](solver, "output/diagnostics.csv", List[NamedComponent](), diag_squared, List[NamedComponent](), LX, LY, LZ)
+    var components = DiagComponents().squared("Ex_sq", 0).squared("Ey_sq", 1).squared("Ez_sq", 2).squared("Bx_sq", 3).squared("By_sq", 4).squared("Bz_sq", 5)
+    var diag = DiagnosticsWriter[Maxwell](d.solver, "output/diagnostics.csv", components.linear_list, components.squared_list, components.maxabs_list, LX, LY, LZ)
 
     var dt = choose_dt()
-    if rank == 0:
+    if d.rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Maxwell](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
+    var result = run_ssprk3_loop_with_diagnostics[Maxwell](d.solver, writer, diag, dt, T_FINAL, NUM_FRAMES, d.nvtx)
 
-    writer.finalize("output/solution.pvd", nvtx)
+    writer.finalize("output/solution.pvd", d.nvtx)
 
     # Final-state multi-field snapshot for richer ParaView inspection
     # (the per-frame async pipeline above writes one Ex field per
@@ -179,77 +149,52 @@ def main() raises:
     # output/snapshot_t_final.vtu -- Ex shows the dominant cavity
     # standing-wave pattern, |E| and |B| show the energy localisation.
     # Gated on np=1 since each rank would dump only its owned slab.
-    var nprocs = solver.mesh.part.px * solver.mesh.part.py * solver.mesh.part.pz
-    if nprocs == 1:
-        var n_owned_dof = solver.num_owned_elements * N_P
-        var snap_ex = List[Float32]()
-        var snap_ey = List[Float32]()
-        var snap_ez = List[Float32]()
-        var snap_bx = List[Float32]()
-        var snap_by = List[Float32]()
-        var snap_bz = List[Float32]()
-        for _ in range(n_owned_dof):
-            snap_ex.append(Float32(0.0))
-            snap_ey.append(Float32(0.0))
-            snap_ez.append(Float32(0.0))
-            snap_bx.append(Float32(0.0))
-            snap_by.append(Float32(0.0))
-            snap_bz.append(Float32(0.0))
-        solver.download_owned_component(0, snap_ex, nvtx)
-        solver.download_owned_component(1, snap_ey, nvtx)
-        solver.download_owned_component(2, snap_ez, nvtx)
-        solver.download_owned_component(3, snap_bx, nvtx)
-        solver.download_owned_component(4, snap_by, nvtx)
-        solver.download_owned_component(5, snap_bz, nvtx)
-        var f_ex = List[Float64]()
-        var f_emag = List[Float64]()
-        var f_bmag = List[Float64]()
-        for k in range(n_owned_dof):
-            var ex = snap_ex[k]
-            var ey = snap_ey[k]
-            var ez = snap_ez[k]
-            var bx = snap_bx[k]
-            var by = snap_by[k]
-            var bz = snap_bz[k]
-            f_ex.append(Float64(ex))
-            f_emag.append(Float64(sqrt(ex * ex + ey * ey + ez * ez)))
-            f_bmag.append(Float64(sqrt(bx * bx + by * by + bz * bz)))
-        var fields = List[List[Float64]]()
-        fields.append(f_ex^)
-        fields.append(f_emag^)
-        fields.append(f_bmag^)
-        var names = List[String]()
-        names.append(String("Ex"))
-        names.append(String("|E|"))
-        names.append(String("|B|"))
-        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
-        if rank == 0:
+    if d.is_single_rank():
+        var snap = DownloadedSnapshot[Maxwell](d.solver, d.nvtx, components=[0, 1, 2, 3, 4, 5])
+        var f_ex = snap.alloc_field()
+        var f_emag = snap.alloc_field()
+        var f_bmag = snap.alloc_field()
+        for k in range(snap.n_owned_dof):
+            var ex = snap.snaps[0][k]
+            var ey = snap.snaps[1][k]
+            var ez = snap.snaps[2][k]
+            var bx = snap.snaps[3][k]
+            var by = snap.snaps[4][k]
+            var bz = snap.snaps[5][k]
+            f_ex[k] = Float64(ex)
+            f_emag[k] = Float64(sqrt(ex * ex + ey * ey + ez * ez))
+            f_bmag[k] = Float64(sqrt(bx * bx + by * by + bz * bz))
+        snap.add_field("Ex", f_ex^)
+        snap.add_field("|E|", f_emag^)
+        snap.add_field("|B|", f_bmag^)
+        snap.write(d.solver, d.nvtx, "output/snapshot_t_final.vtu")
+        if d.rank == 0:
             print("  wrote output/snapshot_t_final.vtu (Ex + |E| + |B|, t=", T_FINAL, ")")
 
     # Round-trip L2 + energy diagnostics are rank-local sums; at np>1
     # they'd need an allreduce to be meaningful, so gate on np=1.
-    if size == 1:
-        var energy_final = _em_energy(solver, nvtx)
+    if d.size == 1:
+        var energy_final = _em_energy(d.solver, d.nvtx)
         print("  EM energy at t=", T_FINAL, " :", energy_final)
         var h_fin = List[Float32]()
-        for _ in range(solver.num_owned_elements * N_P):
+        for _ in range(d.solver.num_owned_elements * N_P):
             h_fin.append(Float32(0.0))
-        solver.download_owned_component(0, h_fin, nvtx)
+        d.solver.download_owned_component(0, h_fin, d.nvtx)
         var err2: Float64 = 0.0
         var ref2: Float64 = 0.0
         for i in range(len(h_ic)):
-            var d = Float64(h_fin[i] - h_ic[i])
+            var dd = Float64(h_fin[i] - h_ic[i])
             var r = Float64(h_ic[i])
-            err2 += d * d
+            err2 += dd * dd
             ref2 += r * r
         var l2_rel = sqrt(err2 / ref2) if ref2 > 0.0 else sqrt(err2)
         print("  relative L2(Ex) vs IC after one period:", Float32(l2_rel))
-    if rank == 0:
+    if d.rank == 0:
         result.print_summary()
         print("  wrote output/solution.pvd")
     # Post-run sync'd throughput measurement.
-    var tput = solver.bench_step_loop(dt, nvtx)
-    if rank == 0:
+    var tput = d.solver.bench_step_loop(dt, d.nvtx)
+    if d.rank == 0:
         tput.print()
 
     mpi.finalize()
