@@ -54,11 +54,11 @@ uniform fields to Float32 epsilon), **smooth-wave benchmark gates**
 (eigenmode periods match analytic to closed-form), and **boundary-
 condition gates** (every BC arm has at least one direct test).
 
-| Physics                  | P-parity sweep covered (2D + 3D) | Shocked gates                                |
-| ------------------------ | -------------------------------- | -------------------------------------------- |
-| Advection                | P=2/3/4/5                        | n/a (smooth)                                 |
-| Euler                    | P=2/3/4/5                        | Sod 2D + 3D, P=2/3/4/5                       |
-| ShallowWater             | P=2/3/4/5                        | Dam break 2D + 3D                            |
-| Maxwell                  | P=2/3/4/5                        | n/a (smooth)                                 |
-| IdealMHD (GLM)           | P=2/3/4/5                        | 3D Brio–Wu P=2/3 (2D not gated; needs HLLD)  |
-| FiveMomentTwoFluid       | P=2/3/4/5 (walls); P=2/3 (Langmuir) | n/a; gated via Langmuir oscillation + BC preservation |
+| Physics                  | Pipelines | P-parity sweep covered           | Shocked gates                                |
+| ------------------------ | --------- | -------------------------------- | -------------------------------------------- |
+| Advection                | 2D + 3D   | P=2/3/4/5                        | n/a (smooth)                                 |
+| Euler                    | 2D + 3D   | P=2/3/4/5                        | Sod 2D + 3D, P=2/3/4/5                       |
+| ShallowWater             | 2D + 3D   | P=2/3/4/5                        | Dam break 2D + 3D                            |
+| Maxwell                  | 2D + 3D   | P=2/3/4/5                        | n/a (smooth)                                 |
+| IdealMHD (GLM)           | 2D + 3D   | P=2/3/4/5                        | 3D Brio–Wu P=2/3 (2D not gated; needs HLLD)  |
+| FiveMomentTwoFluid       | **3D only**   | P=2/3/4/5 (walls); P=2/3 (Langmuir) | n/a; gated via Langmuir oscillation + BC preservation |
