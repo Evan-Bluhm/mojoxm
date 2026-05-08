@@ -264,7 +264,7 @@ multi-rank decomposition + halo-exchange machinery.
   pass: `format-check` (~3s, working-tree-wide mojo-format gate),
   `profile-summary-test` (~0.2s, in-script self-test on the
   cross-bench summary parser), `smoke` (~45s, test+bench-quick),
-  and `test-vtu-meshio` (~1s, meshio-roundtrip + VTK_LAGRANGE_*
+  and `test-vtu-meshio` (~3s, meshio-roundtrip + VTK_LAGRANGE_*
   spec compliance on the 3D P=2..5 fixtures).  Total ~50s cached.
   * **2D smooth (42):** `bench_advection_translation_2d` (rate >= 2.0)
     + `_p3` (rate ~3.92, P+1=4) + `_p4` (rate ~4.67, P+1=5) + `_p5`

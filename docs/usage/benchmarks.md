@@ -106,7 +106,7 @@ gate.
 2. `profile-summary-test` (~0.2 s, in-script self-test on the
    cross-bench summary parser)
 3. `smoke` (~45 s = `test-utils + test-quick + bench-quick`)
-4. `test-vtu-meshio` (~1 s, meshio-roundtrip + VTK_LAGRANGE_* spec
+4. `test-vtu-meshio` (~3 s, meshio-roundtrip + VTK_LAGRANGE_* spec
    compliance on 3D P=2..5 fixtures)
 
 Total ~50 s cached. Run this before every push.

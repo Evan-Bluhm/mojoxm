@@ -45,7 +45,7 @@ This chains:
 | `format-check`             | ~3 s   | Mojo formatter drift                            |
 | `profile-summary-test`     | ~0.2 s | Self-test on the cross-bench summary parser     |
 | `smoke`                    | ~45 s  | `test-utils + test-quick + bench-quick`         |
-| `test-vtu-meshio`          | ~1 s   | Meshio roundtrip + VTK_LAGRANGE_* spec compliance |
+| `test-vtu-meshio`          | ~3 s   | Meshio roundtrip + VTK_LAGRANGE_* spec compliance |
 
 Run this before every push. If it's red locally, CI will be red too.
 
