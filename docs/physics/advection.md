@@ -70,5 +70,5 @@ scheme bug.
 make advection_gaussian
 ./advection_gaussian
 ls output/
-# solution_0000.vtu ... solution.pvd  diagnostics.csv
+# frame_00000.vtu ... solution.pvd  diagnostics.csv
 ```

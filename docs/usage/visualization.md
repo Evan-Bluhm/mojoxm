@@ -11,15 +11,22 @@ produced, each with its own consumer.
 
 | File pattern                          | What it is                                                 | Open with         |
 | ------------------------------------- | ---------------------------------------------------------- | ----------------- |
-| `output/solution_*.vtu`               | Per-frame single-field VTU (async path)                    | ParaView via PVD  |
-| `output/solution.pvd`                 | ParaView collection (XML index of the VTU sequence)        | ParaView          |
+| `output/frame_*.vtu`                  | Per-frame VTU (async path; 5-digit zero-padded)            | ParaView via PVD  |
+| `output/solution.pvd` (3D)            | ParaView collection (XML index of the VTU sequence)        | ParaView          |
+| `output/solution_<driver>.pvd` (2D)   | Per-driver PVD (each 2D driver writes a uniquely-named one)| ParaView          |
 | `output/snapshot_t_final.vtu`         | Multi-field final snapshot (rho + p + \|v\|, etc.)         | ParaView directly |
 | `output/diagnostics.csv`              | One row per frame: time + integrated quantities            | Pandas, gnuplot   |
 | `output/dashboard.gif`                | 2×2 animated overview (after running `animate_dashboard.py`)| Any viewer       |
 
-For 2D-GPU drivers, `solution_*.vtu` already contain multiple physical
+3D drivers write a single global `solution.pvd`; 2D-GPU drivers write
+driver-specific `solution_<driver>.pvd` files (e.g. `solution_adv2d_gpu.pvd`,
+`solution_sod2d_gpu.pvd`) so multiple 2D runs can share `output/`
+without clobbering each other.
+
+For 2D-GPU drivers, `frame_*.vtu` already contain multiple physical
 fields per frame (e.g. rho + p + \|v\| for Euler) because the 2D pipeline
-uses the multi-field path exclusively.
+uses the multi-field path exclusively. `snapshot_t_final.vtu` is a
+3D-only artefact emitted by the 8 multi-component 3D drivers.
 
 ## ParaView
 
@@ -86,7 +93,7 @@ Pass `-f field1,field2,...` to render side-by-side animated panels.
 ```bash
 make test-vtu-meshio
 # or directly:
-pixi run python scripts/validate_vtu.py output/solution_0010.vtu
+pixi run python scripts/validate_vtu.py output/frame_00010.vtu
 ```
 
 The validator checks **VTK-spec node ordering** at every supported P:

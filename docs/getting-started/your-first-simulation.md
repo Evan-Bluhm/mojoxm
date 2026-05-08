@@ -56,8 +56,8 @@ ParaView opens directly:
 
 ```bash
 ls output/
-# solution_0000.vtu  solution_0001.vtu  ...  solution_0020.vtu
-# solution.pvd       diagnostics.csv
+# frame_00000.vtu  frame_00001.vtu  ...  frame_00019.vtu
+# solution.pvd     diagnostics.csv
 ```
 
 Open `output/solution.pvd` in [ParaView](https://www.paraview.org/) for an
