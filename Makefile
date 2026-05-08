@@ -225,10 +225,10 @@ help:
 	@echo '  make smoke               test-utils + test-quick + bench-quick combined (~45s cached; one-command sanity check)'
 	@echo '  make pre-push            format-check + profile-summary-test + smoke +'
 	@echo '                           test-vtu-meshio (~50s cached; routine pre-push gate)'
-	@echo '  make bench-p5            run 19 P=5 P-parity gates at NP=21/56 (~65s cached)'
-	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~40s cached)'
-	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~30s cached)'
-	@echo '  make bench-bcs           run 27 BC + source-term gates -- inflow / outflow / wall / gravity (~45s cached)'
+	@echo '  make bench-p5            run 19 P=5 P-parity gates at NP=21/56 (~75s cached)'
+	@echo '  make bench-shocks        run 13 shocked-flow gates -- Sod / dam-break / Brio-Wu (~45s cached)'
+	@echo '  make bench-rates         run 10 convergence-rate gates -- catches order regressions (~35s cached)'
+	@echo '  make bench-bcs           run 27 BC + source-term gates -- inflow / outflow / wall / gravity (~55s cached)'
 	@echo '  make bench-{mhd,euler,maxwell,sw,advection,two-fluid}'
 	@echo '                           run all gates for one physics module (cached):'
 	@echo '                             mhd 33 gates ~70s, euler 33 ~105s, maxwell 26 ~46s,'
@@ -285,21 +285,21 @@ help:
 	@echo '  make bench-p5            P=5 P-parity sweep -- 19 gates at NP=21 (2D) / NP=56 (3D)'
 	@echo '                           across all 5 smooth physics + limited shocked Sod + Euler'
 	@echo '                           hydrostatic + 3D Two-Fluid (NC=17) + GLM exp-decay rate gates'
-	@echo '                           (~65s cached); the largest comptime configs the suite covers, where'
+	@echo '                           (~75s cached); the largest comptime configs the suite covers, where'
 	@echo '                           high-P regressions show first.'
 	@echo '  make bench-shocks        13 shocked-flow gates exercising HLLC / HLLEC + BJ limiter'
 	@echo '                           (Euler Sod 2D + 3D, P=2-5), HLL SW dam-break (2D + 3D), and'
 	@echo '                           Brio-Wu MHD shock (3D P=2/3); use when iterating on Riemann'
-	@echo '                           solvers or the limiter pipeline (~40s cached).'
+	@echo '                           solvers or the limiter pipeline (~45s cached).'
 	@echo '  make bench-rates         10 convergence-rate gates that explicitly assert log2(e_N /'
 	@echo '                           e_2N) >= P-dependent floor.  Advection 2D + 3D P=2-5 (8) +'
 	@echo '                           Euler 3D P=2/3 (2).  Catches scheme-order regressions an'
-	@echo '                           absolute-L2 sentinel would miss (~30s cached).'
+	@echo '                           absolute-L2 sentinel would miss (~35s cached).'
 	@echo '  make bench-bcs           27 boundary-condition + source-term gates exercising every'
 	@echo '                           BC dispatch arm (interior / wall / outflow / inflow) across'
 	@echo '                           all physics, plus Euler gravity (hydrostatic) and Euler'
 	@echo '                           channel steady-state.  Use when iterating on BC routing or'
-	@echo '                           the source-term hook in rk_stage_kernel (~45s w/ cached binaries).'
+	@echo '                           the source-term hook in rk_stage_kernel (~55s w/ cached binaries).'
 	@echo '  make bench-all           build + run every gate (126 benches; ~4 min cached, ~14 min cold)'
 	@echo '  make bench-<name>        build + run a single bench (see benchmarks/*.mojo)'
 	@echo '                           e.g. bench-euler-sod-2d, bench-mhd-alfven-3d-p4'
@@ -880,7 +880,7 @@ bench-quick: \
 # TwoFluid BC_INFLOW gap that earlier README + bench docstrings
 # noted as unexercised.  Run when iterating on BC routing, ghost-state assembly,
 # inflow_q wiring, or the source-term hook in rk_stage_kernel.
-# Run-time ~45s w/ cached binaries (first cold run is ~6 min
+# Run-time ~55s w/ cached binaries (first cold run is ~6 min
 # since most BC benches aren't in any other aggregator's prebuild
 # path).
 bench-bcs: \
@@ -908,7 +908,7 @@ bench-bcs: \
 # Includes advection 2D + 3D at P=2/3/4/5 (8 gates) and Euler 3D
 # at P=2/3 (2 gates -- 2D Euler / Maxwell / SW / MHD all sit at the
 # Float32 floor or A^2 nonlinear floor at our default resolutions,
-# so a rate gate doesn't fit cleanly there).  Run-time ~30s cached.
+# so a rate gate doesn't fit cleanly there).  Run-time ~35s cached.
 bench-rates: \
 		bench-advection-translation-2d bench-advection-translation-2d-p3 \
 		bench-advection-translation-2d-p4 bench-advection-translation-2d-p5 \
@@ -923,7 +923,7 @@ bench-rates: \
 # (Euler Sod 2D / 3D, P=2-5 in each dim), Brio-Wu MHD shock
 # (3D P=2 + P=3), and HLL SW dam-break (2D + 3D).  Run when
 # iterating on Riemann solvers, the BJ limiter pipeline, or
-# anything in the shock-capture path.  Run-time ~40s wall (cached).
+# anything in the shock-capture path.  Run-time ~45s wall (cached).
 bench-shocks: \
 		bench-euler-sod-2d bench-euler-sod-3d bench-euler-sod-3d-p3 \
 		bench-euler-sod-3d-p4 bench-euler-sod-3d-p5 \

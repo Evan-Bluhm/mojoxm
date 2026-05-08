@@ -32,10 +32,10 @@ Mojo has to compile.
 | Target                   | What it gates                                                  | Time   |
 | ------------------------ | -------------------------------------------------------------- | ------ |
 | `make bench-quick`       | 13 representative gates                                        | ~30 s  |
-| `make bench-p5`          | 19 P=5 high-order gates                                        | ~65 s  |
-| `make bench-shocks`      | 13 Sod / dam-break / Brio–Wu gates                             | ~40 s  |
-| `make bench-rates`       | 10 explicit log₂ convergence-rate gates                        | ~30 s  |
-| `make bench-bcs`         | 27 BC + source-term gates                                      | ~45 s  |
+| `make bench-p5`          | 19 P=5 high-order gates                                        | ~75 s  |
+| `make bench-shocks`      | 13 Sod / dam-break / Brio–Wu gates                             | ~45 s  |
+| `make bench-rates`       | 10 explicit log₂ convergence-rate gates                        | ~35 s  |
+| `make bench-bcs`         | 27 BC + source-term gates                                      | ~55 s  |
 | `make bench-all`         | All 126 analytic-solution gates                                | ~5 min |
 
 ## Per-physics aggregators

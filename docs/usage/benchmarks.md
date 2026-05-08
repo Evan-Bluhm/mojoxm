@@ -21,10 +21,10 @@ This page is the user-facing tour. For the per-bench inventory see the
 | Quick green-bar before pushing          | `make smoke`                 | ~45 s  |
 | Full pre-push gate (matches CI)         | `make pre-push`              | ~50 s  |
 | 13 representative gates                 | `make bench-quick`           | ~30 s  |
-| Just the high-order P=5 gates           | `make bench-p5`              | ~65 s  |
-| Just shocked flow                       | `make bench-shocks`          | ~40 s  |
-| Convergence-rate gates only             | `make bench-rates`           | ~30 s  |
-| Boundary-condition + source-term gates  | `make bench-bcs`             | ~45 s  |
+| Just the high-order P=5 gates           | `make bench-p5`              | ~75 s  |
+| Just shocked flow                       | `make bench-shocks`          | ~45 s  |
+| Convergence-rate gates only             | `make bench-rates`           | ~35 s  |
+| Boundary-condition + source-term gates  | `make bench-bcs`             | ~55 s  |
 | One specific physics                    | `make bench-<physics>`       | varies |
 | The full suite (126 gates)              | `make bench-all`             | ~5 min |
 
