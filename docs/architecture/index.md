@@ -134,6 +134,9 @@ What's on the near-term radar:
 
 - 2D MPI ranks with halo exchange parity to the 3D path.
 - HLLD Riemann solver for MHD (2D + 3D).
+- 2D `FiveMomentTwoFluid` pipeline (the only physics module that
+  currently runs only in 3D — the 2D path has all 5 smooth physics
+  + GLM-MHD but not Two-Fluid yet).
 - Phase-3 single-launch fusion for the 2D pipeline (face-flux into the
   vol+lift+RK kernel).
 - A `Solver2D` wrapper to mirror the 3D `Solver[PhysT, P]` ergonomics.
