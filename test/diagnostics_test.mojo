@@ -62,14 +62,7 @@ comptime VZ: Float32 = 0.0
 comptime IC_BLOCK = 256
 
 
-def fill_constant_kernel[
-    P: Int
-](
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-    value: Float32,
-):
+def fill_constant_kernel[P: Int](q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int, value: Float32):
     comptime NP = num_tet_nodes(P)
     var idx = Int(global_idx.x)
     var total = num_owned * NP
@@ -81,14 +74,7 @@ def fill_constant_kernel[
     q[e * NP + nn] = value
 
 
-def fill_checkerboard_kernel[
-    P: Int
-](
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-    amplitude: Float32,
-):
+def fill_checkerboard_kernel[P: Int](q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int, amplitude: Float32):
     comptime NP = num_tet_nodes(P)
     var idx = Int(global_idx.x)
     var total = num_owned * NP
@@ -104,28 +90,14 @@ def fill_checkerboard_kernel[
     q[e * NP + nn] = sign * amplitude
 
 
-def assert_close(
-    name: String, got: Float64, expected: Float64, tol: Float64
-) raises:
+def assert_close(name: String, got: Float64, expected: Float64, tol: Float64) raises:
     var d = got - expected
     var ad = d if d >= 0.0 else -d
     if ad > tol:
-        raise Error(
-            name
-            + ": got="
-            + String(got)
-            + " expected="
-            + String(expected)
-            + " |diff|="
-            + String(ad)
-            + " tol="
-            + String(tol)
-        )
+        raise Error(name + ": got=" + String(got) + " expected=" + String(expected) + " |diff|=" + String(ad) + " tol=" + String(tol))
 
 
-def test_uniform_field[
-    P: Int
-](mut solver: Solver[Advection, P], mut nvtx: NvtxContext,) raises:
+def test_uniform_field[P: Int](mut solver: Solver[Advection, P], mut nvtx: NvtxContext) raises:
     print("    uniform-field integrals...")
     comptime NP = num_tet_nodes(P)
     # Fill q with 2.5 everywhere.
@@ -149,16 +121,7 @@ def test_uniform_field[
     sq.append(NamedComponent("l2_sq", 0))
     var ma = List[NamedComponent]()
     ma.append(NamedComponent("max_abs_q", 0))
-    var diag = DiagnosticsWriter[Advection, P](
-        solver,
-        "output/_test_uniform_p" + String(P) + ".csv",
-        lin,
-        sq,
-        ma,
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[Advection, P](solver, "output/_test_uniform_p" + String(P) + ".csv", lin, sq, ma, LX, LY, LZ)
     diag.record(0.0, solver, nvtx)
 
     # Expected: int(value) = value * Vol, int(value^2) = value^2 * Vol,
@@ -175,9 +138,7 @@ def test_uniform_field[
     print("      max_abs =", diag.last_row[2], " expected=", v)
 
 
-def test_checkerboard[
-    P: Int
-](mut solver: Solver[Advection, P], mut nvtx: NvtxContext,) raises:
+def test_checkerboard[P: Int](mut solver: Solver[Advection, P], mut nvtx: NvtxContext) raises:
     print("    checkerboard peak-value test...")
     comptime NP = num_tet_nodes(P)
     var amp: Float32 = 7.0
@@ -197,16 +158,7 @@ def test_checkerboard[
     ma.append(NamedComponent("max_abs_q", 0))
     var sq = List[NamedComponent]()
     sq.append(NamedComponent("l2_sq", 0))
-    var diag = DiagnosticsWriter[Advection, P](
-        solver,
-        "output/_test_checker_p" + String(P) + ".csv",
-        List[NamedComponent](),
-        sq,
-        ma,
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[Advection, P](solver, "output/_test_checker_p" + String(P) + ".csv", List[NamedComponent](), sq, ma, LX, LY, LZ)
     diag.record(0.0, solver, nvtx)
 
     # squared should be amp^2 * Vol (independent of sign); max_abs = amp.
@@ -218,20 +170,9 @@ def test_checkerboard[
     print("      max_abs =", diag.last_row[1])
 
 
-def test_empty_writer[
-    P: Int
-](mut solver: Solver[Advection, P], mut nvtx: NvtxContext,) raises:
+def test_empty_writer[P: Int](mut solver: Solver[Advection, P], mut nvtx: NvtxContext) raises:
     print("    zero-column writer...")
-    var diag = DiagnosticsWriter[Advection, P](
-        solver,
-        "output/_test_empty_p" + String(P) + ".csv",
-        List[NamedComponent](),
-        List[NamedComponent](),
-        List[NamedComponent](),
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[Advection, P](solver, "output/_test_empty_p" + String(P) + ".csv", List[NamedComponent](), List[NamedComponent](), List[NamedComponent](), LX, LY, LZ)
     diag.record(1.5, solver, nvtx)
     if len(diag.last_row) != 0:
         raise Error("empty writer produced non-empty row")
@@ -246,30 +187,10 @@ def check[P: Int](mut nvtx: NvtxContext) raises:
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(0, 1, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
+    var mesh = Mesh[P](ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ, BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx, mesh.part, Advection.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
     var physics = Advection(VX, VY, VZ)
-    var solver = Solver[Advection, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var solver = Solver[Advection, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
     test_uniform_field[P](solver, nvtx)
     test_checkerboard[P](solver, nvtx)

@@ -29,11 +29,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd_glm import mhd_glm_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -102,9 +98,7 @@ def _run() raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -126,11 +120,7 @@ def _run() raises -> Float64:
     # GLM disabled (c_h=0): the GLM kernels reduce to plain ideal MHD.
     var c_h_f = Float32(0.0)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             mhd_glm_rk_stage_2d[P](
@@ -163,9 +153,7 @@ def _run() raises -> Float64:
     for k in range(n_q):
         var v = hptr_q[k]
         if isnan(v) or isinf(v):
-            raise Error(
-                "bench_mhd_alfven_glm_2d_p4: non-finite at index " + String(k)
-            )
+            raise Error("bench_mhd_alfven_glm_2d_p4: non-finite at index " + String(k))
         var err = Float64(v - host_ic[k])
         sum_sq += err * err
         var ic = Float64(host_ic[k])
@@ -181,12 +169,7 @@ def _run() raises -> Float64:
     var l2_ic = sqrt(sum_ic / Float64(n_q))
     var rel_l2 = l2 / l2_ic
     if psi_max > PSI_TOL:
-        raise Error(
-            String("bench_mhd_alfven_glm_2d_p4 FAILED: psi_max ")
-            + String(psi_max)
-            + " > tol "
-            + String(PSI_TOL)
-        )
+        raise Error(String("bench_mhd_alfven_glm_2d_p4 FAILED: psi_max ") + String(psi_max) + " > tol " + String(PSI_TOL))
     return rel_l2
 
 
@@ -199,11 +182,6 @@ def main() raises:
     var rel_l2 = _run()
     print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
     if rel_l2 > L2_MAX_REL:
-        raise Error(
-            "bench_mhd_alfven_glm_2d_p4 FAILED: rel L2 "
-            + String(rel_l2)
-            + " exceeds threshold "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_mhd_alfven_glm_2d_p4 FAILED: rel L2 " + String(rel_l2) + " exceeds threshold " + String(L2_MAX_REL))
     print("=== bench_mhd_alfven_glm_2d_p4 PASSED ===")
     mpi.finalize()

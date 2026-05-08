@@ -106,22 +106,8 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print(
-            "shallow_water_drop: GPU DG shallow water, P2 tet, Rusanov,",
-            size,
-            "rank(s)",
-        )
-        print(
-            "  global mesh: ",
-            NX,
-            "x",
-            NY,
-            "x",
-            NZ,
-            " cells -> ",
-            NX * NY * NZ * 6,
-            "tets",
-        )
+        print("shallow_water_drop: GPU DG shallow water, P2 tet, Rusanov,", size, "rank(s)")
+        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
 
     var nvtx = NvtxContext()
 
@@ -140,31 +126,10 @@ def main() raises:
         BC_INTERIOR,  # -z, +z
     )
 
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        ShallowWater.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, ShallowWater.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
     var physics = ShallowWater(GRAVITY, H_MIN)
-    var solver = Solver[ShallowWater](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[ShallowWater](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[drop_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -206,30 +171,13 @@ def main() raises:
     diag_linear.append(NamedComponent("momentum_y", 2))
     var diag_maxabs = List[NamedComponent]()
     diag_maxabs.append(NamedComponent("max_h", 0))
-    var diag = DiagnosticsWriter[ShallowWater](
-        solver,
-        "output/diagnostics.csv",
-        diag_linear,
-        List[NamedComponent](),
-        diag_maxabs,
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[ShallowWater](solver, "output/diagnostics.csv", diag_linear, List[NamedComponent](), diag_maxabs, LX, LY, LZ)
 
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[ShallowWater](
-        solver,
-        writer,
-        diag,
-        dt,
-        T_FINAL,
-        NUM_FRAMES,
-        nvtx,
-    )
+    var result = run_ssprk3_loop_with_diagnostics[ShallowWater](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
 
     writer.finalize("output/solution.pvd", nvtx)
 
@@ -265,29 +213,15 @@ def main() raises:
         var names = List[String]()
         names.append(String("h"))
         names.append(String("|u|"))
-        write_snapshot_3d_multi(
-            solver=solver,
-            field_names=names,
-            field_data=fields,
-            path=String("output/snapshot_t_final.vtu"),
-            nvtx=nvtx,
-        )
+        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
         if rank == 0:
-            print(
-                "  wrote output/snapshot_t_final.vtu (h + |u|, t=", T_FINAL, ")"
-            )
+            print("  wrote output/snapshot_t_final.vtu (h + |u|, t=", T_FINAL, ")")
 
     if size == 1:
         var mass_final = _total_mass(solver, nvtx)
         var mass_drift = mass_final - mass_ic
         print("  integrated mass at t=", T_FINAL, " :", mass_final)
-        print(
-            "  mass drift                   :",
-            mass_drift,
-            "  (relative:",
-            mass_drift / mass_ic,
-            ")",
-        )
+        print("  mass drift                   :", mass_drift, "  (relative:", mass_drift / mass_ic, ")")
     if rank == 0:
         result.print_summary()
         print("  wrote output/solution.pvd")
@@ -305,10 +239,7 @@ def main() raises:
 # flux should conserve this across the run; drift is a numerical
 # diagnostic, not a scheme invariant (nodal sum is not exact
 # L^2(ref-tet) integration at P2).
-def _total_mass(
-    mut solver: Solver[ShallowWater],
-    mut nvtx: NvtxContext,
-) raises -> Float32:
+def _total_mass(mut solver: Solver[ShallowWater], mut nvtx: NvtxContext) raises -> Float32:
     var num_owned = solver.num_owned_elements
     var total_dof = num_owned * N_P
     var h_buf = List[Float32]()
@@ -318,6 +249,4 @@ def _total_mass(
     var tot: Float64 = 0.0
     for i in range(total_dof):
         tot += Float64(h_buf[i])
-    return Float32(
-        tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ)
-    )
+    return Float32(tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ))

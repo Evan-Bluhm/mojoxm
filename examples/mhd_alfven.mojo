@@ -113,11 +113,7 @@ def alfven_ic_kernel(
     var by = By
     var bz = Float32(0.0)
     var p_gas = p0_val
-    var E = (
-        p_gas / (gamma - Float32(1.0))
-        + Float32(0.5) * rho * (u * u + v * v + w * w)
-        + Float32(0.5) * (bx * bx + by * by + bz * bz)
-    )
+    var E = p_gas / (gamma - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w) + Float32(0.5) * (bx * bx + by * by + bz * bz)
     var base = (e * N_P + nn) * 9
     q[base + 0] = rho
     q[base + 1] = rho * u
@@ -147,22 +143,8 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print(
-            "mhd_alfven: GPU DG ideal MHD + GLM, P2 tet, Rusanov,",
-            size,
-            "rank(s)",
-        )
-        print(
-            "  global mesh: ",
-            NX,
-            "x",
-            NY,
-            "x",
-            NZ,
-            " cells -> ",
-            NX * NY * NZ * 6,
-            "tets",
-        )
+        print("mhd_alfven: GPU DG ideal MHD + GLM, P2 tet, Rusanov,", size, "rank(s)")
+        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
         print("  c_h =", C_H, "  alpha_d =", ALPHA_D)
 
     var nvtx = NvtxContext()
@@ -170,37 +152,10 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions.periodic()
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = IdealMHD(
-        GAMMA,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-        C_H,
-        ALPHA_D,
-    )
-    var solver = Solver[IdealMHD](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, IdealMHD.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = IdealMHD(GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D)
+    var solver = Solver[IdealMHD](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[alfven_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -250,30 +205,13 @@ def main() raises:
     diag_squared.append(NamedComponent("Bz_sq", 7))
     var diag_maxabs = List[NamedComponent]()
     diag_maxabs.append(NamedComponent("max_abs_psi", 8))
-    var diag = DiagnosticsWriter[IdealMHD](
-        solver,
-        "output/diagnostics.csv",
-        diag_linear,
-        diag_squared,
-        diag_maxabs,
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[IdealMHD](solver, "output/diagnostics.csv", diag_linear, diag_squared, diag_maxabs, LX, LY, LZ)
 
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[IdealMHD](
-        solver,
-        writer,
-        diag,
-        dt,
-        T_FINAL,
-        NUM_FRAMES,
-        nvtx,
-    )
+    var result = run_ssprk3_loop_with_diagnostics[IdealMHD](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
 
     writer.finalize("output/solution.pvd", nvtx)
 
@@ -318,19 +256,9 @@ def main() raises:
         names.append(String("By"))
         names.append(String("|B|"))
         names.append(String("psi"))
-        write_snapshot_3d_multi(
-            solver=solver,
-            field_names=names,
-            field_data=fields,
-            path=String("output/snapshot_t_final.vtu"),
-            nvtx=nvtx,
-        )
+        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
         if rank == 0:
-            print(
-                "  wrote output/snapshot_t_final.vtu (By + |B| + psi, t=",
-                T_FINAL,
-                ")",
-            )
+            print("  wrote output/snapshot_t_final.vtu (By + |B| + psi, t=", T_FINAL, ")")
 
     # The round-trip L2 and max-|psi| diagnostics below sum over this
     # rank's owned elements only; at np>1 the globally-correct numbers

@@ -70,11 +70,7 @@ comptime T_FINAL: Float32 = 0.5
 comptime DRIFT_TOL: Float64 = 5.0e-4
 
 
-def fill_constant_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-):
+def fill_constant_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
     if idx >= total:
@@ -126,52 +122,11 @@ def main() raises:
     var refs = build_reference_operators(nvtx)
     var ctx = DeviceContext()
 
-    var bcs = BoundaryConditions(
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-    )
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        FiveMomentTwoFluid.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = FiveMomentTwoFluid(
-        GAMMA_E,
-        GAMMA_I,
-        Q_E,
-        M_E,
-        Q_I,
-        M_I,
-        EPS0,
-        C_LIGHT,
-        C_H,
-        ALPHA_D,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-    )
-    var solver = Solver[FiveMomentTwoFluid](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var bcs = BoundaryConditions(BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW)
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, FiveMomentTwoFluid.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = FiveMomentTwoFluid(GAMMA_E, GAMMA_I, Q_E, M_E, Q_I, M_I, EPS0, C_LIGHT, C_H, ALPHA_D, MIN_DENSITY, MIN_PRESSURE)
+    var solver = Solver[FiveMomentTwoFluid](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[fill_constant_kernel](
         solver.d_q.unsafe_ptr(),
@@ -183,12 +138,8 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * 17
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -205,12 +156,8 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -227,12 +174,7 @@ def main() raises:
 
     print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
     if max_drift > DRIFT_TOL:
-        raise Error(
-            "bench_two_fluid_outflow_3d FAILED: drift "
-            + String(max_drift)
-            + " > "
-            + String(DRIFT_TOL)
-        )
+        raise Error("bench_two_fluid_outflow_3d FAILED: drift " + String(max_drift) + " > " + String(DRIFT_TOL))
 
     print("=== bench_two_fluid_outflow_3d PASSED ===")
     mpi.finalize()

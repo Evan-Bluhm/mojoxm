@@ -30,11 +30,7 @@ from std.math import sqrt, ceildiv, sin, log, isnan, isinf
 
 from src import mpi
 from src.partition import build_partition
-from src.reference import (
-    ReferenceElement,
-    to_float32,
-    num_tet_nodes,
-)
+from src.reference import ReferenceElement, to_float32, num_tet_nodes
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
@@ -69,12 +65,7 @@ comptime L2_MAX_REL_AT_12: Float64 = 2.0e-4
 comptime RATE_MIN: Float64 = 2.5
 
 
-def entropy_wave_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def entropy_wave_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -92,9 +83,7 @@ def entropy_wave_ic_kernel(
     var v = V0
     var w = W0
     var p = P0
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (
-        u * u + v * v + w * w
-    )
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
 
     var base = (e * NP + nn) * NC
     q[base + 0] = rho
@@ -115,36 +104,10 @@ def _run(N: Int) raises -> Float64:
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(rank, size, N, N, N),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
-    var physics = Euler(
-        GAMMA,
-        Float32(1.0e-6),
-        Float32(1.0e-6),
-        FLUX_HLLEC,
-        False,
-    )
-    var solver = Solver[Euler, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var mesh = Mesh[P](ctx, build_partition(rank, size, N, N, N), LX, LY, LZ, BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
+    var physics = Euler(GAMMA, Float32(1.0e-6), Float32(1.0e-6), FLUX_HLLEC, False)
+    var solver = Solver[Euler, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
     solver.ctx.enqueue_function[entropy_wave_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -157,13 +120,8 @@ def _run(N: Int) raises -> Float64:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * NC
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -181,13 +139,8 @@ def _run(N: Int) raises -> Float64:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -216,15 +169,7 @@ def main() raises:
         return
 
     print("bench_euler_smooth_wave_3d_p3 (P=3 entropy wave, HLLEC)")
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        NP,
-        "  sweep N=6, 8, 12   (threshold",
-        L2_MAX_REL_AT_12,
-        ")",
-    )
+    print("  P=", P, "  NP=", NP, "  sweep N=6, 8, 12   (threshold", L2_MAX_REL_AT_12, ")")
 
     var err6 = _run(6)
     print("  N=6   rel L2 =", err6)
@@ -234,46 +179,15 @@ def main() raises:
     print("  N=12  rel L2 =", err12)
 
     if err12 > L2_MAX_REL_AT_12:
-        raise Error(
-            "bench_euler_smooth_wave_3d_p3 FAILED: rel L2 at N=12 "
-            + String(err12)
-            + " exceeds "
-            + String(L2_MAX_REL_AT_12)
-        )
+        raise Error("bench_euler_smooth_wave_3d_p3 FAILED: rel L2 at N=12 " + String(err12) + " exceeds " + String(L2_MAX_REL_AT_12))
     if not (err6 > err8 and err8 > err12):
-        raise Error(
-            "bench_euler_smooth_wave_3d_p3 FAILED: rel L2 not monotone"
-            + " (6: "
-            + String(err6)
-            + ", 8: "
-            + String(err8)
-            + ", 12: "
-            + String(err12)
-            + ")"
-        )
+        raise Error("bench_euler_smooth_wave_3d_p3 FAILED: rel L2 not monotone" + " (6: " + String(err6) + ", 8: " + String(err8) + ", 12: " + String(err12) + ")")
 
     var rate_68 = log(err6 / err8) / log(8.0 / 6.0)
     var rate_812 = log(err8 / err12) / log(12.0 / 8.0)
-    print(
-        "  observed rates: log_(4/3)(e6/e8) =",
-        rate_68,
-        "  log_(3/2)(e8/e12) =",
-        rate_812,
-        "  (P+1 =",
-        P + 1,
-        ", floor",
-        RATE_MIN,
-        ")",
-    )
+    print("  observed rates: log_(4/3)(e6/e8) =", rate_68, "  log_(3/2)(e8/e12) =", rate_812, "  (P+1 =", P + 1, ", floor", RATE_MIN, ")")
     if rate_68 < RATE_MIN and rate_812 < RATE_MIN:
-        raise Error(
-            String("bench_euler_smooth_wave_3d_p3 FAILED: rates ")
-            + String(rate_68)
-            + " and "
-            + String(rate_812)
-            + " both below "
-            + String(RATE_MIN)
-        )
+        raise Error(String("bench_euler_smooth_wave_3d_p3 FAILED: rates ") + String(rate_68) + " and " + String(rate_812) + " both below " + String(RATE_MIN))
 
     print("=== bench_euler_smooth_wave_3d_p3 PASSED ===")
     mpi.finalize()

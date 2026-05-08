@@ -33,11 +33,7 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_limiter import bj_limit_full_2d
 from src.local_mesh_2d_gpu_sw import sw_rk_stage_hll_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL
 
@@ -72,20 +68,7 @@ def main() raises:
         return
 
     print("bench_shallow_water_dam_break_2d (2D dam break, closed pool)")
-    print(
-        "  P=",
-        P,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "  H_L=",
-        H_L,
-        "  H_R=",
-        H_R,
-        "  T=",
-        T_FINAL,
-    )
+    print("  P=", P, "  mesh=", NX, "x", NY, "  H_L=", H_L, "  H_R=", H_R, "  T=", T_FINAL)
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -112,12 +95,8 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
-    var d_cell_mean = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_elements * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
+    var d_cell_mean = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_elements * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -148,11 +127,7 @@ def main() raises:
     var h_min_f = Float32(H_MIN)
     var venkat_eps = Float32(VENKAT_EPS)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             sw_rk_stage_hll_2d[P](
@@ -172,14 +147,7 @@ def main() raises:
                 cc=stage.c,
                 dt=dt,
             )
-            bj_limit_full_2d[P, NC](
-                ctx,
-                gpu_mesh,
-                stage.q_out,
-                gpu_re.d_node_weights.unsafe_ptr(),
-                d_cell_mean.unsafe_ptr(),
-                venkat_eps,
-            )
+            bj_limit_full_2d[P, NC](ctx, gpu_mesh, stage.q_out, gpu_re.d_node_weights.unsafe_ptr(), d_cell_mean.unsafe_ptr(), venkat_eps)
     ctx.synchronize()
 
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -216,61 +184,24 @@ def main() raises:
     var mass_fin: Float64 = 0.0
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            mass_fin += (
-                Float64(hptr_q[(elem * NP_p + nn) * NC + 0]) * node_w[nn]
-            )
+            mass_fin += Float64(hptr_q[(elem * NP_p + nn) * NC + 0]) * node_w[nn]
 
     var dmass = mass_fin - mass_ic
     if dmass < 0.0:
         dmass = -dmass
     var rel = dmass / mass_ic
 
-    print(
-        "  steps=",
-        num_steps,
-        "  h in [",
-        h_min,
-        ",",
-        h_max,
-        "]",
-        "  |v|_max=",
-        v_max,
-        "  mass(IC)=",
-        mass_ic,
-        "  mass(t=T)=",
-        mass_fin,
-        "  rel=",
-        rel,
-    )
+    print("  steps=", num_steps, "  h in [", h_min, ",", h_max, "]", "  |v|_max=", v_max, "  mass(IC)=", mass_ic, "  mass(t=T)=", mass_fin, "  rel=", rel)
 
     if rel > MASS_TOL_REL:
-        raise Error(
-            String("bench_shallow_water_dam_break_2d FAILED: mass drift ")
-            + String(rel)
-            + " > "
-            + String(MASS_TOL_REL)
-        )
+        raise Error(String("bench_shallow_water_dam_break_2d FAILED: mass drift ") + String(rel) + " > " + String(MASS_TOL_REL))
     if h_min < Float32(0.0):
-        raise Error(
-            String("bench_shallow_water_dam_break_2d FAILED: h_min ")
-            + String(h_min)
-            + " negative (positivity lost)"
-        )
+        raise Error(String("bench_shallow_water_dam_break_2d FAILED: h_min ") + String(h_min) + " negative (positivity lost)")
     if h_max > H_MAX_OK:
-        raise Error(
-            String("bench_shallow_water_dam_break_2d FAILED: h_max ")
-            + String(h_max)
-            + " > "
-            + String(H_MAX_OK)
-        )
+        raise Error(String("bench_shallow_water_dam_break_2d FAILED: h_max ") + String(h_max) + " > " + String(H_MAX_OK))
     var v_bound = Float32(2.0) * Float32(sqrt(G * H_L))
     if v_max > v_bound:
-        raise Error(
-            String("bench_shallow_water_dam_break_2d FAILED: |v|_max ")
-            + String(v_max)
-            + " > "
-            + String(v_bound)
-        )
+        raise Error(String("bench_shallow_water_dam_break_2d FAILED: |v|_max ") + String(v_max) + " > " + String(v_bound))
 
     print("=== bench_shallow_water_dam_break_2d PASSED ===")
     mpi.finalize()

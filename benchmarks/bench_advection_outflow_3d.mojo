@@ -27,13 +27,7 @@ from std.math import sqrt, ceildiv, exp, isnan, isinf
 
 from src import mpi
 from src.partition import build_partition
-from src.reference import (
-    ReferenceElement,
-    to_float32,
-    num_tet_nodes,
-    build_reference_operators,
-    N_P,
-)
+from src.reference import ReferenceElement, to_float32, num_tet_nodes, build_reference_operators, N_P
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions, BC_OUTFLOW
 from src.halo_exchange import HaloExchange
@@ -105,43 +99,13 @@ def main() raises:
     var refs = build_reference_operators(nvtx)
     var ctx = DeviceContext()
 
-    var bcs = BoundaryConditions(
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-    )
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
+    var bcs = BoundaryConditions(BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW)
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, Advection.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
     var physics = Advection(VX, VY, VZ)
-    var solver = Solver[Advection](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[Advection](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
-    var inv_two_sigma2 = Float32(1.0) / (
-        Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA
-    )
+    var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
     solver.ctx.enqueue_function[gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
@@ -197,23 +161,9 @@ def main() raises:
     var rel = mass_fin / mass_ic
     if rel < 0.0:
         rel = -rel
-    print(
-        "  mass(IC)=",
-        mass_ic,
-        "  mass(t=T)=",
-        mass_fin,
-        "  rel=",
-        rel,
-        "  max |q|=",
-        max_abs,
-    )
+    print("  mass(IC)=", mass_ic, "  mass(t=T)=", mass_fin, "  rel=", rel, "  max |q|=", max_abs)
     if rel > DRAIN_TOL_REL:
-        raise Error(
-            String("bench_advection_outflow_3d FAILED: residual mass ")
-            + String(rel)
-            + " > "
-            + String(DRAIN_TOL_REL)
-        )
+        raise Error(String("bench_advection_outflow_3d FAILED: residual mass ") + String(rel) + " > " + String(DRAIN_TOL_REL))
 
     print("=== bench_advection_outflow_3d PASSED ===")
     mpi.finalize()

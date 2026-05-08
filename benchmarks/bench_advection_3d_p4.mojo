@@ -27,11 +27,7 @@ from std.math import sqrt, ceildiv, exp, log, isnan, isinf
 
 from src import mpi
 from src.partition import build_partition
-from src.reference import (
-    ReferenceElement,
-    to_float32,
-    num_tet_nodes,
-)
+from src.reference import ReferenceElement, to_float32, num_tet_nodes
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
@@ -113,34 +109,12 @@ def _run(N: Int) raises -> Float64:
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(rank, size, N, N, N),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
+    var mesh = Mesh[P](ctx, build_partition(rank, size, N, N, N), LX, LY, LZ, BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx, mesh.part, Advection.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
     var physics = Advection(VX, VY, VZ)
-    var solver = Solver[Advection, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var solver = Solver[Advection, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
-    var inv_two_sigma2 = Float32(1.0) / (
-        Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA
-    )
+    var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
     solver.ctx.enqueue_function[gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
@@ -156,13 +130,8 @@ def _run(N: Int) raises -> Float64:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -180,13 +149,8 @@ def _run(N: Int) raises -> Float64:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -225,46 +189,15 @@ def main() raises:
     print("  N=12  rel L2 =", err12)
 
     if err12 > L2_MAX_REL_AT_12:
-        raise Error(
-            "bench_advection_3d_p4 FAILED: rel L2 at N=12 "
-            + String(err12)
-            + " exceeds "
-            + String(L2_MAX_REL_AT_12)
-        )
+        raise Error("bench_advection_3d_p4 FAILED: rel L2 at N=12 " + String(err12) + " exceeds " + String(L2_MAX_REL_AT_12))
     if not (err6 > err8 and err8 > err12):
-        raise Error(
-            "bench_advection_3d_p4 FAILED: rel L2 did not decrease "
-            + "monotonically (6: "
-            + String(err6)
-            + ", 8: "
-            + String(err8)
-            + ", 12: "
-            + String(err12)
-            + ")"
-        )
+        raise Error("bench_advection_3d_p4 FAILED: rel L2 did not decrease " + "monotonically (6: " + String(err6) + ", 8: " + String(err8) + ", 12: " + String(err12) + ")")
 
     var rate_68 = log(err6 / err8) / log(8.0 / 6.0)
     var rate_812 = log(err8 / err12) / log(12.0 / 8.0)
-    print(
-        "  observed rates: log_(4/3)(e6/e8) =",
-        rate_68,
-        "  log_(3/2)(e8/e12) =",
-        rate_812,
-        "  (P+1 =",
-        P + 1,
-        ", floor",
-        RATE_MIN,
-        ")",
-    )
+    print("  observed rates: log_(4/3)(e6/e8) =", rate_68, "  log_(3/2)(e8/e12) =", rate_812, "  (P+1 =", P + 1, ", floor", RATE_MIN, ")")
     if rate_68 < RATE_MIN and rate_812 < RATE_MIN:
-        raise Error(
-            "bench_advection_3d_p4 FAILED: observed rates "
-            + String(rate_68)
-            + " and "
-            + String(rate_812)
-            + " both below "
-            + String(RATE_MIN)
-        )
+        raise Error("bench_advection_3d_p4 FAILED: observed rates " + String(rate_68) + " and " + String(rate_812) + " both below " + String(RATE_MIN))
 
     print("=== bench_advection_3d_p4 PASSED ===")
     mpi.finalize()

@@ -1552,7 +1552,7 @@ $(BUILD_DIR):
 MOJO_SOURCES := $(shell find src benchmarks examples test -name '*.mojo')
 
 format:
-	$(MOJO) format $(MOJO_SOURCES)
+	$(MOJO) format -l 200 $(MOJO_SOURCES)
 
 # Non-mutating CI-style format gate.  Mirrors the pre-commit hook but
 # covers the *whole working tree*, not just staged files.  Exits

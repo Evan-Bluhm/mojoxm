@@ -29,18 +29,10 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_limiter import bj_limit_full_2d
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_hllc_2d
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL, BC_OUTFLOW
-from src.vtu_2d import (
-    dump_vtu_2d_frame_multi,
-    dump_pvd_collection,
-    vtu_frame_name,
-)
+from src.vtu_2d import dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name
 from src.ssprk3 import ssprk3_stage_plans
 from src.memory_report import MemoryReport, ThroughputReport, format_seconds
 
@@ -82,12 +74,7 @@ def main() raises:
     comptime NC = 4
     var ctx = DeviceContext()
 
-    var bcs = BoundaryConditions2D(
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_WALL,
-        BC_WALL,
-    )
+    var bcs = BoundaryConditions2D(BC_OUTFLOW, BC_OUTFLOW, BC_WALL, BC_WALL)
     var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var host_re = ReferenceElement2D[P]()
     var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY, bcs)
@@ -147,14 +134,7 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = Float32(T_FINAL / Float64(total_steps))
-    print(
-        "  dt=",
-        dt,
-        "  steps/frame=",
-        steps_per_frame,
-        "  total steps=",
-        total_steps,
-    )
+    print("  dt=", dt, "  steps/frame=", steps_per_frame, "  total steps=", total_steps)
 
     var gamma = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
@@ -199,22 +179,13 @@ def main() raises:
     fields.append(pressure.copy())
     fields.append(vmag.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
-    dump_vtu_2d_frame_multi[P](
-        mesh_coords,
-        field_names,
-        fields,
-        String("output/") + f0_name,
-    )
+    dump_vtu_2d_frame_multi[P](mesh_coords, field_names, fields, String("output/") + f0_name)
     paths.append(f0_name)
     times.append(0.0)
 
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
@@ -237,14 +208,7 @@ def main() raises:
                     stage.c,
                     dt,
                 )
-                bj_limit_full_2d[P, NC](
-                    ctx,
-                    gpu_mesh,
-                    stage.q_out,
-                    gpu_re.d_node_weights.unsafe_ptr(),
-                    d_cell_avg.unsafe_ptr(),
-                    venkat_eps,
-                )
+                bj_limit_full_2d[P, NC](ctx, gpu_mesh, stage.q_out, gpu_re.d_node_weights.unsafe_ptr(), d_cell_avg.unsafe_ptr(), venkat_eps)
         ctx.synchronize()
         var c_end = perf_counter_ns()
         compute_ns += c_end - c_start
@@ -258,12 +222,7 @@ def main() raises:
         fi_fields.append(vmag.copy())
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
-        dump_vtu_2d_frame_multi[P](
-            mesh_coords,
-            field_names,
-            fi_fields,
-            String("output/") + fname,
-        )
+        dump_vtu_2d_frame_multi[P](mesh_coords, field_names, fi_fields, String("output/") + fname)
         paths.append(fname)
         times.append(t)
         print("    frame", fi, "/", NUM_FRAMES, " t=", t)
@@ -272,12 +231,7 @@ def main() raises:
     var total_sec = Float64(run_end - run_start) * 1.0e-9
     var compute_sec = Float64(compute_ns) * 1.0e-9
     print("  total time  :", format_seconds(total_sec), "(incl. frame I/O)")
-    ThroughputReport(
-        num_steps=total_steps,
-        wall_seconds=compute_sec,
-        dof_count=gpu_mesh.num_elements * NP_p * NC,
-        state_bytes_per_step=8 * n_q * 4,
-    ).print()
+    ThroughputReport(num_steps=total_steps, wall_seconds=compute_sec, dof_count=gpu_mesh.num_elements * NP_p * NC, state_bytes_per_step=8 * n_q * 4).print()
 
     # End-state density check: left side should still be ~rho_L
     # (rarefaction head hasn't reached the wall at T=0.2), right side
@@ -312,18 +266,9 @@ def main() raises:
     # With the limiter, rho should stay within a few percent of
     # [rho_R, rho_L] = [0.125, 1.0].  Without it the Gibbs overshoot
     # would push it above 1.0 and potentially below rho_R.
-    print(
-        "  rho overshoot ratio = (rho_max - rho_L) / rho_L =",
-        (rho_max - RHO_L) / RHO_L,
-    )
+    print("  rho overshoot ratio = (rho_max - rho_L) / rho_L =", (rho_max - RHO_L) / RHO_L)
 
-    dump_pvd_collection(
-        String("output/solution_sod2d_gpu.pvd"),
-        paths,
-        times,
-    )
-    print(
-        "  wrote output/solution_sod2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames"
-    )
+    dump_pvd_collection(String("output/solution_sod2d_gpu.pvd"), paths, times)
+    print("  wrote output/solution_sod2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames")
 
     mpi.finalize()

@@ -52,37 +52,16 @@ struct TimeLoopResult(Copyable, Movable):
               frame-write time (download +    5.7 s
                 VTU):
         """
-        print(
-            "  final sync:                     "
-            + format_seconds(self.final_sync_sec)
-        )
-        print(
-            "  total steps:",
-            self.total_steps,
-            " wall time:                ",
-            format_seconds(self.wall_sec),
-        )
-        print(
-            "    step-loop time (enqueue only): ",
-            format_seconds(self.step_loop_sec),
-        )
-        print(
-            "    frame-write time (D2H + VTU): ",
-            format_seconds(self.frame_write_sec),
-        )
+        print("  final sync:                     " + format_seconds(self.final_sync_sec))
+        print("  total steps:", self.total_steps, " wall time:                ", format_seconds(self.wall_sec))
+        print("    step-loop time (enqueue only): ", format_seconds(self.step_loop_sec))
+        print("    frame-write time (D2H + VTU): ", format_seconds(self.frame_write_sec))
 
 
 def run_ssprk3_loop[
     PhysT: Physics,
     P: Int = 2,
-](
-    mut solver: Solver[PhysT, P],
-    mut writer: FrameWriter[PhysT, P],
-    dt: Float32,
-    t_final: Float32,
-    num_frames: Int,
-    mut nvtx: NvtxContext,
-) raises -> TimeLoopResult:
+](mut solver: Solver[PhysT, P], mut writer: FrameWriter[PhysT, P], dt: Float32, t_final: Float32, num_frames: Int, mut nvtx: NvtxContext,) raises -> TimeLoopResult:
     # Write the t=0 frame before stepping.  FrameWriter tracks its own
     # frame counter, so subsequent calls auto-increment.
     writer.write_frame(solver, 0.0, nvtx)
@@ -133,13 +112,7 @@ def run_ssprk3_loop[
     var sync_end = perf_counter_ns()
     var wall_end = perf_counter_ns()
 
-    return TimeLoopResult(
-        total_steps=step,
-        wall_sec=Float64(wall_end - wall_start) * 1e-9,
-        step_loop_sec=tloop,
-        frame_write_sec=twrite,
-        final_sync_sec=Float64(sync_end - sync_start) * 1e-9,
-    )
+    return TimeLoopResult(total_steps=step, wall_sec=Float64(wall_end - wall_start) * 1e-9, step_loop_sec=tloop, frame_write_sec=twrite, final_sync_sec=Float64(sync_end - sync_start) * 1e-9)
 
 
 def run_ssprk3_loop_with_diagnostics[
@@ -203,10 +176,4 @@ def run_ssprk3_loop_with_diagnostics[
     var sync_end = perf_counter_ns()
     var wall_end = perf_counter_ns()
 
-    return TimeLoopResult(
-        total_steps=step,
-        wall_sec=Float64(wall_end - wall_start) * 1e-9,
-        step_loop_sec=tloop,
-        frame_write_sec=twrite,
-        final_sync_sec=Float64(sync_end - sync_start) * 1e-9,
-    )
+    return TimeLoopResult(total_steps=step, wall_sec=Float64(wall_end - wall_start) * 1e-9, step_loop_sec=tloop, frame_write_sec=twrite, final_sync_sec=Float64(sync_end - sync_start) * 1e-9)

@@ -33,12 +33,7 @@ struct NvtxContext(Movable):
     var _enabled: Bool
 
     def __init__(out self) raises:
-        var candidates = [
-            String("libnvtx3interop.so.1"),
-            String("libnvtx3interop.so"),
-            String("libnvToolsExt.so.1"),
-            String("libnvToolsExt.so"),
-        ]
+        var candidates = [String("libnvtx3interop.so.1"), String("libnvtx3interop.so"), String("libnvToolsExt.so.1"), String("libnvToolsExt.so")]
         var opt_lib = Optional[OwnedDLHandle](None)
         for i in range(len(candidates)):
             try:
@@ -57,9 +52,7 @@ struct NvtxContext(Movable):
         if not self._enabled:
             return
         var cstr = name + String("\0")
-        var f = self._lib.get_function[
-            def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> Int32
-        ]("nvtxRangePushA")
+        var f = self._lib.get_function[def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> Int32]("nvtxRangePushA")
         _ = f(rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr()))
 
     def pop_range(mut self) raises:
@@ -72,9 +65,7 @@ struct NvtxContext(Movable):
         if not self._enabled:
             return
         var cstr = name + String("\0")
-        var f = self._lib.get_function[
-            def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> NoneType
-        ]("nvtxMarkA")
+        var f = self._lib.get_function[def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> NoneType]("nvtxMarkA")
         f(rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr()))
 
     def is_enabled(self) -> Bool:

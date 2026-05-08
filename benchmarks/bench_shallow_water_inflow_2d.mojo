@@ -33,18 +33,9 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_sw import sw_rk_stage_hll_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
-from src.boundary import (
-    BoundaryConditions2D,
-    BC_INFLOW,
-    BC_OUTFLOW,
-    BC_INTERIOR,
-)
+from src.boundary import BoundaryConditions2D, BC_INFLOW, BC_OUTFLOW, BC_INTERIOR
 
 
 comptime P = 2
@@ -78,20 +69,7 @@ def main() raises:
         return
 
     print("bench_shallow_water_inflow_2d (BC_INFLOW preservation gate)")
-    print(
-        "  P=",
-        P,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "   H0=",
-        H0,
-        "   U0=",
-        U0,
-        "   T=",
-        T_FINAL,
-    )
+    print("  P=", P, "  mesh=", NX, "x", NY, "   H0=", H0, "   U0=", U0, "   T=", T_FINAL)
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -106,13 +84,7 @@ def main() raises:
         BC_INTERIOR,  # -y, +y (periodic)
     )
     var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
-    var mesh_coords = LocalMesh2D[P](
-        Nx=NX,
-        Ny=NY,
-        Lx=LX,
-        Ly=LY,
-        bcs=bcs,
-    )
+    var mesh_coords = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var host_re = ReferenceElement2D[P]()
     var gpu_mesh = LocalMesh2DGpu[P](ctx=ctx, host=host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx=ctx, host=host_re)
@@ -129,9 +101,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -153,11 +123,7 @@ def main() raises:
     var inflow_hu = H0 * U0
     var inflow_hv = Float32(0.0)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             sw_rk_stage_hll_2d[P](
@@ -192,14 +158,7 @@ def main() raises:
         var h = hptr_q[i * 3 + 0]
         var hu = hptr_q[i * 3 + 1]
         var hv = hptr_q[i * 3 + 2]
-        if (
-            isnan(h)
-            or isinf(h)
-            or isnan(hu)
-            or isinf(hu)
-            or isnan(hv)
-            or isinf(hv)
-        ):
+        if isnan(h) or isinf(h) or isnan(hu) or isinf(hu) or isnan(hv) or isinf(hv):
             raise Error("bench_shallow_water_inflow_2d: non-finite output")
         var dh = Float64(h - H0)
         if dh < 0.0:
@@ -219,32 +178,15 @@ def main() raises:
 
     var hu_rel = max_hu_dev / Float64(H0 * U0)
     print("  max |h - H0|             =", max_h_dev, "  (threshold", H_TOL, ")")
-    print(
-        "  max |hu - H0*U0| / H0*U0 =", hu_rel, "  (threshold", HU_REL_TOL, ")"
-    )
+    print("  max |hu - H0*U0| / H0*U0 =", hu_rel, "  (threshold", HU_REL_TOL, ")")
     print("  max |hv|                 =", max_hv, "  (threshold", HV_TOL, ")")
 
     if max_h_dev > H_TOL:
-        raise Error(
-            "bench_shallow_water_inflow_2d FAILED: max |h - H0| "
-            + String(max_h_dev)
-            + " > "
-            + String(H_TOL)
-        )
+        raise Error("bench_shallow_water_inflow_2d FAILED: max |h - H0| " + String(max_h_dev) + " > " + String(H_TOL))
     if hu_rel > HU_REL_TOL:
-        raise Error(
-            "bench_shallow_water_inflow_2d FAILED: hu rel err "
-            + String(hu_rel)
-            + " > "
-            + String(HU_REL_TOL)
-        )
+        raise Error("bench_shallow_water_inflow_2d FAILED: hu rel err " + String(hu_rel) + " > " + String(HU_REL_TOL))
     if max_hv > HV_TOL:
-        raise Error(
-            "bench_shallow_water_inflow_2d FAILED: max |hv| "
-            + String(max_hv)
-            + " > "
-            + String(HV_TOL)
-        )
+        raise Error("bench_shallow_water_inflow_2d FAILED: max |hv| " + String(max_hv) + " > " + String(HV_TOL))
 
     print("=== bench_shallow_water_inflow_2d PASSED ===")
     mpi.finalize()

@@ -135,12 +135,7 @@ def bj_limit_compute_theta_kernel_2d[
 
 def bj_limit_apply_kernel_2d[
     NP: Int, NC: Int
-](
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
-    theta_in: UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-):
+](q: UnsafePointer[Float32, MutAnyOrigin], cell_mean: UnsafePointer[Float32, MutAnyOrigin], theta_in: UnsafePointer[Float32, MutAnyOrigin], num_elements: Int,):
     # One thread per (elem, nn, c) -- coalesced apply pass.
     var idx = Int(global_idx.x)
     var total = num_elements * NP * NC
@@ -171,38 +166,15 @@ def launch_bj_limit_compute_theta_2d[
     theta_out: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     comptime _kernel = bj_limit_compute_theta_kernel_2d[NP, NC]
-    ctx.enqueue_function[_kernel](
-        q,
-        cell_mean,
-        elem_faces,
-        face_elem,
-        num_elements,
-        venkat_eps2,
-        theta_out,
-        grid_dim=ceildiv(num_elements, 256),
-        block_dim=256,
-    )
+    ctx.enqueue_function[_kernel](q, cell_mean, elem_faces, face_elem, num_elements, venkat_eps2, theta_out, grid_dim=ceildiv(num_elements, 256), block_dim=256)
 
 
 def launch_bj_limit_apply_2d[
     NP: Int, NC: Int
-](
-    mut ctx: DeviceContext,
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
-    theta_in: UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-) raises:
+](mut ctx: DeviceContext, q: UnsafePointer[Float32, MutAnyOrigin], cell_mean: UnsafePointer[Float32, MutAnyOrigin], theta_in: UnsafePointer[Float32, MutAnyOrigin], num_elements: Int,) raises:
     comptime _kernel = bj_limit_apply_kernel_2d[NP, NC]
     var total = num_elements * NP * NC
-    ctx.enqueue_function[_kernel](
-        q,
-        cell_mean,
-        theta_in,
-        num_elements,
-        grid_dim=ceildiv(total, 256),
-        block_dim=256,
-    )
+    ctx.enqueue_function[_kernel](q, cell_mean, theta_in, num_elements, grid_dim=ceildiv(total, 256), block_dim=256)
 
 
 # Convenience three-pass orchestrator: run the mass-weighted cell mean
@@ -233,27 +205,6 @@ def bj_limit_full_2d[
 ) raises:
     comptime NP = num_tri_nodes_2d(P)
     var theta_scratch = cell_mean_scratch + mesh.num_elements * NC
-    launch_cell_mean_2d[NP, NC](
-        ctx,
-        q,
-        node_weights,
-        mesh.num_elements,
-        cell_mean_scratch,
-    )
-    launch_bj_limit_compute_theta_2d[NP, NC](
-        ctx,
-        q,
-        cell_mean_scratch,
-        mesh.d_elem_faces.unsafe_ptr(),
-        mesh.d_face_elem.unsafe_ptr(),
-        mesh.num_elements,
-        venkat_eps * venkat_eps,
-        theta_scratch,
-    )
-    launch_bj_limit_apply_2d[NP, NC](
-        ctx,
-        q,
-        cell_mean_scratch,
-        theta_scratch,
-        mesh.num_elements,
-    )
+    launch_cell_mean_2d[NP, NC](ctx, q, node_weights, mesh.num_elements, cell_mean_scratch)
+    launch_bj_limit_compute_theta_2d[NP, NC](ctx, q, cell_mean_scratch, mesh.d_elem_faces.unsafe_ptr(), mesh.d_face_elem.unsafe_ptr(), mesh.num_elements, venkat_eps * venkat_eps, theta_scratch)
+    launch_bj_limit_apply_2d[NP, NC](ctx, q, cell_mean_scratch, theta_scratch, mesh.num_elements)

@@ -23,11 +23,7 @@
 # ======================================================================
 
 from src.reference import mat_inv
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 
 
 def _cholesky_succeeds(m: List[Float64], n: Int) raises -> Bool:
@@ -73,14 +69,7 @@ def check[P: Int]() raises:
         var r = re.node_pos[i * 2 + 0]
         var s = re.node_pos[i * 2 + 1]
         if r < -1.0e-12 or s < -1.0e-12 or r + s > 1.0 + 1.0e-12:
-            raise Error(
-                "node "
-                + String(i)
-                + " outside reference simplex: r="
-                + String(r)
-                + " s="
-                + String(s)
-            )
+            raise Error("node " + String(i) + " outside reference simplex: r=" + String(r) + " s=" + String(s))
     print("  node positions OK (", NP_P, "nodes)")
 
     # 3. M_ref is SPD.  We have M_ref_inv; M_ref = (M_ref_inv)^-1.
@@ -93,15 +82,7 @@ def check[P: Int]() raises:
     for i in range(len(re.edge_to_elem)):
         var v = Int(re.edge_to_elem[i])
         if v < 0 or v >= NP_P:
-            raise Error(
-                "edge_to_elem["
-                + String(i)
-                + "] = "
-                + String(v)
-                + " out of range [0, "
-                + String(NP_P)
-                + ")"
-            )
+            raise Error("edge_to_elem[" + String(i) + "] = " + String(v) + " out of range [0, " + String(NP_P) + ")")
     # Spot-check vertex entries: edge 0 (v0, v1) must start at node 0,
     # end at node 1.  Edge 1 (v1, v2) starts at 1, ends at 2.  Edge 2
     # (v2, v0) starts at 2, ends at 0.
@@ -115,13 +96,9 @@ def check[P: Int]() raises:
     vend.append(0)
     for e in range(3):
         if Int(re.edge_to_elem[e * NFP_edge + 0]) != vstart[e]:
-            raise Error(
-                "edge " + String(e) + " start != vertex " + String(vstart[e])
-            )
+            raise Error("edge " + String(e) + " start != vertex " + String(vstart[e]))
         if Int(re.edge_to_elem[e * NFP_edge + (NFP_edge - 1)]) != vend[e]:
-            raise Error(
-                "edge " + String(e) + " end != vertex " + String(vend[e])
-            )
+            raise Error("edge " + String(e) + " end != vertex " + String(vend[e]))
     print("  edge-to-element map OK (", 3 * NFP_edge, "entries)")
 
     # 5. Cell-mean node weights must sum to 1 (partition of unity)
@@ -138,46 +115,26 @@ def check[P: Int]() raises:
     var wsum_err = wsum - 1.0
     var a_wsum_err = wsum_err if wsum_err >= 0.0 else -wsum_err
     if a_wsum_err > 1.0e-12:
-        raise Error(
-            "node_weights sum " + String(wsum) + " != 1 (partition of unity)"
-        )
+        raise Error("node_weights sum " + String(wsum) + " != 1 (partition of unity)")
     if P <= 3:
         for i in range(NP_P):
             var w = re.node_weights[i]
             if w < -1.0e-12:
-                raise Error(
-                    "P<=3 node_weights["
-                    + String(i)
-                    + "] = "
-                    + String(w)
-                    + " is negative"
-                )
+                raise Error("P<=3 node_weights[" + String(i) + "] = " + String(w) + " is negative")
     # P=2-specific spot check -- exact Lagrange-P=2 quadrature.
     if P == 2:
         for i in range(3):
             var w = re.node_weights[i]
             var aw = w if w >= 0.0 else -w
             if aw > 1.0e-12:
-                raise Error(
-                    "P=2 vertex "
-                    + String(i)
-                    + " weight "
-                    + String(w)
-                    + " expected 0"
-                )
+                raise Error("P=2 vertex " + String(i) + " weight " + String(w) + " expected 0")
         var third = 1.0 / 3.0
         for i in range(3, 6):
             var w = re.node_weights[i]
             var err = w - third
             var a_err = err if err >= 0.0 else -err
             if a_err > 1.0e-12:
-                raise Error(
-                    "P=2 midpoint "
-                    + String(i)
-                    + " weight "
-                    + String(w)
-                    + " expected 1/3"
-                )
+                raise Error("P=2 midpoint " + String(i) + " weight " + String(w) + " expected 1/3")
     print("  node_weights OK (sum=", wsum, ")")
 
 

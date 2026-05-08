@@ -37,18 +37,9 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_hllc_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
-from src.boundary import (
-    BoundaryConditions2D,
-    BC_INFLOW,
-    BC_OUTFLOW,
-    BC_INTERIOR,
-)
+from src.boundary import BoundaryConditions2D, BC_INFLOW, BC_OUTFLOW, BC_INTERIOR
 
 
 comptime P = 2
@@ -85,18 +76,7 @@ def main() raises:
         return
 
     print("bench_euler_inflow_2d (BC_INFLOW preservation gate, HLLC)")
-    print(
-        "  P=",
-        P,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "   M=",
-        U0 / sqrt(GAMMA * P0 / RHO0),
-        "   T=",
-        T_FINAL,
-    )
+    print("  P=", P, "  mesh=", NX, "x", NY, "   M=", U0 / sqrt(GAMMA * P0 / RHO0), "   T=", T_FINAL)
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -130,9 +110,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -155,11 +133,7 @@ def main() raises:
     var inflow_rhov = Float32(0.0)
     var inflow_E = E0
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             euler_rk_stage_hllc_2d[P](
@@ -198,16 +172,7 @@ def main() raises:
         var rhou = hptr_q[i * 4 + 1]
         var rhov = hptr_q[i * 4 + 2]
         var E = hptr_q[i * 4 + 3]
-        if (
-            isnan(rho)
-            or isinf(rho)
-            or isnan(rhou)
-            or isinf(rhou)
-            or isnan(rhov)
-            or isinf(rhov)
-            or isnan(E)
-            or isinf(E)
-        ):
+        if isnan(rho) or isinf(rho) or isnan(rhou) or isinf(rhou) or isnan(rhov) or isinf(rhov) or isnan(E) or isinf(E):
             raise Error("bench_euler_inflow_2d: non-finite output")
         var drho = Float64(rho - RHO0)
         if drho < 0.0:
@@ -233,63 +198,19 @@ def main() raises:
     var rho_rel = max_rho_dev / Float64(RHO0)
     var rhou_rel = max_rhou_dev / Float64(RHO0 * U0)
     var E_rel = max_E_dev / Float64(E0)
-    print(
-        "  max |rho - rho0| / rho0       =",
-        rho_rel,
-        "  (threshold",
-        RHO_REL_TOL,
-        ")",
-    )
-    print(
-        "  max |rhou - rho0*u0|/rho0*u0  =",
-        rhou_rel,
-        "  (threshold",
-        RHOU_REL_TOL,
-        ")",
-    )
-    print(
-        "  max |rhov|                    =",
-        max_rhov,
-        "  (threshold",
-        RHOV_TOL,
-        ")",
-    )
-    print(
-        "  max |E - E0| / E0             =",
-        E_rel,
-        "  (threshold",
-        E_REL_TOL,
-        ")",
-    )
+    print("  max |rho - rho0| / rho0       =", rho_rel, "  (threshold", RHO_REL_TOL, ")")
+    print("  max |rhou - rho0*u0|/rho0*u0  =", rhou_rel, "  (threshold", RHOU_REL_TOL, ")")
+    print("  max |rhov|                    =", max_rhov, "  (threshold", RHOV_TOL, ")")
+    print("  max |E - E0| / E0             =", E_rel, "  (threshold", E_REL_TOL, ")")
 
     if rho_rel > RHO_REL_TOL:
-        raise Error(
-            "bench_euler_inflow_2d FAILED: rho rel err "
-            + String(rho_rel)
-            + " > "
-            + String(RHO_REL_TOL)
-        )
+        raise Error("bench_euler_inflow_2d FAILED: rho rel err " + String(rho_rel) + " > " + String(RHO_REL_TOL))
     if rhou_rel > RHOU_REL_TOL:
-        raise Error(
-            "bench_euler_inflow_2d FAILED: rhou rel err "
-            + String(rhou_rel)
-            + " > "
-            + String(RHOU_REL_TOL)
-        )
+        raise Error("bench_euler_inflow_2d FAILED: rhou rel err " + String(rhou_rel) + " > " + String(RHOU_REL_TOL))
     if max_rhov > RHOV_TOL:
-        raise Error(
-            "bench_euler_inflow_2d FAILED: max |rhov| "
-            + String(max_rhov)
-            + " > "
-            + String(RHOV_TOL)
-        )
+        raise Error("bench_euler_inflow_2d FAILED: max |rhov| " + String(max_rhov) + " > " + String(RHOV_TOL))
     if E_rel > E_REL_TOL:
-        raise Error(
-            "bench_euler_inflow_2d FAILED: E rel err "
-            + String(E_rel)
-            + " > "
-            + String(E_REL_TOL)
-        )
+        raise Error("bench_euler_inflow_2d FAILED: E rel err " + String(E_rel) + " > " + String(E_REL_TOL))
 
     print("=== bench_euler_inflow_2d PASSED ===")
     mpi.finalize()

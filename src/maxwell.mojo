@@ -106,9 +106,7 @@ struct Maxwell(ImplicitlyCopyable, Physics):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[
-        origin: MutOrigin
-    ](self, target: UnsafePointer[NoneType, origin]):
+    def _to_device_type[origin: MutOrigin](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -126,11 +124,7 @@ struct Maxwell(ImplicitlyCopyable, Physics):
     # F^y_B = y^ x E          = (Ez, 0, -Ex)
     # F^z_E = c^2 * (B x z^) = c^2 * (By, -Bx, 0)
     # F^z_B = z^ x E          = (-Ey, Ex, 0)
-    def internal_flux(
-        self,
-        q: UnsafePointer[Float32, MutAnyOrigin],
-        flux: UnsafePointer[Float32, MutAnyOrigin],
-    ) -> Float32:
+    def internal_flux(self, q: UnsafePointer[Float32, MutAnyOrigin], flux: UnsafePointer[Float32, MutAnyOrigin]) -> Float32:
         var Ex = q[0]
         var Ey = q[1]
         var Ez = q[2]
@@ -216,15 +210,7 @@ struct Maxwell(ImplicitlyCopyable, Physics):
     # PEC reflection; BC_OUTFLOW is zero-gradient, which Rusanov reads
     # as a perfectly transmitting normal-incidence boundary (and a
     # lossy oblique-incidence one, same as the Euler outflow BC).
-    def boundary_flux(
-        self,
-        q_int: UnsafePointer[Float32, MutAnyOrigin],
-        bc_type: Int32,
-        nx: Float32,
-        ny: Float32,
-        nz: Float32,
-        flux: UnsafePointer[Float32, MutAnyOrigin],
-    ) -> Float32:
+    def boundary_flux(self, q_int: UnsafePointer[Float32, MutAnyOrigin], bc_type: Int32, nx: Float32, ny: Float32, nz: Float32, flux: UnsafePointer[Float32, MutAnyOrigin]) -> Float32:
         var q_ghost = InlineArray[Float32, 6](fill=0.0)
         if bc_type == BC_WALL:
             # Flip tangential E, flip normal B.
@@ -250,22 +236,13 @@ struct Maxwell(ImplicitlyCopyable, Physics):
             # BC_OUTFLOW / default: zero-gradient extrapolation.
             for k in range(6):
                 q_ghost[k] = q_int[k]
-        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-            q_ghost.unsafe_ptr()
-        )
+        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](q_ghost.unsafe_ptr())
         return self.numerical_flux(q_int, q_ghost_p, nx, ny, nz, flux)
 
     # Uniform current source.  In SI units with eps0 = 1/c^2, mu0 = 1:
     #   dE/dt += -J / eps0 = -c^2 * J
     #   dB/dt += -M                   (magnetic current -- usually zero)
-    def source_term(
-        self,
-        q: UnsafePointer[Float32, MutAnyOrigin],
-        x: Float32,
-        y: Float32,
-        z: Float32,
-        source_out: UnsafePointer[Float32, MutAnyOrigin],
-    ):
+    def source_term(self, q: UnsafePointer[Float32, MutAnyOrigin], x: Float32, y: Float32, z: Float32, source_out: UnsafePointer[Float32, MutAnyOrigin]):
         var c2 = self.c * self.c
         source_out[0] = -c2 * self.Jx
         source_out[1] = -c2 * self.Jy
@@ -274,8 +251,5 @@ struct Maxwell(ImplicitlyCopyable, Physics):
         source_out[4] = -self.My
         source_out[5] = -self.Mz
 
-    def limit_state(
-        self,
-        q: UnsafePointer[Float32, MutAnyOrigin],
-    ):
+    def limit_state(self, q: UnsafePointer[Float32, MutAnyOrigin]):
         pass

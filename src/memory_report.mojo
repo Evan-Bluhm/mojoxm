@@ -43,13 +43,7 @@ struct MemoryReport(Movable):
 
     def total_device_bytes(self) -> Int:
         # Pinned host buffers don't consume device memory.
-        return (
-            self.rk_stage_bytes
-            + self.dg_operators_bytes
-            + self.limiter_bytes
-            + self.mesh_connectivity_bytes
-            + self.halo_device_bytes
-        )
+        return self.rk_stage_bytes + self.dg_operators_bytes + self.limiter_bytes + self.mesh_connectivity_bytes + self.halo_device_bytes
 
     def total_bytes(self) -> Int:
         return self.total_device_bytes() + self.halo_pinned_bytes
@@ -169,11 +163,7 @@ struct ThroughputReport(Movable):
     def dof_per_second(self) -> Float64:
         if self.wall_seconds <= 0.0:
             return 0.0
-        return (
-            Float64(self.dof_count)
-            * Float64(self.num_steps)
-            / self.wall_seconds
-        )
+        return Float64(self.dof_count) * Float64(self.num_steps) / self.wall_seconds
 
     def state_bandwidth_bytes_per_second(self) -> Float64:
         """Lower-bound estimate of the achieved DRAM bandwidth: bytes
@@ -185,9 +175,7 @@ struct ThroughputReport(Movable):
         bandwidth."""
         if self.wall_seconds <= 0.0 or self.state_bytes_per_step == 0:
             return 0.0
-        var total_bytes = Float64(self.state_bytes_per_step) * Float64(
-            self.num_steps
-        )
+        var total_bytes = Float64(self.state_bytes_per_step) * Float64(self.num_steps)
         return total_bytes / self.wall_seconds
 
     def print(self) raises:
@@ -195,23 +183,11 @@ struct ThroughputReport(Movable):
         print("  steps:                " + String(self.num_steps))
         print("  DOF / step:           " + String(self.dof_count))
         print("  wall time:            " + format_seconds(self.wall_seconds))
-        print(
-            "  per-step wall:        " + format_seconds(self.per_step_seconds())
-        )
-        print(
-            "  throughput:           "
-            + _format_dof_per_s(self.dof_per_second())
-        )
+        print("  per-step wall:        " + format_seconds(self.per_step_seconds()))
+        print("  throughput:           " + _format_dof_per_s(self.dof_per_second()))
         if self.state_bytes_per_step > 0:
-            print(
-                "  state bytes / step:   "
-                + _format_bytes(self.state_bytes_per_step)
-            )
-            print(
-                "  state bandwidth:      "
-                + _format_bytes_per_s(self.state_bandwidth_bytes_per_second())
-                + "  (lower bound; excludes operator + mesh reads)"
-            )
+            print("  state bytes / step:   " + _format_bytes(self.state_bytes_per_step))
+            print("  state bandwidth:      " + _format_bytes_per_s(self.state_bandwidth_bytes_per_second()) + "  (lower bound; excludes operator + mesh reads)")
         print("============================")
 
 

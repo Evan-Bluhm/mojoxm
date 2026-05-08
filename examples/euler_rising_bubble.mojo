@@ -113,9 +113,7 @@ def bubble_ic_kernel(
     var bubble_mask = exp(-r2 / (radius * radius))
 
     # Keep pressure = hydrostatic; deplete density inside the bubble.
-    var rho = rho_bg * (
-        Float32(1.0) - (Float32(1.0) - rho_factor) * bubble_mask
-    )
+    var rho = rho_bg * (Float32(1.0) - (Float32(1.0) - rho_factor) * bubble_mask)
     var p = p_bg
     var E = p / (gamma - Float32(1.0))  # velocities are zero
     var base = (e * N_P + nn) * 5
@@ -142,22 +140,8 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print(
-            "euler_rising_bubble: GPU DG Euler + gravity,",
-            size,
-            "rank(s)",
-        )
-        print(
-            "  global mesh: ",
-            NX,
-            "x",
-            NY,
-            "x",
-            NZ,
-            " cells -> ",
-            NX * NY * NZ * 6,
-            "tets",
-        )
+        print("euler_rising_bubble: GPU DG Euler + gravity,", size, "rank(s)")
+        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
 
     var nvtx = NvtxContext()
 
@@ -175,43 +159,13 @@ def main() raises:
         BC_WALL,  # -z, +z
     )
 
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
 
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
+    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
 
-    var physics = Euler(
-        GAMMA,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-        FLUX_HLLEC,
-        True,
-        GX,
-        GY,
-        GZ,
-    )
+    var physics = Euler(GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True, GX, GY, GZ)
 
-    var solver = Solver[Euler](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[Euler](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[bubble_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -236,13 +190,7 @@ def main() raises:
     # diagnostic prints are suppressed outside np=1.
     if size == 1:
         var y_bubble_ic = _bubble_centroid_y(solver, nvtx)
-        print(
-            "  bubble centroid y at t=0 :",
-            y_bubble_ic,
-            " (expected ~",
-            BUBBLE_Y0,
-            ")",
-        )
+        print("  bubble centroid y at t=0 :", y_bubble_ic, " (expected ~", BUBBLE_Y0, ")")
 
     # Pre-step perf snapshot: device memory accounting (rank 0 only).
     if rank == 0:
@@ -263,30 +211,13 @@ def main() raises:
     diag_linear.append(NamedComponent("momentum_y", 2))
     diag_linear.append(NamedComponent("momentum_z", 3))
     diag_linear.append(NamedComponent("total_energy", 4))
-    var diag = DiagnosticsWriter[Euler](
-        solver,
-        "output/diagnostics.csv",
-        diag_linear,
-        List[NamedComponent](),
-        List[NamedComponent](),
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[Euler](solver, "output/diagnostics.csv", diag_linear, List[NamedComponent](), List[NamedComponent](), LX, LY, LZ)
 
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Euler](
-        solver,
-        writer,
-        diag,
-        dt,
-        T_FINAL,
-        NUM_FRAMES,
-        nvtx,
-    )
+    var result = run_ssprk3_loop_with_diagnostics[Euler](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
 
     writer.finalize("output/solution.pvd", nvtx)
 
@@ -332,19 +263,9 @@ def main() raises:
         names.append(String("rho"))
         names.append(String("p"))
         names.append(String("|v|"))
-        write_snapshot_3d_multi(
-            solver=solver,
-            field_names=names,
-            field_data=fields,
-            path=String("output/snapshot_t_final.vtu"),
-            nvtx=nvtx,
-        )
+        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
         if rank == 0:
-            print(
-                "  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=",
-                T_FINAL,
-                ")",
-            )
+            print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
 
     if size == 1:
         var y_bubble_final = _bubble_centroid_y(solver, nvtx)
@@ -370,10 +291,7 @@ def main() raises:
 # ----------------------------------------------------------------------
 
 
-def _bubble_centroid_y(
-    mut solver: Solver[Euler],
-    mut nvtx: NvtxContext,
-) raises -> Float32:
+def _bubble_centroid_y(mut solver: Solver[Euler], mut nvtx: NvtxContext) raises -> Float32:
     var num_owned = solver.num_owned_elements
     var h_q = List[Float32]()
     for _ in range(num_owned * N_P):

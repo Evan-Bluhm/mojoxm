@@ -29,11 +29,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_sw import sw_rk_stage_hll_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -89,9 +85,7 @@ def _run(NX: Int) raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -108,11 +102,7 @@ def _run(NX: Int) raises -> Float64:
     var g_f = Float32(GRAVITY)
     var h_min_f = Float32(H_MIN)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             sw_rk_stage_hll_2d[P](
@@ -162,15 +152,7 @@ def _run(NX: Int) raises -> Float64:
         dmass = -dmass
     var mass_rel = dmass / mass_ic_local
     if mass_rel > MASS_TOL_REL:
-        raise Error(
-            String("bench_shallow_water_wave_2d_p4 FAILED: mass drift ")
-            + String(mass_rel)
-            + " > tol "
-            + String(MASS_TOL_REL)
-            + " (at NX="
-            + String(NX)
-            + ")"
-        )
+        raise Error(String("bench_shallow_water_wave_2d_p4 FAILED: mass drift ") + String(mass_rel) + " > tol " + String(MASS_TOL_REL) + " (at NX=" + String(NX) + ")")
 
     return rel_l2
 
@@ -185,15 +167,7 @@ def main() raises:
         return
 
     print("bench_shallow_water_wave_2d_p4 (linear SW wave, 2D HLL, P=4)")
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        num_tri_nodes_2d(P),
-        "  sweep NX=8, 12, 16   (threshold",
-        L2_MAX_REL,
-        ")",
-    )
+    print("  P=", P, "  NP=", num_tri_nodes_2d(P), "  sweep NX=8, 12, 16   (threshold", L2_MAX_REL, ")")
 
     var err8 = _run(8)
     print("  NX=8   rel L2 =", err8)
@@ -203,26 +177,11 @@ def main() raises:
     print("  NX=16  rel L2 =", err16)
 
     if err8 > L2_MAX_REL:
-        raise Error(
-            "bench_shallow_water_wave_2d_p4 FAILED: NX=8 rel L2 "
-            + String(err8)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_shallow_water_wave_2d_p4 FAILED: NX=8 rel L2 " + String(err8) + " exceeds " + String(L2_MAX_REL))
     if err12 > L2_MAX_REL:
-        raise Error(
-            "bench_shallow_water_wave_2d_p4 FAILED: NX=12 rel L2 "
-            + String(err12)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_shallow_water_wave_2d_p4 FAILED: NX=12 rel L2 " + String(err12) + " exceeds " + String(L2_MAX_REL))
     if err16 > L2_MAX_REL:
-        raise Error(
-            "bench_shallow_water_wave_2d_p4 FAILED: NX=16 rel L2 "
-            + String(err16)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_shallow_water_wave_2d_p4 FAILED: NX=16 rel L2 " + String(err16) + " exceeds " + String(L2_MAX_REL))
 
     print("=== bench_shallow_water_wave_2d_p4 PASSED ===")
     mpi.finalize()

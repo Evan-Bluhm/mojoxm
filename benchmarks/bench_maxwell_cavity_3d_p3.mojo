@@ -36,11 +36,7 @@ from std.math import sqrt, ceildiv, sin, isnan, isinf
 
 from src import mpi
 from src.partition import build_partition
-from src.reference import (
-    ReferenceElement,
-    to_float32,
-    num_tet_nodes,
-)
+from src.reference import ReferenceElement, to_float32, num_tet_nodes
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions, BC_INTERIOR, BC_WALL
 from src.halo_exchange import HaloExchange
@@ -73,13 +69,7 @@ comptime PI_F: Float32 = 3.14159265358979323846
 comptime L2_MAX_REL: Float64 = 1.0e-4
 
 
-def cavity_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-    Ly: Float32,
-):
+def cavity_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int, Ly: Float32):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -106,13 +96,8 @@ def main() raises:
         print("bench_maxwell_cavity_3d_p3: runs at np=1 only")
         return
 
-    print(
-        "bench_maxwell_cavity_3d_p3 (Maxwell PEC cavity standing wave, P=3, one"
-        " period)"
-    )
-    print(
-        "  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL
-    )
+    print("bench_maxwell_cavity_3d_p3 (Maxwell PEC cavity standing wave, P=3, one period)")
+    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -124,47 +109,11 @@ def main() raises:
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
-    var bcs = BoundaryConditions(
-        BC_INTERIOR,
-        BC_INTERIOR,
-        BC_WALL,
-        BC_WALL,
-        BC_INTERIOR,
-        BC_INTERIOR,
-    )
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Maxwell.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = Maxwell(
-        C_LIGHT,
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-    )
-    var solver = Solver[Maxwell, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var bcs = BoundaryConditions(BC_INTERIOR, BC_INTERIOR, BC_WALL, BC_WALL, BC_INTERIOR, BC_INTERIOR)
+    var mesh = Mesh[P](ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, Maxwell.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = Maxwell(C_LIGHT, Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0))
+    var solver = Solver[Maxwell, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
     solver.ctx.enqueue_function[cavity_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -178,13 +127,8 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * NC
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -202,13 +146,8 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -228,11 +167,6 @@ def main() raises:
     print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
 
     if rel_l2 > L2_MAX_REL:
-        raise Error(
-            "bench_maxwell_cavity_3d_p3 FAILED: rel L2 "
-            + String(rel_l2)
-            + " exceeds threshold "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_maxwell_cavity_3d_p3 FAILED: rel L2 " + String(rel_l2) + " exceeds threshold " + String(L2_MAX_REL))
     print("=== bench_maxwell_cavity_3d_p3 PASSED ===")
     mpi.finalize()

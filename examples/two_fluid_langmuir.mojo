@@ -126,10 +126,7 @@ def langmuir_ic_kernel(
     q[base + 1] = rho_e0 * u_pert  # rho_e * u_e
     q[base + 2] = Float32(0.0)
     q[base + 3] = Float32(0.0)
-    q[base + 4] = (
-        p_e0 / (gamma_e - Float32(1.0))
-        + Float32(0.5) * rho_e0 * u_pert * u_pert
-    )
+    q[base + 4] = p_e0 / (gamma_e - Float32(1.0)) + Float32(0.5) * rho_e0 * u_pert * u_pert
     # Ion fluid: uniform density, zero velocity.
     q[base + 5] = rho_i0
     q[base + 6] = Float32(0.0)
@@ -156,74 +153,20 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print(
-            "two_fluid_langmuir: GPU DG 5-moment two-fluid + Maxwell, P2 tet,",
-            size,
-            "rank(s)",
-        )
-        print(
-            "  global mesh: ",
-            NX,
-            "x",
-            NY,
-            "x",
-            NZ,
-            " cells -> ",
-            NX * NY * NZ * 6,
-            "tets",
-        )
+        print("two_fluid_langmuir: GPU DG 5-moment two-fluid + Maxwell, P2 tet,", size, "rank(s)")
+        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
         var omega_p = sqrt(N0 * Q_E * Q_E / (EPS0 * M_E))
-        print(
-            "  omega_p =",
-            omega_p,
-            "  T_period =",
-            Float32(6.283185307179586) / omega_p,
-            "  T_FINAL = ~0.5 period",
-        )
+        print("  omega_p =", omega_p, "  T_period =", Float32(6.283185307179586) / omega_p, "  T_FINAL = ~0.5 period")
 
     var nvtx = NvtxContext()
     var refs = build_reference_operators(nvtx)
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions.periodic()
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        FiveMomentTwoFluid.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = FiveMomentTwoFluid(
-        GAMMA_E,
-        GAMMA_I,
-        Q_E,
-        M_E,
-        Q_I,
-        M_I,
-        EPS0,
-        C_LIGHT,
-        C_H,
-        ALPHA_D,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-    )
-    var solver = Solver[FiveMomentTwoFluid](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, FiveMomentTwoFluid.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = FiveMomentTwoFluid(GAMMA_E, GAMMA_I, Q_E, M_E, Q_I, M_I, EPS0, C_LIGHT, C_H, ALPHA_D, MIN_DENSITY, MIN_PRESSURE)
+    var solver = Solver[FiveMomentTwoFluid](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[langmuir_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -270,30 +213,13 @@ def main() raises:
     diag_squared.append(NamedComponent("Ez_sq", 12))
     var diag_maxabs = List[NamedComponent]()
     diag_maxabs.append(NamedComponent("max_abs_psi", 16))
-    var diag = DiagnosticsWriter[FiveMomentTwoFluid](
-        solver,
-        "output/diagnostics.csv",
-        diag_linear,
-        diag_squared,
-        diag_maxabs,
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[FiveMomentTwoFluid](solver, "output/diagnostics.csv", diag_linear, diag_squared, diag_maxabs, LX, LY, LZ)
 
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[FiveMomentTwoFluid](
-        solver,
-        writer,
-        diag,
-        dt,
-        T_FINAL,
-        NUM_FRAMES,
-        nvtx,
-    )
+    var result = run_ssprk3_loop_with_diagnostics[FiveMomentTwoFluid](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
 
     writer.finalize("output/solution.pvd", nvtx)
 
@@ -338,22 +264,9 @@ def main() raises:
         names.append(String("n_i"))
         names.append(String("Ex"))
         names.append(String("charge_density"))
-        write_snapshot_3d_multi(
-            solver=solver,
-            field_names=names,
-            field_data=fields,
-            path=String("output/snapshot_t_final.vtu"),
-            nvtx=nvtx,
-        )
+        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
         if rank == 0:
-            print(
-                (
-                    "  wrote output/snapshot_t_final.vtu (n_e + n_i + Ex +"
-                    " charge, t="
-                ),
-                T_FINAL,
-                ")",
-            )
+            print("  wrote output/snapshot_t_final.vtu (n_e + n_i + Ex + charge, t=", T_FINAL, ")")
 
     # At np=1 sample a few diagnostics: the spatial mean of Ex and of
     # rho_e * u_e (electron x-momentum) should both be traces of the

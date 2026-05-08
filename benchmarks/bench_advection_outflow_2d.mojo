@@ -27,11 +27,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_advection import advection_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_OUTFLOW
 
@@ -72,21 +68,10 @@ def main() raises:
     comptime NFP_e = num_edge_nodes(P)
     var ctx = DeviceContext()
 
-    var bcs = BoundaryConditions2D(
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-    )
+    var bcs = BoundaryConditions2D(BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW)
     var host_mesh = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var host_re = ReferenceElement2D[P]()
-    var mesh_coords = LocalMesh2D[P](
-        Nx=NX,
-        Ny=NY,
-        Lx=LX,
-        Ly=LY,
-        bcs=bcs,
-    )
+    var mesh_coords = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY, bcs=bcs)
     var gpu_mesh = LocalMesh2DGpu[P](ctx=ctx, host=host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx=ctx, host=host_re)
 
@@ -105,9 +90,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -128,11 +111,7 @@ def main() raises:
     var num_steps = Int(T_FINAL / dt_est) + 1
     var dt = T_FINAL / Float32(num_steps)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             advection_rk_stage_2d[P](
@@ -172,24 +151,10 @@ def main() raises:
     var rel = mass_fin / mass_ic
     if rel < 0.0:
         rel = -rel
-    print(
-        "  mass(IC)=",
-        mass_ic,
-        "  mass(t=T)=",
-        mass_fin,
-        "  rel=",
-        rel,
-        "  max |q|=",
-        max_abs,
-    )
+    print("  mass(IC)=", mass_ic, "  mass(t=T)=", mass_fin, "  rel=", rel, "  max |q|=", max_abs)
 
     if rel > DRAIN_TOL_REL:
-        raise Error(
-            String("bench_advection_outflow_2d FAILED: residual mass ")
-            + String(rel)
-            + " > "
-            + String(DRAIN_TOL_REL)
-        )
+        raise Error(String("bench_advection_outflow_2d FAILED: residual mass ") + String(rel) + " > " + String(DRAIN_TOL_REL))
 
     print("=== bench_advection_outflow_2d PASSED ===")
     mpi.finalize()

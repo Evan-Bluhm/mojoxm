@@ -63,12 +63,7 @@ comptime BZ0: Float32 = -0.6
 comptime DRIFT_TOL: Float64 = 1.0e-3
 
 
-def uniform_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def uniform_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
     if idx >= total:
@@ -103,29 +98,9 @@ def main() raises:
     var ctx = DeviceContext()
 
     # BC_INFLOW on all six faces -- the last untested dispatch arm.
-    var bcs = BoundaryConditions(
-        BC_INFLOW,
-        BC_INFLOW,
-        BC_INFLOW,
-        BC_INFLOW,
-        BC_INFLOW,
-        BC_INFLOW,
-    )
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Maxwell.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
+    var bcs = BoundaryConditions(BC_INFLOW, BC_INFLOW, BC_INFLOW, BC_INFLOW, BC_INFLOW, BC_INFLOW)
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, Maxwell.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
     # Inflow ghost matches the IC exactly.
     var physics = Maxwell(
         C_LIGHT,
@@ -142,15 +117,7 @@ def main() raises:
         BY0,
         BZ0,  # inflow ghost
     )
-    var solver = Solver[Maxwell](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[Maxwell](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[uniform_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -174,13 +141,8 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -193,20 +155,7 @@ def main() raises:
         var bx = q_ptr[i * 6 + 3]
         var by = q_ptr[i * 6 + 4]
         var bz = q_ptr[i * 6 + 5]
-        if (
-            isnan(qx)
-            or isinf(qx)
-            or isnan(qy)
-            or isinf(qy)
-            or isnan(qz)
-            or isinf(qz)
-            or isnan(bx)
-            or isinf(bx)
-            or isnan(by)
-            or isinf(by)
-            or isnan(bz)
-            or isinf(bz)
-        ):
+        if isnan(qx) or isinf(qx) or isnan(qy) or isinf(qy) or isnan(qz) or isinf(qz) or isnan(bx) or isinf(bx) or isnan(by) or isinf(by) or isnan(bz) or isinf(bz):
             raise Error("bench_maxwell_inflow_3d: non-finite output")
         var d_ex = Float64(qx - EX0)
         if d_ex < 0.0:
@@ -242,12 +191,7 @@ def main() raises:
 
     print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
     if max_drift > DRIFT_TOL:
-        raise Error(
-            "bench_maxwell_inflow_3d FAILED: drift "
-            + String(max_drift)
-            + " > "
-            + String(DRIFT_TOL)
-        )
+        raise Error("bench_maxwell_inflow_3d FAILED: drift " + String(max_drift) + " > " + String(DRIFT_TOL))
 
     print("=== bench_maxwell_inflow_3d PASSED ===")
     mpi.finalize()

@@ -40,11 +40,7 @@ from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_limiter import bj_limit_full_2d
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_hllc_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL, BC_OUTFLOW
 from src.sod_exact_riemann import sod_exact_rho, shock_speed_S_R
@@ -87,12 +83,7 @@ def main() raises:
     comptime NC = 4
     var ctx = DeviceContext()
 
-    var bcs = BoundaryConditions2D(
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_WALL,
-        BC_WALL,
-    )
+    var bcs = BoundaryConditions2D(BC_OUTFLOW, BC_OUTFLOW, BC_WALL, BC_WALL)
     var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var host_re = ReferenceElement2D[P]()
     var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY, bcs)
@@ -118,12 +109,8 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
-    var d_cell_mean = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_elements * (NC + 1)
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
+    var d_cell_mean = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_elements * (NC + 1))
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -143,11 +130,7 @@ def main() raises:
     var min_p = Float32(1.0e-6)
     var venkat_eps = Float32(VENKAT_EPS)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             euler_rk_stage_hllc_2d[P](
@@ -168,14 +151,7 @@ def main() raises:
                 stage.c,
                 dt,
             )
-            bj_limit_full_2d[P, NC](
-                ctx,
-                gpu_mesh,
-                stage.q_out,
-                gpu_re.d_node_weights.unsafe_ptr(),
-                d_cell_mean.unsafe_ptr(),
-                venkat_eps,
-            )
+            bj_limit_full_2d[P, NC](ctx, gpu_mesh, stage.q_out, gpu_re.d_node_weights.unsafe_ptr(), d_cell_mean.unsafe_ptr(), venkat_eps)
     ctx.synchronize()
 
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -214,9 +190,7 @@ def main() raises:
 
     var rho_ref_L = sod_exact_rho(0.10, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
     var rho_ref_R = sod_exact_rho(0.95, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
-    var rho_ref_star = sod_exact_rho(
-        0.60, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R
-    )
+    var rho_ref_star = sod_exact_rho(0.60, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
     var ix_L = Int((0.10 / LX) * Float64(NX))
     var ix_R = Int((0.95 / LX) * Float64(NX))
     var ix_star = Int((0.60 / LX) * Float64(NX))
@@ -231,26 +205,17 @@ def main() raises:
     if err_L < 0.0:
         err_L = -err_L
     if err_L > PLATEAU_L_TOL_REL:
-        raise Error(
-            String("bench_euler_sod_limited_2d_p5 FAILED: left plateau err ")
-            + String(err_L)
-        )
+        raise Error(String("bench_euler_sod_limited_2d_p5 FAILED: left plateau err ") + String(err_L))
     var err_R = (meas_R - rho_ref_R) / rho_ref_R
     if err_R < 0.0:
         err_R = -err_R
     if err_R > PLATEAU_R_TOL_REL:
-        raise Error(
-            String("bench_euler_sod_limited_2d_p5 FAILED: right plateau err ")
-            + String(err_R)
-        )
+        raise Error(String("bench_euler_sod_limited_2d_p5 FAILED: right plateau err ") + String(err_R))
     var err_star = (meas_star - rho_ref_star) / rho_ref_star
     if err_star < 0.0:
         err_star = -err_star
     if err_star > STAR_TOL_REL:
-        raise Error(
-            String("bench_euler_sod_limited_2d_p5 FAILED: star plateau err ")
-            + String(err_star)
-        )
+        raise Error(String("bench_euler_sod_limited_2d_p5 FAILED: star plateau err ") + String(err_star))
 
     var ix_start = Int((0.70 / LX) * Float64(NX))
     var max_grad: Float64 = 0.0
@@ -262,39 +227,17 @@ def main() raises:
             max_grad = a
             ix_shock = ix
     if ix_shock < 0:
-        raise Error(
-            "bench_euler_sod_limited_2d_p5 FAILED: no shock front found"
-        )
+        raise Error("bench_euler_sod_limited_2d_p5 FAILED: no shock front found")
     var x_shock_meas = (Float64(ix_shock) - 0.5) * dx_cell
 
     var S_R = shock_speed_S_R(RHO_L, P_L, RHO_R, P_R, GAMMA)
     var x_shock_exact = 0.5 + T_FINAL * S_R
     var shock_err_cells = (x_shock_meas - x_shock_exact) / dx_cell
-    var a_shock_err_cells = (
-        shock_err_cells if shock_err_cells >= 0.0 else -shock_err_cells
-    )
-    print(
-        "  shock x:          ",
-        x_shock_meas,
-        " vs",
-        x_shock_exact,
-        "  err:",
-        a_shock_err_cells,
-        "cells (tol",
-        SHOCK_TOL_CELLS,
-        ")",
-    )
+    var a_shock_err_cells = shock_err_cells if shock_err_cells >= 0.0 else -shock_err_cells
+    print("  shock x:          ", x_shock_meas, " vs", x_shock_exact, "  err:", a_shock_err_cells, "cells (tol", SHOCK_TOL_CELLS, ")")
 
     if a_shock_err_cells > SHOCK_TOL_CELLS:
-        raise Error(
-            String(
-                "bench_euler_sod_limited_2d_p5 FAILED: shock position off by "
-            )
-            + String(a_shock_err_cells)
-            + " cells (tol "
-            + String(SHOCK_TOL_CELLS)
-            + ")"
-        )
+        raise Error(String("bench_euler_sod_limited_2d_p5 FAILED: shock position off by ") + String(a_shock_err_cells) + " cells (tol " + String(SHOCK_TOL_CELLS) + ")")
 
     print("=== bench_euler_sod_limited_2d_p5 PASSED ===")
     mpi.finalize()

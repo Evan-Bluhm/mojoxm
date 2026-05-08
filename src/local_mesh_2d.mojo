@@ -37,17 +37,8 @@
 #   face_length       : [num_faces]              Float64
 # ======================================================================
 
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
-from src.boundary import (
-    BoundaryConditions2D,
-    BC_INTERIOR,
-    BC_WALL,
-    BC_OUTFLOW,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
+from src.boundary import BoundaryConditions2D, BC_INTERIOR, BC_WALL, BC_OUTFLOW
 from std.math import sqrt
 
 
@@ -112,14 +103,7 @@ struct LocalMesh2D[P: Int = 2](Movable):
     # faces; non-zero for boundary faces dispatched to physics.boundary_flux).
     var face_bc_type: List[Int32]
 
-    def __init__(
-        out self,
-        Nx: Int,
-        Ny: Int,
-        Lx: Float64,
-        Ly: Float64,
-        bcs: BoundaryConditions2D = BoundaryConditions2D.periodic(),
-    ) raises:
+    def __init__(out self, Nx: Int, Ny: Int, Lx: Float64, Ly: Float64, bcs: BoundaryConditions2D = BoundaryConditions2D.periodic()) raises:
         self.Nx = Nx
         self.Ny = Ny
         self.Lx = Lx
@@ -198,9 +182,7 @@ struct LocalMesh2D[P: Int = 2](Movable):
                     var J11 = v2y - v0y
                     var detJ = J00 * J11 - J01 * J10
                     if detJ <= 0.0:
-                        raise Error(
-                            "LocalMesh2D: triangle has non-positive area"
-                        )
+                        raise Error("LocalMesh2D: triangle has non-positive area")
                     var inv_det = 1.0 / detJ
                     # J^-1 = (1/detJ) * [[J11, -J01], [-J10, J00]]
                     self.elem_invJ[elem * 4 + 0] = J11 * inv_det
@@ -322,30 +304,20 @@ struct LocalMesh2D[P: Int = 2](Movable):
                     for m in range(NFP_e):
                         # Side 0: node = re.edge_to_elem[e0_lf * NFP_e + m]
                         var n0 = Int(re.edge_to_elem[e0_lf * NFP_e + m])
-                        self.face_elem_node[(fid * 2 + 0) * NFP_e + m] = Int32(
-                            n0
-                        )
+                        self.face_elem_node[(fid * 2 + 0) * NFP_e + m] = Int32(n0)
                         # Side 1: same edge but walked in reverse, because
                         # the two elements share this face with opposite
                         # orientation.  Side 1's edge-local index P-m
                         # maps to this slot.
-                        var n1 = Int(
-                            re.edge_to_elem[e1_lf * NFP_e + (NFP_e - 1 - m)]
-                        )
-                        self.face_elem_node[(fid * 2 + 1) * NFP_e + m] = Int32(
-                            n1
-                        )
+                        var n1 = Int(re.edge_to_elem[e1_lf * NFP_e + (NFP_e - 1 - m)])
+                        self.face_elem_node[(fid * 2 + 1) * NFP_e + m] = Int32(n1)
                         # canon_to_ref: the canonical (side-0-ordering)
                         # slot m maps to ref-edge slot m on side 0 and
                         # (P-m) on side 1, in the tri-local edge index
                         # e0_lf / e1_lf respectively.  Caller consumes
                         # this when indexing Lift_ref[e, i, ref_slot].
-                        self.elem_canon_to_ref[
-                            (e0_owner * 3 + e0_lf) * NFP_e + m
-                        ] = Int32(m)
-                        self.elem_canon_to_ref[
-                            (e1_owner * 3 + e1_lf) * NFP_e + m
-                        ] = Int32(NFP_e - 1 - m)
+                        self.elem_canon_to_ref[(e0_owner * 3 + e0_lf) * NFP_e + m] = Int32(m)
+                        self.elem_canon_to_ref[(e1_owner * 3 + e1_lf) * NFP_e + m] = Int32(NFP_e - 1 - m)
 
         # --- BC overlay ------------------------------------------------
         # For non-periodic axes we stamp a bc_type onto the existing
@@ -398,15 +370,9 @@ struct LocalMesh2D[P: Int = 2](Movable):
                 self.elem_face_side[elem * 3 + lf] = Int32(0)
                 for m in range(NFP_e):
                     var nn = Int(re.edge_to_elem[lf * NFP_e + m])
-                    self.face_elem_node[(new_fid * 2 + 0) * NFP_e + m] = Int32(
-                        nn
-                    )
-                    self.face_elem_node[(new_fid * 2 + 1) * NFP_e + m] = Int32(
-                        nn
-                    )
-                    self.elem_canon_to_ref[(elem * 3 + lf) * NFP_e + m] = Int32(
-                        m
-                    )
+                    self.face_elem_node[(new_fid * 2 + 0) * NFP_e + m] = Int32(nn)
+                    self.face_elem_node[(new_fid * 2 + 1) * NFP_e + m] = Int32(nn)
+                    self.elem_canon_to_ref[(elem * 3 + lf) * NFP_e + m] = Int32(m)
         if bcs.bc_y_lo != BC_INTERIOR:
             var my_base = nf_periodic + extra_mx
             for i in range(Nx):
@@ -424,12 +390,6 @@ struct LocalMesh2D[P: Int = 2](Movable):
                 self.elem_face_side[elem * 3 + lf] = Int32(0)
                 for m in range(NFP_e):
                     var nn = Int(re.edge_to_elem[lf * NFP_e + m])
-                    self.face_elem_node[(new_fid * 2 + 0) * NFP_e + m] = Int32(
-                        nn
-                    )
-                    self.face_elem_node[(new_fid * 2 + 1) * NFP_e + m] = Int32(
-                        nn
-                    )
-                    self.elem_canon_to_ref[(elem * 3 + lf) * NFP_e + m] = Int32(
-                        m
-                    )
+                    self.face_elem_node[(new_fid * 2 + 0) * NFP_e + m] = Int32(nn)
+                    self.face_elem_node[(new_fid * 2 + 1) * NFP_e + m] = Int32(nn)
+                    self.elem_canon_to_ref[(elem * 3 + lf) * NFP_e + m] = Int32(m)

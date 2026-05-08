@@ -39,14 +39,7 @@ struct ShallowWater(ImplicitlyCopyable, Physics):
     var inflow_hu: Float32
     var inflow_hv: Float32
 
-    def __init__(
-        out self,
-        g: Float32,
-        h_min: Float32,
-        inflow_h: Float32 = Float32(0.0),
-        inflow_hu: Float32 = Float32(0.0),
-        inflow_hv: Float32 = Float32(0.0),
-    ):
+    def __init__(out self, g: Float32, h_min: Float32, inflow_h: Float32 = Float32(0.0), inflow_hu: Float32 = Float32(0.0), inflow_hv: Float32 = Float32(0.0)):
         self.g = g
         self.h_min = h_min
         self.inflow_h = inflow_h
@@ -56,9 +49,7 @@ struct ShallowWater(ImplicitlyCopyable, Physics):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[
-        origin: MutOrigin
-    ](self, target: UnsafePointer[NoneType, origin]):
+    def _to_device_type[origin: MutOrigin](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -69,11 +60,7 @@ struct ShallowWater(ImplicitlyCopyable, Physics):
     # F^x = [hu, hu^2 + g h^2/2, huv]
     # F^y = [hv, huv, hv^2 + g h^2/2]
     # F^z = 0
-    def internal_flux(
-        self,
-        q: UnsafePointer[Float32, MutAnyOrigin],
-        flux: UnsafePointer[Float32, MutAnyOrigin],
-    ) -> Float32:
+    def internal_flux(self, q: UnsafePointer[Float32, MutAnyOrigin], flux: UnsafePointer[Float32, MutAnyOrigin]) -> Float32:
         var h = q[0] if q[0] > self.h_min else self.h_min
         var hu = q[1]
         var hv = q[2]
@@ -148,15 +135,7 @@ struct ShallowWater(ImplicitlyCopyable, Physics):
 
     # Boundary-face flux via ghost-state synthesis.  BC_WALL reflects
     # normal momentum (slip wall); BC_OUTFLOW is zero-gradient.
-    def boundary_flux(
-        self,
-        q_int: UnsafePointer[Float32, MutAnyOrigin],
-        bc_type: Int32,
-        nx: Float32,
-        ny: Float32,
-        nz: Float32,
-        flux: UnsafePointer[Float32, MutAnyOrigin],
-    ) -> Float32:
+    def boundary_flux(self, q_int: UnsafePointer[Float32, MutAnyOrigin], bc_type: Int32, nx: Float32, ny: Float32, nz: Float32, flux: UnsafePointer[Float32, MutAnyOrigin]) -> Float32:
         var q_ghost = InlineArray[Float32, 3](fill=0.0)
         if bc_type == BC_WALL:
             # Reflect the (xy) normal momentum; keep tangential.
@@ -173,28 +152,16 @@ struct ShallowWater(ImplicitlyCopyable, Physics):
             q_ghost[0] = q_int[0]
             q_ghost[1] = q_int[1]
             q_ghost[2] = q_int[2]
-        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-            q_ghost.unsafe_ptr()
-        )
+        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](q_ghost.unsafe_ptr())
         return self.numerical_flux(q_int, q_ghost_p, nx, ny, nz, flux)
 
     # Flat-bottom shallow water: no source.  A bed-slope term
     # -g h grad(b) would fit naturally here once we wire up a bed
     # elevation field; for now this is a no-op.
-    def source_term(
-        self,
-        q: UnsafePointer[Float32, MutAnyOrigin],
-        x: Float32,
-        y: Float32,
-        z: Float32,
-        source_out: UnsafePointer[Float32, MutAnyOrigin],
-    ):
+    def source_term(self, q: UnsafePointer[Float32, MutAnyOrigin], x: Float32, y: Float32, z: Float32, source_out: UnsafePointer[Float32, MutAnyOrigin]):
         source_out[0] = Float32(0.0)
         source_out[1] = Float32(0.0)
         source_out[2] = Float32(0.0)
 
-    def limit_state(
-        self,
-        q: UnsafePointer[Float32, MutAnyOrigin],
-    ):
+    def limit_state(self, q: UnsafePointer[Float32, MutAnyOrigin]):
         pass

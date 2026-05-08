@@ -42,23 +42,12 @@ from std.time import perf_counter_ns
 from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
-from src.local_mesh_2d_gpu_mhd_glm import (
-    mhd_glm_rk_stage_2d,
-    launch_mhd_glm_psi_damp_2d,
-)
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.local_mesh_2d_gpu_mhd_glm import mhd_glm_rk_stage_2d, launch_mhd_glm_psi_damp_2d
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.ssprk3 import ssprk3_stage_plans
 from src.memory_report import MemoryReport, ThroughputReport, format_seconds
-from src.vtu_2d import (
-    dump_vtu_2d_frame_multi,
-    dump_pvd_collection,
-    vtu_frame_name,
-)
+from src.vtu_2d import dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name
 
 
 comptime P = 2
@@ -92,15 +81,7 @@ def main() raises:
         print("mhd_alfven_glm_2d_gpu: runs at np=1 only")
         return
 
-    print(
-        "mhd_alfven_glm_2d_gpu (GPU 2D MHD + Dedner GLM, P=",
-        P,
-        ",",
-        NX,
-        "x",
-        NY,
-        ")",
-    )
+    print("mhd_alfven_glm_2d_gpu (GPU 2D MHD + Dedner GLM, P=", P, ",", NX, "x", NY, ")")
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -112,17 +93,7 @@ def main() raises:
     var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY)
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
-    print(
-        "  elements:",
-        gpu_mesh.num_elements,
-        "  nodes/elem:",
-        NP_p,
-        "  total DOF:",
-        gpu_mesh.num_elements * NP_p * NC,
-        "  (NC=",
-        NC,
-        " incl. psi)",
-    )
+    print("  elements:", gpu_mesh.num_elements, "  nodes/elem:", NP_p, "  total DOF:", gpu_mesh.num_elements * NP_p * NC, "  (NC=", NC, " incl. psi)")
 
     # IC: Alfven wave background + small psi perturbation.
     # NC=7 layout: rho, mom_x, mom_y, Bx, By, E, psi.
@@ -183,20 +154,7 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = Float32(T_FINAL / Float64(total_steps))
-    print(
-        "  cf=",
-        cf,
-        "  c_h=",
-        C_H,
-        "  alpha_d=",
-        ALPHA_D,
-        "  dt=",
-        dt,
-        "  steps/frame=",
-        steps_per_frame,
-        "  total steps=",
-        total_steps,
-    )
+    print("  cf=", cf, "  c_h=", C_H, "  alpha_d=", ALPHA_D, "  dt=", dt, "  steps/frame=", steps_per_frame, "  total steps=", total_steps)
 
     var gamma_f = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
@@ -249,22 +207,13 @@ def main() raises:
     fields.append(bmag.copy())
     fields.append(psi_field.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
-    dump_vtu_2d_frame_multi[P](
-        mesh_coords,
-        field_names,
-        fields,
-        String("output/") + f0_name,
-    )
+    dump_vtu_2d_frame_multi[P](mesh_coords, field_names, fields, String("output/") + f0_name)
     paths.append(f0_name)
     times.append(0.0)
 
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
@@ -289,13 +238,7 @@ def main() raises:
                     dt,
                 )
             # Operator-split psi damping after each full SSPRK3 step.
-            launch_mhd_glm_psi_damp_2d[NP_p](
-                ctx,
-                d_q.unsafe_ptr(),
-                gpu_mesh.num_elements,
-                alpha_d_f,
-                dt,
-            )
+            launch_mhd_glm_psi_damp_2d[NP_p](ctx, d_q.unsafe_ptr(), gpu_mesh.num_elements, alpha_d_f, dt)
         ctx.synchronize()
         var c_end = perf_counter_ns()
         compute_ns += c_end - c_start
@@ -310,12 +253,7 @@ def main() raises:
         fi_fields.append(psi_field.copy())
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
-        dump_vtu_2d_frame_multi[P](
-            mesh_coords,
-            field_names,
-            fi_fields,
-            String("output/") + fname,
-        )
+        dump_vtu_2d_frame_multi[P](mesh_coords, field_names, fi_fields, String("output/") + fname)
         paths.append(fname)
         times.append(t)
         # Track psi peak amplitude per frame for textual diagnostic.
@@ -324,30 +262,15 @@ def main() raises:
             var ap = psi_field[i] if psi_field[i] >= 0.0 else -psi_field[i]
             if ap > psi_peak:
                 psi_peak = ap
-        print(
-            "    frame", fi, "/", NUM_FRAMES, " t=", t, "  |psi|_max=", psi_peak
-        )
+        print("    frame", fi, "/", NUM_FRAMES, " t=", t, "  |psi|_max=", psi_peak)
     var run_end = perf_counter_ns()
 
     var total_sec = Float64(run_end - run_start) * 1.0e-9
     var compute_sec = Float64(compute_ns) * 1.0e-9
     print("  total time  :", format_seconds(total_sec), "(incl. frame I/O)")
-    ThroughputReport(
-        num_steps=total_steps,
-        wall_seconds=compute_sec,
-        dof_count=gpu_mesh.num_elements * NP_p * NC,
-        state_bytes_per_step=8 * n_q * 4,
-    ).print()
+    ThroughputReport(num_steps=total_steps, wall_seconds=compute_sec, dof_count=gpu_mesh.num_elements * NP_p * NC, state_bytes_per_step=8 * n_q * 4).print()
 
-    dump_pvd_collection(
-        String("output/solution_mhd_alfven_glm_2d_gpu.pvd"),
-        paths,
-        times,
-    )
-    print(
-        "  wrote output/solution_mhd_alfven_glm_2d_gpu.pvd +",
-        NUM_FRAMES + 1,
-        "VTU frames",
-    )
+    dump_pvd_collection(String("output/solution_mhd_alfven_glm_2d_gpu.pvd"), paths, times)
+    print("  wrote output/solution_mhd_alfven_glm_2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames")
 
     mpi.finalize()

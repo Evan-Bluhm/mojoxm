@@ -64,12 +64,7 @@ comptime PSI_TOL_REL: Float64 = 1.0e-3
 comptime STATE_TOL: Float64 = 1.0e-4
 
 
-def damp_ic_kernel_p3(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def damp_ic_kernel_p3(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -83,9 +78,7 @@ def damp_ic_kernel_p3(
     var bx = B0
     var by = Float32(0.0)
     var bz = Float32(0.0)
-    var E = p_gas / (GAMMA - Float32(1.0)) + Float32(0.5) * (
-        bx * bx + by * by + bz * bz
-    )
+    var E = p_gas / (GAMMA - Float32(1.0)) + Float32(0.5) * (bx * bx + by * by + bz * bz)
 
     var base = (e * NP + nn) * 9
     q[base + 0] = rho
@@ -109,22 +102,7 @@ def main() raises:
         return
 
     print("bench_mhd_glm_psi_damp_3d_p3 (3D GLM psi damping at P=3)")
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        NP,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "x",
-        NZ,
-        "   alpha_d=",
-        ALPHA_D,
-        "   T=",
-        T_FINAL,
-    )
+    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "   alpha_d=", ALPHA_D, "   T=", T_FINAL)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -137,37 +115,10 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var bcs = BoundaryConditions.periodic()
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = IdealMHD(
-        GAMMA,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-        C_H,
-        ALPHA_D,
-    )
-    var solver = Solver[IdealMHD, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var mesh = Mesh[P](ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, IdealMHD.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = IdealMHD(GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D)
+    var solver = Solver[IdealMHD, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
     solver.ctx.enqueue_function[damp_ic_kernel_p3](
         solver.d_q.unsafe_ptr(),
@@ -180,12 +131,8 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * IdealMHD.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -205,12 +152,8 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -239,31 +182,13 @@ def main() raises:
 
     var psi_rel = max_psi_dev / Float64(A0)
     print("  psi exact      =", psi_exact)
-    print(
-        "  max |psi - exact| / A0 =", psi_rel, "  (threshold", PSI_TOL_REL, ")"
-    )
-    print(
-        "  max state drift (rho, momenta, B, E) =",
-        max_state_drift,
-        "  (threshold",
-        STATE_TOL,
-        ")",
-    )
+    print("  max |psi - exact| / A0 =", psi_rel, "  (threshold", PSI_TOL_REL, ")")
+    print("  max state drift (rho, momenta, B, E) =", max_state_drift, "  (threshold", STATE_TOL, ")")
 
     if psi_rel > PSI_TOL_REL:
-        raise Error(
-            "bench_mhd_glm_psi_damp_3d_p3 FAILED: psi rel err "
-            + String(psi_rel)
-            + " > "
-            + String(PSI_TOL_REL)
-        )
+        raise Error("bench_mhd_glm_psi_damp_3d_p3 FAILED: psi rel err " + String(psi_rel) + " > " + String(PSI_TOL_REL))
     if max_state_drift > STATE_TOL:
-        raise Error(
-            "bench_mhd_glm_psi_damp_3d_p3 FAILED: state drift "
-            + String(max_state_drift)
-            + " > "
-            + String(STATE_TOL)
-        )
+        raise Error("bench_mhd_glm_psi_damp_3d_p3 FAILED: state drift " + String(max_state_drift) + " > " + String(STATE_TOL))
 
     print("=== bench_mhd_glm_psi_damp_3d_p3 PASSED ===")
     mpi.finalize()

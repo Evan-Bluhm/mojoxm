@@ -35,11 +35,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_OUTFLOW
 
@@ -88,9 +84,7 @@ def main() raises:
 
     # BC_OUTFLOW on all four faces -- the path that is otherwise
     # untested in 2D Maxwell.
-    var bcs = BoundaryConditions2D(
-        BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW
-    )
+    var bcs = BoundaryConditions2D(BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW)
     var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var host_re = ReferenceElement2D[P]()
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
@@ -117,9 +111,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -133,11 +125,7 @@ def main() raises:
     var dt = Float32(T_FINAL / Float64(num_steps))
     print("  dt=", dt, "  steps=", num_steps)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             maxwell_rk_stage_2d[P](
@@ -173,12 +161,7 @@ def main() raises:
 
     print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
     if max_drift > DRIFT_TOL:
-        raise Error(
-            "bench_maxwell_outflow_2d FAILED: drift "
-            + String(max_drift)
-            + " > "
-            + String(DRIFT_TOL)
-        )
+        raise Error("bench_maxwell_outflow_2d FAILED: drift " + String(max_drift) + " > " + String(DRIFT_TOL))
 
     print("=== bench_maxwell_outflow_2d PASSED ===")
     mpi.finalize()

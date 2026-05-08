@@ -63,11 +63,7 @@ comptime T_FINAL: Float32 = 0.5
 comptime DRIFT_TOL: Float64 = 5.0e-4
 
 
-def fill_constant_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-):
+def fill_constant_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -108,23 +104,8 @@ def main() raises:
         print("bench_two_fluid_walls_3d_p4: runs at np=1 only")
         return
 
-    print(
-        "bench_two_fluid_walls_3d_p4 (3D Two-Fluid BC_WALL preservation, P=4)"
-    )
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        NP,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "x",
-        NZ,
-        "   T=",
-        T_FINAL,
-    )
+    print("bench_two_fluid_walls_3d_p4 (3D Two-Fluid BC_WALL preservation, P=4)")
+    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "   T=", T_FINAL)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -135,29 +116,9 @@ def main() raises:
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
-    var bcs = BoundaryConditions(
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-    )
-    var mesh = Mesh[P](
-        ctx=ctx,
-        part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ),
-        Lx=LX,
-        Ly=LY,
-        Lz=LZ,
-        bcs=bcs,
-    )
-    var halo = HaloExchange(
-        ctx=ctx,
-        part=mesh.part,
-        nc=FiveMomentTwoFluid.NUM_COMPONENTS,
-        d_perm=mesh.d_perm.unsafe_ptr(),
-        bcs=bcs,
-    )
+    var bcs = BoundaryConditions(BC_WALL, BC_WALL, BC_WALL, BC_WALL, BC_WALL, BC_WALL)
+    var mesh = Mesh[P](ctx=ctx, part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ), Lx=LX, Ly=LY, Lz=LZ, bcs=bcs)
+    var halo = HaloExchange(ctx=ctx, part=mesh.part, nc=FiveMomentTwoFluid.NUM_COMPONENTS, d_perm=mesh.d_perm.unsafe_ptr(), bcs=bcs)
     var physics = FiveMomentTwoFluid(
         gamma_e=GAMMA_E,
         gamma_i=GAMMA_I,
@@ -172,15 +133,7 @@ def main() raises:
         min_density=MIN_DENSITY,
         min_pressure=MIN_PRESSURE,
     )
-    var solver = Solver[FiveMomentTwoFluid, P](
-        ctx=ctx^,
-        mesh=mesh^,
-        halo=halo^,
-        physics=physics^,
-        D_ref=D_ref^,
-        Lift_ref=Lift_ref^,
-        node_weights=node_weights^,
-    )
+    var solver = Solver[FiveMomentTwoFluid, P](ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^, D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^)
 
     solver.ctx.enqueue_function[fill_constant_kernel](
         solver.d_q.unsafe_ptr(),
@@ -192,12 +145,8 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * NC
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -214,12 +163,8 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -237,12 +182,7 @@ def main() raises:
     print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
 
     if max_drift > DRIFT_TOL:
-        raise Error(
-            "bench_two_fluid_walls_3d_p4 FAILED: max drift "
-            + String(max_drift)
-            + " > "
-            + String(DRIFT_TOL)
-        )
+        raise Error("bench_two_fluid_walls_3d_p4 FAILED: max drift " + String(max_drift) + " > " + String(DRIFT_TOL))
 
     print("=== bench_two_fluid_walls_3d_p4 PASSED ===")
     mpi.finalize()

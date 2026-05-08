@@ -26,17 +26,9 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_2d
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
-from src.vtu_2d import (
-    dump_vtu_2d_frame_multi,
-    dump_pvd_collection,
-    vtu_frame_name,
-)
+from src.vtu_2d import dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name
 from src.memory_report import MemoryReport, ThroughputReport, format_seconds
 from src.ssprk3 import ssprk3_stage_plans
 
@@ -93,16 +85,7 @@ def main() raises:
     var mesh_coords = LocalMesh2D[P](Nx=NX, Ny=NY, Lx=LX, Ly=LY)
     var gpu_mesh = LocalMesh2DGpu[P](ctx=ctx, host=host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx=ctx, host=host_re)
-    print(
-        "  elements:",
-        gpu_mesh.num_elements,
-        " faces:",
-        gpu_mesh.num_faces,
-        "  nodes/elem:",
-        NP_p,
-        "  total DOF:",
-        gpu_mesh.num_elements * NP_p * NC,
-    )
+    print("  elements:", gpu_mesh.num_elements, " faces:", gpu_mesh.num_faces, "  nodes/elem:", NP_p, "  total DOF:", gpu_mesh.num_elements * NP_p * NC)
 
     # IC: isentropic vortex (Shu 1998).
     var n_q = gpu_mesh.num_elements * NP_p * NC
@@ -169,14 +152,7 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = Float32(T_FINAL / Float64(total_steps))
-    print(
-        "  dt=",
-        dt,
-        "  steps/frame=",
-        steps_per_frame,
-        "  total steps=",
-        total_steps,
-    )
+    print("  dt=", dt, "  steps/frame=", steps_per_frame, "  total steps=", total_steps)
 
     var gamma = Float32(GAMMA)
     var min_rho = Float32(1.0e-6)
@@ -223,22 +199,13 @@ def main() raises:
     fields.append(pressure.copy())
     fields.append(vmag.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
-    dump_vtu_2d_frame_multi[P](
-        mesh_coords,
-        field_names,
-        fields,
-        String("output/") + f0_name,
-    )
+    dump_vtu_2d_frame_multi[P](mesh_coords, field_names, fields, String("output/") + f0_name)
     paths.append(f0_name)
     times.append(0.0)
 
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
@@ -274,12 +241,7 @@ def main() raises:
         fi_fields.append(vmag.copy())
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
-        dump_vtu_2d_frame_multi[P](
-            mesh_coords,
-            field_names,
-            fi_fields,
-            String("output/") + fname,
-        )
+        dump_vtu_2d_frame_multi[P](mesh_coords, field_names, fi_fields, String("output/") + fname)
         paths.append(fname)
         times.append(t)
         print("    frame", fi, "/", NUM_FRAMES, " t=", t)
@@ -294,12 +256,7 @@ def main() raises:
     # step = 8 * n_q * 4 mirrors the 3D `Solver.state_bytes_per_step`
     # formula (8 q-buffer touches per SSPRK3 step from the 2-3-3
     # read/write pattern of the three Shu-Osher stages).
-    ThroughputReport(
-        num_steps=total_steps,
-        wall_seconds=compute_sec,
-        dof_count=gpu_mesh.num_elements * NP_p * NC,
-        state_bytes_per_step=8 * n_q * 4,
-    ).print()
+    ThroughputReport(num_steps=total_steps, wall_seconds=compute_sec, dof_count=gpu_mesh.num_elements * NP_p * NC, state_bytes_per_step=8 * n_q * 4).print()
 
     # Final relative L2 vs IC (one period == exact IC on periodic).
     var sum_sq: Float64 = 0.0
@@ -314,15 +271,7 @@ def main() raises:
     print("  L2 err =", l2, "  rel err =", l2 / l2_ic, "  (IC L2 =", l2_ic, ")")
 
     # PVD collection -- `scripts/animate_2d.py` walks this directly.
-    dump_pvd_collection(
-        String("output/solution_euler2d_gpu.pvd"),
-        paths,
-        times,
-    )
-    print(
-        "  wrote output/solution_euler2d_gpu.pvd +",
-        NUM_FRAMES + 1,
-        "VTU frames",
-    )
+    dump_pvd_collection(String("output/solution_euler2d_gpu.pvd"), paths, times)
+    print("  wrote output/solution_euler2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames")
 
     mpi.finalize()

@@ -55,9 +55,7 @@ comptime mesh_f = DType.float32
 comptime mesh_i = DType.int32
 
 
-def _upload_f64_as_f32(
-    mut ctx: DeviceContext, src: List[Float64]
-) raises -> DeviceBuffer[mesh_f]:
+def _upload_f64_as_f32(mut ctx: DeviceContext, src: List[Float64]) raises -> DeviceBuffer[mesh_f]:
     """Convert a host Float64 list to Float32 in a pinned host buffer,
     then enqueue_copy it to a fresh device buffer.  Used for the mesh
     geometry (coordinates, Jacobians, face normals, etc.) -- the 2D
@@ -72,9 +70,7 @@ def _upload_f64_as_f32(
     return dbuf^
 
 
-def _upload_i32(
-    mut ctx: DeviceContext, src: List[Int32]
-) raises -> DeviceBuffer[mesh_i]:
+def _upload_i32(mut ctx: DeviceContext, src: List[Int32]) raises -> DeviceBuffer[mesh_i]:
     var n = len(src)
     var hbuf = ctx.enqueue_create_host_buffer[mesh_i](n)
     memcpy(dest=hbuf.unsafe_ptr(), src=src.unsafe_ptr(), count=n)
@@ -107,11 +103,7 @@ struct LocalMesh2DGpu[P: Int = 2](Movable):
     var d_face_length: DeviceBuffer[mesh_f]
     var d_face_bc_type: DeviceBuffer[mesh_i]
 
-    def __init__(
-        out self,
-        mut ctx: DeviceContext,
-        host: LocalMesh2D[Self.P],
-    ) raises:
+    def __init__(out self, mut ctx: DeviceContext, host: LocalMesh2D[Self.P]) raises:
         self.num_elements = host.num_elements
         self.num_faces = host.num_faces
 
@@ -187,12 +179,7 @@ struct LocalMesh2DGpu[P: Int = 2](Movable):
 
 def cell_mean_kernel_2d[
     NP: Int, NC: Int
-](
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    node_weights: UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
-):
+](q: UnsafePointer[Float32, MutAnyOrigin], node_weights: UnsafePointer[Float32, MutAnyOrigin], num_elements: Int, cell_mean: UnsafePointer[Float32, MutAnyOrigin],):
     # One thread per (element, component) pair (NC-fold parallelism
     # vs the original 1-thread-per-element design).  Adjacent threads
     # in a warp now access q[base_q + nn*NC + c] at consecutive c
@@ -213,19 +200,6 @@ def cell_mean_kernel_2d[
 
 def launch_cell_mean_2d[
     NP: Int, NC: Int
-](
-    mut ctx: DeviceContext,
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    node_weights: UnsafePointer[Float32, MutAnyOrigin],
-    num_elements: Int,
-    cell_mean: UnsafePointer[Float32, MutAnyOrigin],
-) raises:
+](mut ctx: DeviceContext, q: UnsafePointer[Float32, MutAnyOrigin], node_weights: UnsafePointer[Float32, MutAnyOrigin], num_elements: Int, cell_mean: UnsafePointer[Float32, MutAnyOrigin],) raises:
     comptime _kernel = cell_mean_kernel_2d[NP, NC]
-    ctx.enqueue_function[_kernel](
-        q,
-        node_weights,
-        num_elements,
-        cell_mean,
-        grid_dim=ceildiv(num_elements * NC, 256),
-        block_dim=256,
-    )
+    ctx.enqueue_function[_kernel](q, node_weights, num_elements, cell_mean, grid_dim=ceildiv(num_elements * NC, 256), block_dim=256)

@@ -36,11 +36,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_euler import euler_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -118,9 +114,7 @@ def _run(N: Int) raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -139,11 +133,7 @@ def _run(N: Int) raises -> Float64:
     var min_rho = Float32(1.0e-6)
     var min_p = Float32(1.0e-6)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             euler_rk_stage_2d[P](
@@ -173,9 +163,7 @@ def _run(N: Int) raises -> Float64:
     for k in range(n_q):
         var v = hptr_q[k]
         if isnan(v) or isinf(v):
-            raise Error(
-                "bench_euler_vortex_2d: non-finite output at index " + String(k)
-            )
+            raise Error("bench_euler_vortex_2d: non-finite output at index " + String(k))
         var e = Float64(v - host_ic[k])
         sum_sq += e * e
         var ic = Float64(host_ic[k])
@@ -201,11 +189,6 @@ def main() raises:
     print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
 
     if rel_l2 > L2_MAX_REL:
-        raise Error(
-            "bench_euler_vortex_2d FAILED: rel L2 "
-            + String(rel_l2)
-            + " exceeds threshold "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_euler_vortex_2d FAILED: rel L2 " + String(rel_l2) + " exceeds threshold " + String(L2_MAX_REL))
     print("=== bench_euler_vortex_2d PASSED ===")
     mpi.finalize()

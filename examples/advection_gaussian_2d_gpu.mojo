@@ -19,11 +19,7 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_advection import advection_rk_stage_2d
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.vtu_2d import dump_vtu_2d_frame, dump_pvd_collection, vtu_frame_name
 from src.ssprk3 import ssprk3_stage_plans
@@ -83,16 +79,7 @@ def main() raises:
     var mesh_coords = LocalMesh2D[P](NX, NY, LX, LY)
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
     var gpu_re = ReferenceElement2DGpu[P](ctx, host_re)
-    print(
-        "  elements:",
-        gpu_mesh.num_elements,
-        " faces:",
-        gpu_mesh.num_faces,
-        "  nodes/elem:",
-        NP_p,
-        "  total DOF:",
-        gpu_mesh.num_elements * NP_p,
-    )
+    print("  elements:", gpu_mesh.num_elements, " faces:", gpu_mesh.num_faces, "  nodes/elem:", NP_p, "  total DOF:", gpu_mesh.num_elements * NP_p)
 
     # IC: Gaussian on host, uploaded to d_q.
     var n_q = gpu_mesh.num_elements * NP_p
@@ -100,12 +87,8 @@ def main() raises:
     var host_ic = List[Float32]()
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            var x = Float32(
-                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
-            )
-            var y = Float32(
-                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
-            )
+            var x = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0])
+            var y = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1])
             var v = _gauss(x, y)
             host_q.append(v)
             host_ic.append(v)
@@ -141,14 +124,7 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float32(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = T_FINAL / Float32(total_steps)
-    print(
-        "  dt=",
-        dt,
-        "  steps/frame=",
-        steps_per_frame,
-        "  total steps=",
-        total_steps,
-    )
+    print("  dt=", dt, "  steps/frame=", steps_per_frame, "  total steps=", total_steps)
 
     var q_scalar = List[Float64]()
     for _ in range(n_q):
@@ -160,22 +136,13 @@ def main() raises:
     for k in range(n_q):
         q_scalar[k] = Float64(host_q[k])
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
-    dump_vtu_2d_frame[P](
-        mesh_coords,
-        q_scalar,
-        String("output/") + f0_name,
-        String("q"),
-    )
+    dump_vtu_2d_frame[P](mesh_coords, q_scalar, String("output/") + f0_name, String("q"))
     paths.append(f0_name)
     times.append(0.0)
 
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
@@ -207,12 +174,7 @@ def main() raises:
             q_scalar[k] = Float64(hptr_q[k])
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
-        dump_vtu_2d_frame[P](
-            mesh_coords,
-            q_scalar,
-            String("output/") + fname,
-            String("q"),
-        )
+        dump_vtu_2d_frame[P](mesh_coords, q_scalar, String("output/") + fname, String("q"))
         paths.append(fname)
         times.append(t)
         print("    frame", fi, "/", NUM_FRAMES, " t=", t)
@@ -240,13 +202,7 @@ def main() raises:
     var l2_ic = sqrt(sum_ic / Float64(n_q))
     print("  L2 err =", l2, "  rel err =", l2 / l2_ic, "  (IC L2 =", l2_ic, ")")
 
-    dump_pvd_collection(
-        String("output/solution_adv2d_gpu.pvd"),
-        paths,
-        times,
-    )
-    print(
-        "  wrote output/solution_adv2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames"
-    )
+    dump_pvd_collection(String("output/solution_adv2d_gpu.pvd"), paths, times)
+    print("  wrote output/solution_adv2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames")
 
     mpi.finalize()

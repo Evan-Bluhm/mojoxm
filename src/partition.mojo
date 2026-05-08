@@ -103,12 +103,7 @@ struct ProcGrid(Copyable, Movable):
     var pz: Int
 
 
-def choose_proc_grid(
-    nprocs: Int,
-    nx: Int,
-    ny: Int,
-    nz: Int,
-) raises -> ProcGrid:
+def choose_proc_grid(nprocs: Int, nx: Int, ny: Int, nz: Int) raises -> ProcGrid:
     var best_px: Int = 1
     var best_py: Int = 1
     var best_pz: Int = nprocs
@@ -164,13 +159,7 @@ def choose_proc_grid(
 # ----------------------------------------------------------------------
 
 
-def build_partition(
-    rank: Int,
-    nprocs: Int,
-    nx: Int,
-    ny: Int,
-    nz: Int,
-) raises -> Partition:
+def build_partition(rank: Int, nprocs: Int, nx: Int, ny: Int, nz: Int) raises -> Partition:
     var grid = choose_proc_grid(nprocs, nx, ny, nz)
 
     # rank -> (rx, ry, rz) using row-major order (z fastest, x slowest).

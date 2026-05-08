@@ -25,11 +25,7 @@ from std.math import sqrt, ceildiv, sin, isnan, isinf
 
 from src import mpi
 from src.partition import build_partition
-from src.reference import (
-    ReferenceElement,
-    to_float32,
-    num_tet_nodes,
-)
+from src.reference import ReferenceElement, to_float32, num_tet_nodes
 from src.mesh import Mesh
 from src.boundary import BoundaryConditions
 from src.halo_exchange import HaloExchange
@@ -59,12 +55,7 @@ comptime L2_MAX_REL: Float64 = 5.0e-4
 comptime MASS_TOL_REL: Float64 = 1.0e-4
 
 
-def wave_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def wave_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -99,30 +90,10 @@ def _run(N: Int) raises -> RunResult:
     var node_weights = to_float32(re.node_weights)
 
     var NZ = 2
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(rank, size, N, N, NZ),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        ShallowWater.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
+    var mesh = Mesh[P](ctx, build_partition(rank, size, N, N, NZ), LX, LY, LZ, BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx, mesh.part, ShallowWater.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
     var physics = ShallowWater(GRAVITY, H_MIN)
-    var solver = Solver[ShallowWater, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var solver = Solver[ShallowWater, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
     solver.ctx.enqueue_function[wave_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -135,13 +106,8 @@ def _run(N: Int) raises -> RunResult:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * NC
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -159,13 +125,8 @@ def _run(N: Int) raises -> RunResult:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 

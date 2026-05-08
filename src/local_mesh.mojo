@@ -41,12 +41,7 @@
 # struct -- no post-build host-to-device upload pass.
 # ======================================================================
 
-from src.reference import (
-    N_F,
-    num_tet_nodes,
-    num_tri_nodes,
-    ReferenceElement,
-)
+from src.reference import N_F, num_tet_nodes, num_tri_nodes, ReferenceElement
 from src.boundary import BoundaryConditions, BC_INTERIOR
 from std.math import sqrt, ceildiv
 from std.gpu import global_idx
@@ -378,18 +373,10 @@ def _lagrange_tet_exponents(P: Int) raises -> List[_NodeExp]:
         for a0v in range(P - 2, 0, -1):
             for a1v in range(P - a0v - 1, 0, -1):
                 var a2v = P - a0v - a1v
-                var e0 = a0v if ni[0] == 0 else (
-                    a1v if ni[1] == 0 else (a2v if ni[2] == 0 else 0)
-                )
-                var e1 = a0v if ni[0] == 1 else (
-                    a1v if ni[1] == 1 else (a2v if ni[2] == 1 else 0)
-                )
-                var e2 = a0v if ni[0] == 2 else (
-                    a1v if ni[1] == 2 else (a2v if ni[2] == 2 else 0)
-                )
-                var e3 = a0v if ni[0] == 3 else (
-                    a1v if ni[1] == 3 else (a2v if ni[2] == 3 else 0)
-                )
+                var e0 = a0v if ni[0] == 0 else (a1v if ni[1] == 0 else (a2v if ni[2] == 0 else 0))
+                var e1 = a0v if ni[0] == 1 else (a1v if ni[1] == 1 else (a2v if ni[2] == 1 else 0))
+                var e2 = a0v if ni[0] == 2 else (a1v if ni[1] == 2 else (a2v if ni[2] == 2 else 0))
+                var e3 = a0v if ni[0] == 3 else (a1v if ni[1] == 3 else (a2v if ni[2] == 3 else 0))
                 out.append(_NodeExp(e0, e1, e2, e3))
     if P < 4:
         return out^
@@ -402,29 +389,13 @@ def _lagrange_tet_exponents(P: Int) raises -> List[_NodeExp]:
     return out^
 
 
-def _find_tet_node(
-    tet_nodes: List[_NodeExp],
-    a0: Int,
-    a1: Int,
-    a2: Int,
-    a3: Int,
-) raises -> Int:
+def _find_tet_node(tet_nodes: List[_NodeExp], a0: Int, a1: Int, a2: Int, a3: Int) raises -> Int:
     """Linear scan for the tet-local node whose exponents match (a0..a3)."""
     for i in range(len(tet_nodes)):
         var n = tet_nodes[i]
         if n.a0 == a0 and n.a1 == a1 and n.a2 == a2 and n.a3 == a3:
             return i
-    raise Error(
-        "_find_tet_node: no match for ("
-        + String(a0)
-        + ","
-        + String(a1)
-        + ","
-        + String(a2)
-        + ","
-        + String(a3)
-        + ")"
-    )
+    raise Error("_find_tet_node: no match for (" + String(a0) + "," + String(a1) + "," + String(a2) + "," + String(a3) + ")")
 
 
 def _canon_face_barycentric(m: Int, P: Int) raises -> List[Int]:
@@ -481,12 +452,7 @@ def _canon_face_barycentric(m: Int, P: Int) raises -> List[Int]:
                 out.append(b2)
                 return out^
             idx += 1
-    raise Error(
-        "_canon_face_barycentric: index "
-        + String(m)
-        + " out of range for P="
-        + String(P)
-    )
+    raise Error("_canon_face_barycentric: index " + String(m) + " out of range for P=" + String(P))
 
 
 def _reference_face_to_elem(P: Int) raises -> List[Int32]:
@@ -529,12 +495,7 @@ struct _MeshTables(Movable):
     var face_type_area: List[Float32]
 
 
-def _compute_tables(
-    dx: Float32,
-    dy: Float32,
-    dz: Float32,
-    P: Int,
-) raises -> _MeshTables:
+def _compute_tables(dx: Float32, dy: Float32, dz: Float32, P: Int) raises -> _MeshTables:
     """Generic Kuhn-tet mesh table builder for order-P Lagrange.
     At P=2 produces the same tables as the old hand-coded P=2
     builder (bit-identical to within Float32 roundoff)."""
@@ -582,11 +543,7 @@ def _compute_tables(
         Jm[2 * 3 + 1] = (vpz[2] - vpz[0]) * dz
         Jm[2 * 3 + 2] = (vpz[3] - vpz[0]) * dz
 
-        var det = (
-            Jm[0] * (Jm[4] * Jm[8] - Jm[5] * Jm[7])
-            - Jm[1] * (Jm[3] * Jm[8] - Jm[5] * Jm[6])
-            + Jm[2] * (Jm[3] * Jm[7] - Jm[4] * Jm[6])
-        )
+        var det = Jm[0] * (Jm[4] * Jm[8] - Jm[5] * Jm[7]) - Jm[1] * (Jm[3] * Jm[8] - Jm[5] * Jm[6]) + Jm[2] * (Jm[3] * Jm[7] - Jm[4] * Jm[6])
         if det <= 0.0:
             raise Error("non-positive Jacobian in tet template")
         var V = det / 6.0
@@ -618,15 +575,9 @@ def _compute_tables(
             var w1 = Float32(a1) / Pf
             var w2 = Float32(a2) / Pf
             var w3 = Float32(a3) / Pf
-            tet_node_rel_xyz[(t * N_P_p + n) * 3 + 0] = (
-                w0 * vpx[0] + w1 * vpx[1] + w2 * vpx[2] + w3 * vpx[3]
-            )
-            tet_node_rel_xyz[(t * N_P_p + n) * 3 + 1] = (
-                w0 * vpy[0] + w1 * vpy[1] + w2 * vpy[2] + w3 * vpy[3]
-            )
-            tet_node_rel_xyz[(t * N_P_p + n) * 3 + 2] = (
-                w0 * vpz[0] + w1 * vpz[1] + w2 * vpz[2] + w3 * vpz[3]
-            )
+            tet_node_rel_xyz[(t * N_P_p + n) * 3 + 0] = w0 * vpx[0] + w1 * vpx[1] + w2 * vpx[2] + w3 * vpx[3]
+            tet_node_rel_xyz[(t * N_P_p + n) * 3 + 1] = w0 * vpy[0] + w1 * vpy[1] + w2 * vpy[2] + w3 * vpy[3]
+            tet_node_rel_xyz[(t * N_P_p + n) * 3 + 2] = w0 * vpz[0] + w1 * vpz[1] + w2 * vpz[2] + w3 * vpz[3]
 
     # ---- Per-(tet, local_face) tables ------------------------------
     var tet_face_type = _zeros_i32(6 * 4)
@@ -709,12 +660,8 @@ def _compute_tables(
                     a[fv[ii]] = w_at_fv[ii]
                 # a[f] stays 0.  Find the tet-local node with these
                 # exponents.
-                var tet_node = _find_tet_node(
-                    tet_node_exp, a[0], a[1], a[2], a[3]
-                )
-                tet_face_cnode_to_elemnode[(t * 4 + f) * N_FP_p + m] = Int32(
-                    tet_node
-                )
+                var tet_node = _find_tet_node(tet_node_exp, a[0], a[1], a[2], a[3])
+                tet_face_cnode_to_elemnode[(t * 4 + f) * N_FP_p + m] = Int32(tet_node)
                 # And find the ref face-local index by matching the
                 # tet_node against ref_face_node_map[f, ...].
                 var ref_m = -1
@@ -723,14 +670,7 @@ def _compute_tables(
                         ref_m = mm
                         break
                 if ref_m < 0:
-                    raise Error(
-                        "canon-to-ref lookup failed for tet="
-                        + String(t)
-                        + " f="
-                        + String(f)
-                        + " canon m="
-                        + String(m)
-                    )
+                    raise Error("canon-to-ref lookup failed for tet=" + String(t) + " f=" + String(f) + " canon m=" + String(m))
                 tet_canon_to_ref[(t * 4 + f) * N_FP_p + m] = Int32(ref_m)
 
     # ---- Per-face-type tables --------------------------------------
@@ -809,12 +749,8 @@ def _compute_tables(
         var t1 = Int(face_type_side1_tet[ft])
         var f1 = Int(face_type_side1_lf[ft])
         for m in range(N_FP_p):
-            face_type_elem_node[
-                (ft * 2 + 0) * N_FP_p + m
-            ] = tet_face_cnode_to_elemnode[(t0 * 4 + f0) * N_FP_p + m]
-            face_type_elem_node[
-                (ft * 2 + 1) * N_FP_p + m
-            ] = tet_face_cnode_to_elemnode[(t1 * 4 + f1) * N_FP_p + m]
+            face_type_elem_node[(ft * 2 + 0) * N_FP_p + m] = tet_face_cnode_to_elemnode[(t0 * 4 + f0) * N_FP_p + m]
+            face_type_elem_node[(ft * 2 + 1) * N_FP_p + m] = tet_face_cnode_to_elemnode[(t1 * 4 + f1) * N_FP_p + m]
 
     return _MeshTables(
         tet_invJ^,
@@ -906,9 +842,7 @@ def build_elements_kernel[
         o_elem_faces[elem * N_F + lf] = Int32(owner_cell * FACES_PER_CELL + ft)
         o_elem_face_side[elem * N_F + lf] = tet_face_side[tet_t * N_F + lf]
         for m in range(NFP):
-            o_elem_canon_to_ref[(elem * N_F + lf) * NFP + m] = tet_canon_to_ref[
-                (tet_t * N_F + lf) * NFP + m
-            ]
+            o_elem_canon_to_ref[(elem * N_F + lf) * NFP + m] = tet_canon_to_ref[(tet_t * N_F + lf) * NFP + m]
 
 
 def build_faces_kernel[
@@ -960,12 +894,8 @@ def build_faces_kernel[
     o_face_area[face] = face_type_area[ft]
 
     for m in range(NFP):
-        o_face_elem_node[(face * 2 + 0) * NFP + m] = face_type_elem_node[
-            (ft * 2 + 0) * NFP + m
-        ]
-        o_face_elem_node[(face * 2 + 1) * NFP + m] = face_type_elem_node[
-            (ft * 2 + 1) * NFP + m
-        ]
+        o_face_elem_node[(face * 2 + 0) * NFP + m] = face_type_elem_node[(ft * 2 + 0) * NFP + m]
+        o_face_elem_node[(face * 2 + 1) * NFP + m] = face_type_elem_node[(ft * 2 + 1) * NFP + m]
 
 
 # ======================================================================
@@ -1013,15 +943,7 @@ def build_faces_kernel[
 # (apply BC on the first OWNED cube layer, skipping the ghost ring).
 
 
-def apply_plus_x_bc_kernel(
-    face_elem: UnsafePointer[Int32, MutAnyOrigin],
-    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
-    Nx: Int,
-    Ny: Int,
-    Nz: Int,
-    bnd_off: Int,
-    bc_value: Int32,
-):
+def apply_plus_x_bc_kernel(face_elem: UnsafePointer[Int32, MutAnyOrigin], face_bc_type: UnsafePointer[Int32, MutAnyOrigin], Nx: Int, Ny: Int, Nz: Int, bnd_off: Int, bc_value: Int32):
     # Two faces per (j, k) pair at cube (Nx-1-bnd_off, j, k), iterating
     # j in [bnd_off, Ny - bnd_off) and k in [bnd_off, Nz - bnd_off) so
     # we only touch the owned face ring (and skip the ghost ring at
@@ -1045,15 +967,7 @@ def apply_plus_x_bc_kernel(
     face_bc_type[fid] = bc_value
 
 
-def apply_plus_y_bc_kernel(
-    face_elem: UnsafePointer[Int32, MutAnyOrigin],
-    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
-    Nx: Int,
-    Ny: Int,
-    Nz: Int,
-    bnd_off: Int,
-    bc_value: Int32,
-):
+def apply_plus_y_bc_kernel(face_elem: UnsafePointer[Int32, MutAnyOrigin], face_bc_type: UnsafePointer[Int32, MutAnyOrigin], Nx: Int, Ny: Int, Nz: Int, bnd_off: Int, bc_value: Int32):
     var tid = Int(global_idx.x)
     var xw = Nx - 2 * bnd_off
     var zw = Nz - 2 * bnd_off
@@ -1073,15 +987,7 @@ def apply_plus_y_bc_kernel(
     face_bc_type[fid] = bc_value
 
 
-def apply_plus_z_bc_kernel(
-    face_elem: UnsafePointer[Int32, MutAnyOrigin],
-    face_bc_type: UnsafePointer[Int32, MutAnyOrigin],
-    Nx: Int,
-    Ny: Int,
-    Nz: Int,
-    bnd_off: Int,
-    bc_value: Int32,
-):
+def apply_plus_z_bc_kernel(face_elem: UnsafePointer[Int32, MutAnyOrigin], face_bc_type: UnsafePointer[Int32, MutAnyOrigin], Nx: Int, Ny: Int, Nz: Int, bnd_off: Int, bc_value: Int32):
     var tid = Int(global_idx.x)
     var xw = Nx - 2 * bnd_off
     var yw = Ny - 2 * bnd_off
@@ -1332,18 +1238,7 @@ struct LocalMesh[P: Int = 2](Movable):
     var elem_node_xyz_f32_ptr: UnsafePointer[Float32, MutExternalOrigin]
     var elem_node_xyz_f32_len: Int
 
-    def __init__(
-        out self,
-        mut ctx: DeviceContext,
-        Nx: Int,
-        Ny: Int,
-        Nz: Int,
-        Lx: Float64,
-        Ly: Float64,
-        Lz: Float64,
-        bcs: BoundaryConditions,
-        bnd_off: Int = 0,
-    ) raises:
+    def __init__(out self, mut ctx: DeviceContext, Nx: Int, Ny: Int, Nz: Int, Lx: Float64, Ly: Float64, Lz: Float64, bcs: BoundaryConditions, bnd_off: Int = 0) raises:
         self.Nx = Nx
         self.Ny = Ny
         self.Nz = Nz
@@ -1380,20 +1275,14 @@ struct LocalMesh[P: Int = 2](Movable):
         var tables = _compute_tables(dx, dy, dz, Self.P)
 
         # 2. Allocate device buffers for outputs.
-        self.d_elem_node_xyz = ctx.enqueue_create_buffer[mesh_f](
-            ne * Self.NP * 3
-        )
+        self.d_elem_node_xyz = ctx.enqueue_create_buffer[mesh_f](ne * Self.NP * 3)
         self.d_elem_invJ = ctx.enqueue_create_buffer[mesh_f](ne * 9)
         self.d_elem_inv_6V = ctx.enqueue_create_buffer[mesh_f](ne)
         self.d_elem_faces = ctx.enqueue_create_buffer[mesh_i](ne * N_F)
         self.d_elem_face_side = ctx.enqueue_create_buffer[mesh_i](ne * N_F)
-        self.d_elem_canon_to_ref = ctx.enqueue_create_buffer[mesh_i](
-            ne * N_F * Self.NFP
-        )
+        self.d_elem_canon_to_ref = ctx.enqueue_create_buffer[mesh_i](ne * N_F * Self.NFP)
         self.d_face_elem = ctx.enqueue_create_buffer[mesh_i](nf * 2)
-        self.d_face_elem_node = ctx.enqueue_create_buffer[mesh_i](
-            nf * 2 * Self.NFP
-        )
+        self.d_face_elem_node = ctx.enqueue_create_buffer[mesh_i](nf * 2 * Self.NFP)
         self.d_face_normal = ctx.enqueue_create_buffer[mesh_f](nf * 3)
         self.d_face_area = ctx.enqueue_create_buffer[mesh_f](nf)
         # Zero-initialise the BC type buffer so every face is "interior"
@@ -1618,9 +1507,7 @@ def _zeros_i32(n: Int) raises -> List[Int32]:
     return out^
 
 
-def _upload_f32_small(
-    mut ctx: DeviceContext, src: List[Float32]
-) raises -> DeviceBuffer[mesh_f]:
+def _upload_f32_small(mut ctx: DeviceContext, src: List[Float32]) raises -> DeviceBuffer[mesh_f]:
     var n = len(src)
     var hbuf = ctx.enqueue_create_host_buffer[mesh_f](n)
     memcpy(dest=hbuf.unsafe_ptr(), src=src.unsafe_ptr(), count=n)
@@ -1629,9 +1516,7 @@ def _upload_f32_small(
     return dbuf^
 
 
-def _upload_i32_small(
-    mut ctx: DeviceContext, src: List[Int32]
-) raises -> DeviceBuffer[mesh_i]:
+def _upload_i32_small(mut ctx: DeviceContext, src: List[Int32]) raises -> DeviceBuffer[mesh_i]:
     var n = len(src)
     var hbuf = ctx.enqueue_create_host_buffer[mesh_i](n)
     memcpy(dest=hbuf.unsafe_ptr(), src=src.unsafe_ptr(), count=n)

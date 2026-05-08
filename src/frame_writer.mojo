@@ -83,25 +83,14 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
     var _component: Int
     var _output_dir: String
 
-    def __init__(
-        out self,
-        mut solver: Solver[Self.PhysT, Self.P],
-        mut nvtx: NvtxContext,
-        output_dir: String = String("output"),
-        component: Int = 0,
-        max_concurrent: Int = 8,
-    ) raises:
+    def __init__(out self, mut solver: Solver[Self.PhysT, Self.P], mut nvtx: NvtxContext, output_dir: String = String("output"), component: Int = 0, max_concurrent: Int = 8) raises:
         nvtx.push_range("init_frame_writer")
         # Per-rank VTU: show only this rank's owned elements.  At np=1
         # that is the entire mesh; at np>1 each rank writes its own
         # file with no ghost geometry.  Pass the per-P nodes-per-element
         # count so VtuWriter picks the right VTK cell type (24 for P=2's
         # quadratic tet, 71 for higher-order Lagrange).
-        self._vtu = VtuWriter(
-            solver.mesh.num_owned_elements,
-            solver.mesh.owned_node_xyz_f32_ptr,
-            num_tet_nodes(Self.P),
-        )
+        self._vtu = VtuWriter(solver.mesh.num_owned_elements, solver.mesh.owned_node_xyz_f32_ptr, num_tet_nodes(Self.P))
         self._aw = AsyncWriter(max_concurrent=max_concurrent)
         self._snapshot = List[Float32]()
         for _ in range(solver.total_owned_dof):
@@ -130,21 +119,12 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
         _ensure_dir(self._output_dir)
         nvtx.pop_range()
 
-    def write_frame(
-        mut self,
-        mut solver: Solver[Self.PhysT, Self.P],
-        t: Float64,
-        mut nvtx: NvtxContext,
-    ) raises:
+    def write_frame(mut self, mut solver: Solver[Self.PhysT, Self.P], t: Float64, mut nvtx: NvtxContext) raises:
         """Download one component, enqueue an async VTU write, record
         (path, time) for the eventual PVD collection file.  The frame
         index is derived from the number of frames written so far."""
         nvtx.push_range("write_frame")
-        solver.download_owned_component(
-            self._component,
-            self._snapshot,
-            nvtx,
-        )
+        solver.download_owned_component(self._component, self._snapshot, nvtx)
         var frame_id = len(self._paths)
         var fname = String("frame_")
         var sid = String(frame_id)
@@ -162,14 +142,7 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
         self._times.append(t)
         nvtx.pop_range()
 
-    def write_frame_multi(
-        mut self,
-        mut solver: Solver[Self.PhysT, Self.P],
-        t: Float64,
-        field_names: List[String],
-        field_data: List[List[Float64]],
-        mut nvtx: NvtxContext,
-    ) raises:
+    def write_frame_multi(mut self, mut solver: Solver[Self.PhysT, Self.P], t: Float64, field_names: List[String], field_data: List[List[Float64]], mut nvtx: NvtxContext) raises:
         """Write one multi-field 3D VTU frame *synchronously* using
         pre-computed host-side `field_data` (one List[Float64] of length
         `num_owned_elements * num_tet_nodes(P)` per field, in the order
@@ -206,11 +179,7 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
         self._times.append(t)
         nvtx.pop_range()
 
-    def finalize(
-        mut self,
-        pvd_path: String,
-        mut nvtx: NvtxContext,
-    ) raises:
+    def finalize(mut self, pvd_path: String, mut nvtx: NvtxContext) raises:
         """Block until every outstanding async write has flushed, then
         write the ParaView collection file.  At np>1 each rank writes
         its own per-rank pvd under its rank_NNN subdirectory so the
@@ -277,23 +246,12 @@ struct FrameWriter[PhysT: Physics, P: Int = 2](Movable):
 # Gate on np=1 in the calling driver (this helper does NOT) -- at
 # np>1 each rank would dump only its owned slab to the same path
 # and stomp on the other ranks' output.
-def write_snapshot_3d_multi[
-    PhysT: Physics,
-    P: Int = 2,
-](
-    mut solver: Solver[PhysT, P],
-    field_names: List[String],
-    field_data: List[List[Float64]],
-    path: String,
-    mut nvtx: NvtxContext,
-) raises:
+def write_snapshot_3d_multi[PhysT: Physics, P: Int = 2](mut solver: Solver[PhysT, P], field_names: List[String], field_data: List[List[Float64]], path: String, mut nvtx: NvtxContext) raises:
     nvtx.push_range("snapshot_3d_multi")
     dump_vtu_3d_frame_multi(
         num_elements=solver.num_owned_elements,
         nodes_per_elem=num_tet_nodes(P),
-        elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](
-            solver.mesh.owned_node_xyz_f32_ptr
-        ),
+        elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](solver.mesh.owned_node_xyz_f32_ptr),
         field_names=field_names,
         field_data=field_data,
         path=path,

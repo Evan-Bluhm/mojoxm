@@ -122,31 +122,18 @@ def choose_dt() raises -> Float32:
     return CFL * h / (v * Float32(2 * 2 + 1))
 
 
-def _write_bytes(
-    fd: Int,
-    buf: UnsafePointer[UInt8, MutAnyOrigin],
-    n: Int,
-) raises:
+def _write_bytes(fd: Int, buf: UnsafePointer[UInt8, MutAnyOrigin], n: Int) raises:
     var remaining = n
     var p = buf
     while remaining > 0:
-        var wrote = Int(
-            external_call["write", c_ssize_t](fd, p, c_size_t(remaining))
-        )
+        var wrote = Int(external_call["write", c_ssize_t](fd, p, c_size_t(remaining)))
         if wrote <= 0:
             raise Error("write() failed while dumping final q")
         remaining -= wrote
         p = p + wrote
 
 
-def dump_final_q(
-    mut solver: Solver[Advection],
-    rank: Int,
-    nx_global: Int,
-    ny_global: Int,
-    nz_global: Int,
-    mut nvtx: NvtxContext,
-) raises:
+def dump_final_q(mut solver: Solver[Advection], rank: Int, nx_global: Int, ny_global: Int, nz_global: Int, mut nvtx: NvtxContext) raises:
     # Gather per-rank q + global element ids into host buffers.
     var num_owned = solver.num_owned_elements
     var q_buf = List[Float32]()
@@ -155,15 +142,7 @@ def dump_final_q(
     var id_buf = List[Int32]()
     for _ in range(num_owned):
         id_buf.append(Int32(0))
-    solver.download_owned_component_with_ids(
-        0,
-        q_buf,
-        id_buf,
-        nx_global,
-        ny_global,
-        nz_global,
-        nvtx,
-    )
+    solver.download_owned_component_with_ids(0, q_buf, id_buf, nx_global, ny_global, nz_global, nvtx)
 
     # Build path `output/final_q_rank_<rank>.bin`.
     var path_s = String("output/final_q_rank_")
@@ -177,12 +156,7 @@ def dump_final_q(
         path_c[i] = UInt8(path_s.unsafe_ptr()[i])
     path_c[pn] = 0
 
-    var fd = Int(
-        external_call["creat", c_int](
-            path_c,
-            _OPEN_MODE,
-        )
-    )
+    var fd = Int(external_call["creat", c_int](path_c, _OPEN_MODE))
     if fd < 0:
         path_c.free()
         raise Error("creat() failed for " + path_s)
@@ -194,21 +168,15 @@ def dump_final_q(
     header[2] = UInt32(num_owned)
     header[3] = UInt32(1)  # NC for scalar advection
     header[4] = UInt32(N_P)
-    var header_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
-        header.unsafe_ptr()
-    )
+    var header_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](header.unsafe_ptr())
     _write_bytes(fd, header_ptr, 5 * 4)
 
     # Global element IDs.
-    var ids_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
-        id_buf.unsafe_ptr().bitcast[UInt8]()
-    )
+    var ids_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](id_buf.unsafe_ptr().bitcast[UInt8]())
     _write_bytes(fd, ids_ptr, num_owned * 4)
 
     # q values (Float32).
-    var q_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
-        q_buf.unsafe_ptr().bitcast[UInt8]()
-    )
+    var q_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](q_buf.unsafe_ptr().bitcast[UInt8]())
     _write_bytes(fd, q_ptr, num_owned * N_P * 4)
 
     _ = external_call["close", c_int](c_int(fd))
@@ -222,13 +190,7 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print(
-            "mpi_advection_test:",
-            NUM_TEST_STEPS,
-            "step dump for correctness check, ",
-            size,
-            "ranks",
-        )
+        print("mpi_advection_test:", NUM_TEST_STEPS, "step dump for correctness check, ", size, "ranks")
 
     var nvtx = NvtxContext()
     var ctx = DeviceContext()
@@ -237,34 +199,12 @@ def main() raises:
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx, mesh.part, Advection.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
     var physics = Advection(VX, VY, VZ)
-    var solver = Solver[Advection](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var solver = Solver[Advection](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
-    var inv_two_sigma2 = Float32(1.0) / (
-        Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA
-    )
+    var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
     solver.ctx.enqueue_function[gaussian_ic_kernel, gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),

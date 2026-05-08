@@ -20,20 +20,12 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_sw import sw_rk_stage_2d
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D, BC_WALL
 from src.ssprk3 import ssprk3_stage_plans
 from src.memory_report import MemoryReport, ThroughputReport, format_seconds
-from src.vtu_2d import (
-    dump_vtu_2d_frame_multi,
-    dump_pvd_collection,
-    vtu_frame_name,
-)
+from src.vtu_2d import dump_vtu_2d_frame_multi, dump_pvd_collection, vtu_frame_name
 
 
 comptime P = 2
@@ -62,21 +54,7 @@ def main() raises:
         return
 
     print("shallow_water_dam_break_2d_gpu (walls on all 4 sides)")
-    print(
-        "  mesh:",
-        NX,
-        "x",
-        NY,
-        " domain:",
-        LX,
-        "x",
-        LY,
-        " (h_L=",
-        H_L,
-        ", h_R=",
-        H_R,
-        ")",
-    )
+    print("  mesh:", NX, "x", NY, " domain:", LX, "x", LY, " (h_L=", H_L, ", h_R=", H_R, ")")
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -135,14 +113,7 @@ def main() raises:
     var steps_per_frame = Int(T_FINAL / (Float64(NUM_FRAMES) * dt_est)) + 1
     var total_steps = NUM_FRAMES * steps_per_frame
     var dt = Float32(T_FINAL / Float64(total_steps))
-    print(
-        "  dt=",
-        dt,
-        "  steps/frame=",
-        steps_per_frame,
-        "  total steps=",
-        total_steps,
-    )
+    print("  dt=", dt, "  steps/frame=", steps_per_frame, "  total steps=", total_steps)
 
     var g = Float32(G)
     var min_h = Float32(1.0e-6)
@@ -177,22 +148,13 @@ def main() raises:
     fields.append(depth.copy())
     fields.append(vmag.copy())
     var f0_name = vtu_frame_name(FRAME_PREFIX, 0)
-    dump_vtu_2d_frame_multi[P](
-        mesh_coords,
-        field_names,
-        fields,
-        String("output/") + f0_name,
-    )
+    dump_vtu_2d_frame_multi[P](mesh_coords, field_names, fields, String("output/") + f0_name)
     paths.append(f0_name)
     times.append(0.0)
 
     var run_start = perf_counter_ns()
     var compute_ns: UInt = 0
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for fi in range(1, NUM_FRAMES + 1):
         var c_start = perf_counter_ns()
         for _ in range(steps_per_frame):
@@ -226,12 +188,7 @@ def main() raises:
         fi_fields.append(vmag.copy())
         var t = Float64(fi) * Float64(steps_per_frame) * Float64(dt)
         var fname = vtu_frame_name(FRAME_PREFIX, fi)
-        dump_vtu_2d_frame_multi[P](
-            mesh_coords,
-            field_names,
-            fi_fields,
-            String("output/") + fname,
-        )
+        dump_vtu_2d_frame_multi[P](mesh_coords, field_names, fi_fields, String("output/") + fname)
         paths.append(fname)
         times.append(t)
         print("    frame", fi, "/", NUM_FRAMES, " t=", t)
@@ -240,12 +197,7 @@ def main() raises:
     var total_sec = Float64(run_end - run_start) * 1.0e-9
     var compute_sec = Float64(compute_ns) * 1.0e-9
     print("  total time  :", format_seconds(total_sec), "(incl. frame I/O)")
-    ThroughputReport(
-        num_steps=total_steps,
-        wall_seconds=compute_sec,
-        dof_count=gpu_mesh.num_elements * NP_p * NC,
-        state_bytes_per_step=8 * n_q * 4,
-    ).print()
+    ThroughputReport(num_steps=total_steps, wall_seconds=compute_sec, dof_count=gpu_mesh.num_elements * NP_p * NC, state_bytes_per_step=8 * n_q * 4).print()
 
     var total_h: Float64 = 0.0
     var max_h: Float64 = 0.0
@@ -260,23 +212,9 @@ def main() raises:
                 min_h_f = h
     var mean_hf = total_h / Float64(gpu_mesh.num_elements * NP_p)
     var mass_err = (mean_hf - mean_h0) / mean_h0
-    print(
-        "  final mean h =",
-        mean_hf,
-        "  relative drift =",
-        mass_err,
-        "  (h range [",
-        min_h_f,
-        ",",
-        max_h,
-        "])",
-    )
+    print("  final mean h =", mean_hf, "  relative drift =", mass_err, "  (h range [", min_h_f, ",", max_h, "])")
 
-    dump_pvd_collection(
-        String("output/solution_dam_gpu.pvd"),
-        paths,
-        times,
-    )
+    dump_pvd_collection(String("output/solution_dam_gpu.pvd"), paths, times)
     print("  wrote output/solution_dam_gpu.pvd +", NUM_FRAMES + 1, "VTU frames")
 
     mpi.finalize()

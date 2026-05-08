@@ -76,14 +76,7 @@ def main() raises:
         hptr[k * NC + 3] = E0
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
-    bj_limit_full_2d[P, NC](
-        ctx,
-        gpu,
-        d_q.unsafe_ptr(),
-        re_gpu.d_node_weights.unsafe_ptr(),
-        d_ca.unsafe_ptr(),
-        Float32(0.1),
-    )
+    bj_limit_full_2d[P, NC](ctx, gpu, d_q.unsafe_ptr(), re_gpu.d_node_weights.unsafe_ptr(), d_ca.unsafe_ptr(), Float32(0.1))
     ctx.enqueue_copy(hbuf, d_q)
     ctx.synchronize()
     var max_uniform_err: Float32 = 0.0
@@ -103,11 +96,7 @@ def main() raises:
             max_uniform_err = m
     print("  (1) smooth passthrough max |q - q_IC| =", max_uniform_err)
     if max_uniform_err > Float32(1.0e-6):
-        raise Error(
-            "limiter perturbed a uniform state (max err "
-            + String(max_uniform_err)
-            + ")"
-        )
+        raise Error("limiter perturbed a uniform state (max err " + String(max_uniform_err) + ")")
 
     # ---- (2) within-cell spike monotonicity -----------------------
     # Same setup as the P=2 test: rho=1 everywhere, then perturb
@@ -126,14 +115,7 @@ def main() raises:
     hptr[0 * NC + 0] = Float32(5.0)
     ctx.enqueue_copy(d_q, hbuf)
     ctx.synchronize()
-    bj_limit_full_2d[P, NC](
-        ctx,
-        gpu,
-        d_q.unsafe_ptr(),
-        re_gpu.d_node_weights.unsafe_ptr(),
-        d_ca.unsafe_ptr(),
-        Float32(0.1),
-    )
+    bj_limit_full_2d[P, NC](ctx, gpu, d_q.unsafe_ptr(), re_gpu.d_node_weights.unsafe_ptr(), d_ca.unsafe_ptr(), Float32(0.1))
     ctx.enqueue_copy(hbuf, d_q)
     ctx.synchronize()
 
@@ -146,15 +128,9 @@ def main() raises:
             max_rho = rho
     print("  (2) spike: max rho after limiting (pre-limit = 5.0) =", max_rho)
     if max_rho >= Float32(5.0):
-        raise Error(
-            "limiter did nothing -- max rho stayed at " + String(max_rho)
-        )
+        raise Error("limiter did nothing -- max rho stayed at " + String(max_rho))
     if max_rho > Float32(2.5):
-        raise Error(
-            "limiter under-scaled the spike (max rho "
-            + String(max_rho)
-            + ", expected < 2.5)"
-        )
+        raise Error("limiter under-scaled the spike (max rho " + String(max_rho) + ", expected < 2.5)")
 
     # Check (2b): far-from-spike elements should be unperturbed.
     var max_far_err: Float32 = 0.0
@@ -177,11 +153,7 @@ def main() raises:
                 max_far_err = m
     print("  (2) far-from-spike max |q - q_IC| =", max_far_err)
     if max_far_err > Float32(1.0e-6):
-        raise Error(
-            "limiter perturbed far-from-spike elements (max err "
-            + String(max_far_err)
-            + ")"
-        )
+        raise Error("limiter perturbed far-from-spike elements (max err " + String(max_far_err) + ")")
 
     print("=== limiter_2d_gpu_test_p3 PASSED ===")
     mpi.finalize()

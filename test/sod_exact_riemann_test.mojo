@@ -71,22 +71,12 @@ def main() raises:
     # ---------- sample 1: far left -- IC unchanged ----------
     var rho_far_left = sod_exact_rho(0.0, 0.2, gamma, rho_L, p_L, rho_R, p_R)
     if not approx_eq(rho_far_left, rho_L, EPS_TIGHT):
-        raise Error(
-            "sod_exact_riemann_test FAILED: rho(x=0, t=0.2) expected rho_L="
-            + String(rho_L)
-            + ", got "
-            + String(rho_far_left)
-        )
+        raise Error("sod_exact_riemann_test FAILED: rho(x=0, t=0.2) expected rho_L=" + String(rho_L) + ", got " + String(rho_far_left))
 
     # ---------- sample 2: far right -- IC unchanged ----------
     var rho_far_right = sod_exact_rho(1.0, 0.2, gamma, rho_L, p_L, rho_R, p_R)
     if not approx_eq(rho_far_right, rho_R, EPS_TIGHT):
-        raise Error(
-            "sod_exact_riemann_test FAILED: rho(x=1, t=0.2) expected rho_R="
-            + String(rho_R)
-            + ", got "
-            + String(rho_far_right)
-        )
+        raise Error("sod_exact_riemann_test FAILED: rho(x=1, t=0.2) expected rho_R=" + String(rho_R) + ", got " + String(rho_far_right))
 
     # ---------- sample 3: post-rarefaction plateau ----------
     # At t=0.2, the contact discontinuity sits at x_contact = 0.5 + t*u_star
@@ -94,34 +84,19 @@ def main() raises:
     # we should be on the rho_*L plateau.
     var rho_starL = sod_exact_rho(0.65, 0.2, gamma, rho_L, p_L, rho_R, p_R)
     if not approx_eq(rho_starL, rho_star_L_ref, EPS_LOOSE):
-        raise Error(
-            "sod_exact_riemann_test FAILED: rho_*L expected "
-            + String(rho_star_L_ref)
-            + ", got "
-            + String(rho_starL)
-        )
+        raise Error("sod_exact_riemann_test FAILED: rho_*L expected " + String(rho_star_L_ref) + ", got " + String(rho_starL))
 
     # ---------- sample 4: post-shock plateau ----------
     # At t=0.2 the shock sits at x_shock ~ 0.5 + 0.2 * 1.7522 = 0.85.
     # Between contact (~0.685) and shock (~0.85) we're on rho_*R.
     var rho_starR = sod_exact_rho(0.78, 0.2, gamma, rho_L, p_L, rho_R, p_R)
     if not approx_eq(rho_starR, rho_star_R_ref, EPS_LOOSE):
-        raise Error(
-            "sod_exact_riemann_test FAILED: rho_*R expected "
-            + String(rho_star_R_ref)
-            + ", got "
-            + String(rho_starR)
-        )
+        raise Error("sod_exact_riemann_test FAILED: rho_*R expected " + String(rho_star_R_ref) + ", got " + String(rho_starR))
 
     # ---------- shock speed ----------
     var S_R_meas = shock_speed_S_R(rho_L, p_L, rho_R, p_R, gamma)
     if not approx_eq(S_R_meas, S_R_ref, EPS_LOOSE):
-        raise Error(
-            "sod_exact_riemann_test FAILED: S_R expected "
-            + String(S_R_ref)
-            + ", got "
-            + String(S_R_meas)
-        )
+        raise Error("sod_exact_riemann_test FAILED: S_R expected " + String(S_R_ref) + ", got " + String(S_R_meas))
 
     # ---------- monotonicity check across the rarefaction fan ----------
     # Inside the rarefaction (xi_head_L ~ -a_L = -1.183 to xi_tail_L ~
@@ -135,37 +110,16 @@ def main() raises:
         var rho_here = sod_exact_rho(x, 0.2, gamma, rho_L, p_L, rho_R, p_R)
         # Allow Float64 noise of 1e-14 in the comparison.
         if rho_here > prev + 1.0e-12:
-            raise Error(
-                "sod_exact_riemann_test FAILED: rarefaction not monotone at x="
-                + String(x)
-                + " rho="
-                + String(rho_here)
-                + " prev="
-                + String(prev)
-            )
+            raise Error("sod_exact_riemann_test FAILED: rarefaction not monotone at x=" + String(x) + " rho=" + String(rho_here) + " prev=" + String(prev))
         prev = rho_here
 
     # ---------- symmetric IC: rho_L = rho_R, p_L = p_R ----------
     # Newton solver with degenerate (zero-strength) Riemann state
     # should return rho_L everywhere.  This used to be a numerical
     # corner case for some implementations.
-    var rho_uniform = sod_exact_rho(
-        0.5,
-        0.2,
-        gamma,
-        rho_L,
-        p_L,
-        rho_L,
-        p_L,
-    )
+    var rho_uniform = sod_exact_rho(0.5, 0.2, gamma, rho_L, p_L, rho_L, p_L)
     if not approx_eq(rho_uniform, rho_L, EPS_TIGHT):
-        raise Error(
-            "sod_exact_riemann_test FAILED: degenerate IC (uniform) should"
-            " return rho_L="
-            + String(rho_L)
-            + " everywhere, got "
-            + String(rho_uniform)
-        )
+        raise Error("sod_exact_riemann_test FAILED: degenerate IC (uniform) should return rho_L=" + String(rho_L) + " everywhere, got " + String(rho_uniform))
 
     # ---------- Toro Test 3: strong shock (rare + shock structure) ----------
     # Toro 2009 Table 4.1 / 4.3: rho_L = rho_R = 1, p_L = 1000, p_R = 0.01
@@ -191,38 +145,19 @@ def main() raises:
     var rho_starR3_ref: Float64 = 5.999
     var S_R3_ref: Float64 = 23.5175
 
-    var rho_starL3 = sod_exact_rho(
-        0.55, 0.012, gamma, rho_L3, p_L3, rho_R3, p_R3
-    )
+    var rho_starL3 = sod_exact_rho(0.55, 0.012, gamma, rho_L3, p_L3, rho_R3, p_R3)
     if not approx_eq(rho_starL3, rho_starL3_ref, EPS_LOOSE):
-        raise Error(
-            "sod_exact_riemann_test FAILED: Toro 3 rho_*L expected "
-            + String(rho_starL3_ref)
-            + ", got "
-            + String(rho_starL3)
-        )
-    var rho_starR3 = sod_exact_rho(
-        0.76, 0.012, gamma, rho_L3, p_L3, rho_R3, p_R3
-    )
+        raise Error("sod_exact_riemann_test FAILED: Toro 3 rho_*L expected " + String(rho_starL3_ref) + ", got " + String(rho_starL3))
+    var rho_starR3 = sod_exact_rho(0.76, 0.012, gamma, rho_L3, p_L3, rho_R3, p_R3)
     # Strong-shock relative tol: 5.999 vs 5.999 -- absolute eps_loose
     # (5e-3) is generous given the magnitude.
     if not approx_eq(rho_starR3, rho_starR3_ref, EPS_LOOSE):
-        raise Error(
-            "sod_exact_riemann_test FAILED: Toro 3 rho_*R expected "
-            + String(rho_starR3_ref)
-            + ", got "
-            + String(rho_starR3)
-        )
+        raise Error("sod_exact_riemann_test FAILED: Toro 3 rho_*R expected " + String(rho_starR3_ref) + ", got " + String(rho_starR3))
     var S_R3 = shock_speed_S_R(rho_L3, p_L3, rho_R3, p_R3, gamma)
     # S_R magnitude is ~23, so EPS_LOOSE = 5e-3 is too tight; use 0.01
     # absolute for the speed (one part in ~2300, well below textbook
     # truncation of 4 sigfigs).
     if not approx_eq(S_R3, S_R3_ref, 0.01):
-        raise Error(
-            "sod_exact_riemann_test FAILED: Toro 3 S_R expected "
-            + String(S_R3_ref)
-            + ", got "
-            + String(S_R3)
-        )
+        raise Error("sod_exact_riemann_test FAILED: Toro 3 S_R expected " + String(S_R3_ref) + ", got " + String(S_R3))
 
     print("=== sod_exact_riemann_test PASSED ===")

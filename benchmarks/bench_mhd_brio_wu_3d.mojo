@@ -53,12 +53,7 @@ from src import mpi
 from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
-from src.boundary import (
-    BoundaryConditions,
-    BC_INTERIOR,
-    BC_WALL,
-    BC_OUTFLOW,
-)
+from src.boundary import BoundaryConditions, BC_INTERIOR, BC_WALL, BC_OUTFLOW
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.mhd import IdealMHD
@@ -100,12 +95,7 @@ comptime RHO_MAX_OK: Float32 = Float32(1.5)
 comptime MASS_TOL_REL: Float64 = 2.0e-2
 
 
-def brio_wu_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def brio_wu_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
     if idx >= total:
@@ -114,17 +104,13 @@ def brio_wu_ic_kernel(
     var nn = idx % N_P
     var e = Int(owned_elem_ids[i])
     var px = elem_node_xyz[(e * N_P + nn) * 3 + 0]
-    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(
-        0.5
-    )
+    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(0.5)
     var rho = RHO_L + s * (RHO_R - RHO_L)
     var p = P_L + s * (P_R - P_L)
     var by = BY_L + s * (BY_R - BY_L)
     var bx = BX
     var bz = Float32(0.0)
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (
-        bx * bx + by * by + bz * bz
-    )
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (bx * bx + by * by + bz * bz)
     var base = (e * N_P + nn) * 9
     q[base + 0] = rho
     q[base + 1] = Float32(0.0)
@@ -154,45 +140,11 @@ def main() raises:
     var refs = build_reference_operators(nvtx)
     var ctx = DeviceContext()
 
-    var bcs = BoundaryConditions(
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-    )
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = IdealMHD(
-        GAMMA,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-        C_H,
-        ALPHA_D,
-    )
-    var solver = Solver[IdealMHD](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var bcs = BoundaryConditions(BC_OUTFLOW, BC_OUTFLOW, BC_WALL, BC_WALL, BC_WALL, BC_WALL)
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, IdealMHD.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = IdealMHD(GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D)
+    var solver = Solver[IdealMHD](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
     # Venkat eps = 0.1 matches euler_sod_3d.  Quantities of interest
     # (rho ~ O(1), |B| ~ O(1)) are similarly scaled.
     solver.enable_cell_limiter(True, Float32(0.1))
@@ -281,46 +233,20 @@ def main() raises:
     print("  mass(IC)=", mass_ic, "  mass(t=T)=", mass_fin)
 
     if bx_max_err > BX_TOL:
-        raise Error(
-            String("bench_mhd_brio_wu_3d FAILED: Bx drifted ")
-            + String(bx_max_err)
-            + " > tol "
-            + String(BX_TOL)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d FAILED: Bx drifted ") + String(bx_max_err) + " > tol " + String(BX_TOL))
     if psi_max > PSI_TOL:
-        raise Error(
-            String("bench_mhd_brio_wu_3d FAILED: psi ")
-            + String(psi_max)
-            + " > tol "
-            + String(PSI_TOL)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d FAILED: psi ") + String(psi_max) + " > tol " + String(PSI_TOL))
     if rho_min < RHO_MIN_OK:
-        raise Error(
-            String("bench_mhd_brio_wu_3d FAILED: rho_min ")
-            + String(rho_min)
-            + " < "
-            + String(RHO_MIN_OK)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d FAILED: rho_min ") + String(rho_min) + " < " + String(RHO_MIN_OK))
     if rho_max > RHO_MAX_OK:
-        raise Error(
-            String("bench_mhd_brio_wu_3d FAILED: rho_max ")
-            + String(rho_max)
-            + " > "
-            + String(RHO_MAX_OK)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d FAILED: rho_max ") + String(rho_max) + " > " + String(RHO_MAX_OK))
 
     var dmass = mass_fin - mass_ic
     if dmass < 0.0:
         dmass = -dmass
     var rel = dmass / mass_ic
     if rel > MASS_TOL_REL:
-        raise Error(
-            String("bench_mhd_brio_wu_3d FAILED: mass drift ")
-            + String(rel * 100.0)
-            + "%% > tol "
-            + String(MASS_TOL_REL * 100.0)
-            + "%%"
-        )
+        raise Error(String("bench_mhd_brio_wu_3d FAILED: mass drift ") + String(rel * 100.0) + "%% > tol " + String(MASS_TOL_REL * 100.0) + "%%")
 
     print("=== bench_mhd_brio_wu_3d PASSED ===")
     mpi.finalize()

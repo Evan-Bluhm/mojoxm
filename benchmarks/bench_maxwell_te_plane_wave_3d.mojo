@@ -107,17 +107,7 @@ def main() raises:
         return
 
     print("bench_maxwell_te_plane_wave_3d (3D TE plane wave, periodic box)")
-    print(
-        "  P= 2   mesh=",
-        NX,
-        "x",
-        NY,
-        "x",
-        NZ,
-        "   T=",
-        T_FINAL,
-        " (one period)",
-    )
+    print("  P= 2   mesh=", NX, "x", NY, "x", NZ, "   T=", T_FINAL, " (one period)")
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -125,39 +115,10 @@ def main() raises:
     var ctx = DeviceContext()
 
     var bcs = BoundaryConditions.periodic()
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Maxwell.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = Maxwell(
-        C_LIGHT,
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-    )
-    var solver = Solver[Maxwell](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, Maxwell.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = Maxwell(C_LIGHT, Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0))
+    var solver = Solver[Maxwell](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[te_plane_wave_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -171,13 +132,8 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * Maxwell.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -194,13 +150,8 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -231,28 +182,11 @@ def main() raises:
     var l2_ic = sqrt(sum_ic / Float64(n_owned_dof))
     var rel_l2 = l2 / l2_ic
     print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
-    print(
-        "  max |Ex|/|Ez|/|Bx|/|By| =",
-        max_zero_leak,
-        "  (threshold",
-        ZERO_COMPONENT_MAX,
-        ")",
-    )
+    print("  max |Ex|/|Ez|/|Bx|/|By| =", max_zero_leak, "  (threshold", ZERO_COMPONENT_MAX, ")")
 
     if rel_l2 > L2_MAX_REL:
-        raise Error(
-            "bench_maxwell_te_plane_wave_3d FAILED: rel L2 "
-            + String(rel_l2)
-            + " exceeds threshold "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_maxwell_te_plane_wave_3d FAILED: rel L2 " + String(rel_l2) + " exceeds threshold " + String(L2_MAX_REL))
     if max_zero_leak > ZERO_COMPONENT_MAX:
-        raise Error(
-            String("bench_maxwell_te_plane_wave_3d FAILED: zero-component ")
-            + "leakage "
-            + String(max_zero_leak)
-            + " > "
-            + String(ZERO_COMPONENT_MAX)
-        )
+        raise Error(String("bench_maxwell_te_plane_wave_3d FAILED: zero-component ") + "leakage " + String(max_zero_leak) + " > " + String(ZERO_COMPONENT_MAX))
     print("=== bench_maxwell_te_plane_wave_3d PASSED ===")
     mpi.finalize()

@@ -58,12 +58,7 @@ comptime RHO_REL_TOL: Float64 = 1.0e-4
 comptime P_REL_TOL: Float64 = 5.0e-4
 
 
-def hydrostatic_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def hydrostatic_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -93,22 +88,7 @@ def main() raises:
         return
 
     print("bench_euler_hydrostatic_3d_p5 (hydrostatic balance at P=5, NP=56)")
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        NP,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "x",
-        NZ,
-        "   gz=",
-        GZ_NEG,
-        "   T=",
-        T_FINAL,
-    )
+    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "   gz=", GZ_NEG, "   T=", T_FINAL)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -127,40 +107,10 @@ def main() raises:
         BC_WALL,
         BC_WALL,  # z: slip walls
     )
-    var mesh = Mesh[P](
-        ctx=ctx,
-        part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ),
-        Lx=LX,
-        Ly=LY,
-        Lz=LZ,
-        bcs=bcs,
-    )
-    var halo = HaloExchange(
-        ctx=ctx,
-        part=mesh.part,
-        nc=Euler.NUM_COMPONENTS,
-        d_perm=mesh.d_perm.unsafe_ptr(),
-        bcs=bcs,
-    )
-    var physics = Euler(
-        gamma=GAMMA,
-        min_density=MIN_DENSITY,
-        min_pressure=MIN_PRESSURE,
-        flux_type=FLUX_HLLEC,
-        entropy_fix=False,
-        gx=Float32(0.0),
-        gy=Float32(0.0),
-        gz=GZ_NEG,
-    )
-    var solver = Solver[Euler, P](
-        ctx=ctx^,
-        mesh=mesh^,
-        halo=halo^,
-        physics=physics^,
-        D_ref=D_ref^,
-        Lift_ref=Lift_ref^,
-        node_weights=node_weights^,
-    )
+    var mesh = Mesh[P](ctx=ctx, part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ), Lx=LX, Ly=LY, Lz=LZ, bcs=bcs)
+    var halo = HaloExchange(ctx=ctx, part=mesh.part, nc=Euler.NUM_COMPONENTS, d_perm=mesh.d_perm.unsafe_ptr(), bcs=bcs)
+    var physics = Euler(gamma=GAMMA, min_density=MIN_DENSITY, min_pressure=MIN_PRESSURE, flux_type=FLUX_HLLEC, entropy_fix=False, gx=Float32(0.0), gy=Float32(0.0), gz=GZ_NEG)
+    var solver = Solver[Euler, P](ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^, D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^)
 
     solver.ctx.enqueue_function[hydrostatic_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -173,12 +123,8 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * Euler.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -196,12 +142,8 @@ def main() raises:
         solver.step_ssprk3(dt_used, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -220,11 +162,7 @@ def main() raises:
         var u = rhou / rho_now
         var v = rhov / rho_now
         var w = rhow / rho_now
-        var v_mag = sqrt(
-            Float64(u) * Float64(u)
-            + Float64(v) * Float64(v)
-            + Float64(w) * Float64(w)
-        )
+        var v_mag = sqrt(Float64(u) * Float64(u) + Float64(v) * Float64(v) + Float64(w) * Float64(w))
         if v_mag > max_v:
             max_v = v_mag
         var rho_dev = Float64(rho_now - RHO0)
@@ -250,26 +188,11 @@ def main() raises:
     print("  max dp/p0      =", max_p_dev, "  (threshold", P_REL_TOL, ")")
 
     if max_v > VMAX_TOL:
-        raise Error(
-            "bench_euler_hydrostatic_3d_p5 FAILED: max |v| "
-            + String(max_v)
-            + " > "
-            + String(VMAX_TOL)
-        )
+        raise Error("bench_euler_hydrostatic_3d_p5 FAILED: max |v| " + String(max_v) + " > " + String(VMAX_TOL))
     if max_rho_dev > RHO_REL_TOL:
-        raise Error(
-            "bench_euler_hydrostatic_3d_p5 FAILED: max drho/rho0 "
-            + String(max_rho_dev)
-            + " > "
-            + String(RHO_REL_TOL)
-        )
+        raise Error("bench_euler_hydrostatic_3d_p5 FAILED: max drho/rho0 " + String(max_rho_dev) + " > " + String(RHO_REL_TOL))
     if max_p_dev > P_REL_TOL:
-        raise Error(
-            "bench_euler_hydrostatic_3d_p5 FAILED: max dp/p0 "
-            + String(max_p_dev)
-            + " > "
-            + String(P_REL_TOL)
-        )
+        raise Error("bench_euler_hydrostatic_3d_p5 FAILED: max dp/p0 " + String(max_p_dev) + " > " + String(P_REL_TOL))
 
     print("=== bench_euler_hydrostatic_3d_p5 PASSED ===")
     mpi.finalize()

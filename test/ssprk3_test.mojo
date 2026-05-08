@@ -58,9 +58,7 @@ def main() raises:
 
     # --- (1) length ---
     if len(plans) != 3:
-        raise Error(
-            "ssprk3_test FAILED: expected 3 stages, got " + String(len(plans))
-        )
+        raise Error("ssprk3_test FAILED: expected 3 stages, got " + String(len(plans)))
 
     # --- (2) buffer routing per stage ---
     var s0 = plans[0].copy()
@@ -76,47 +74,14 @@ def main() raises:
         raise Error("ssprk3_test FAILED: stage 2 routing wrong")
 
     # --- (3) coefficients per stage ---
-    if not (
-        approx_eq(s0.a, Float32(1.0))
-        and approx_eq(s0.b, Float32(0.0))
-        and approx_eq(s0.c, Float32(1.0))
-    ):
-        raise Error(
-            "ssprk3_test FAILED: stage 0 coefficients wrong: a="
-            + String(s0.a)
-            + " b="
-            + String(s0.b)
-            + " c="
-            + String(s0.c)
-        )
-    if not (
-        approx_eq(s1.a, Float32(0.75))
-        and approx_eq(s1.b, Float32(0.25))
-        and approx_eq(s1.c, Float32(0.25))
-    ):
-        raise Error(
-            "ssprk3_test FAILED: stage 1 coefficients wrong: a="
-            + String(s1.a)
-            + " b="
-            + String(s1.b)
-            + " c="
-            + String(s1.c)
-        )
+    if not (approx_eq(s0.a, Float32(1.0)) and approx_eq(s0.b, Float32(0.0)) and approx_eq(s0.c, Float32(1.0))):
+        raise Error("ssprk3_test FAILED: stage 0 coefficients wrong: a=" + String(s0.a) + " b=" + String(s0.b) + " c=" + String(s0.c))
+    if not (approx_eq(s1.a, Float32(0.75)) and approx_eq(s1.b, Float32(0.25)) and approx_eq(s1.c, Float32(0.25))):
+        raise Error("ssprk3_test FAILED: stage 1 coefficients wrong: a=" + String(s1.a) + " b=" + String(s1.b) + " c=" + String(s1.c))
     var third = Float32(1.0 / 3.0)
     var two_thirds = Float32(2.0 / 3.0)
-    if not (
-        approx_eq(s2.a, third)
-        and approx_eq(s2.b, two_thirds)
-        and approx_eq(s2.c, two_thirds)
-    ):
-        raise Error(
-            "ssprk3_test FAILED: stage 2 coefficients wrong: a="
-            + String(s2.a)
-            + " b="
-            + String(s2.b)
-            + " c="
-            + String(s2.c)
-        )
+    if not (approx_eq(s2.a, third) and approx_eq(s2.b, two_thirds) and approx_eq(s2.c, two_thirds)):
+        raise Error("ssprk3_test FAILED: stage 2 coefficients wrong: a=" + String(s2.a) + " b=" + String(s2.b) + " c=" + String(s2.c))
 
     # --- Conservation invariant: a + b == 1 in each stage.  This is
     # what makes the scheme strong-stability-preserving (the next-
@@ -134,20 +99,8 @@ def main() raises:
     # forward Euler).  Stage 0 has b=0 so the relation is vacuous
     # there (the dt*L(q) term is the only contribution).
     if s1.b > Float32(0.0) and not approx_eq(s1.c, s1.b):
-        raise Error(
-            "ssprk3_test FAILED: stage 1 c != b (broke SSPRK3 SSP-coefficient"
-            " property): c="
-            + String(s1.c)
-            + " b="
-            + String(s1.b)
-        )
+        raise Error("ssprk3_test FAILED: stage 1 c != b (broke SSPRK3 SSP-coefficient property): c=" + String(s1.c) + " b=" + String(s1.b))
     if s2.b > Float32(0.0) and not approx_eq(s2.c, s2.b):
-        raise Error(
-            "ssprk3_test FAILED: stage 2 c != b (broke SSPRK3 SSP-coefficient"
-            " property): c="
-            + String(s2.c)
-            + " b="
-            + String(s2.b)
-        )
+        raise Error("ssprk3_test FAILED: stage 2 c != b (broke SSPRK3 SSP-coefficient property): c=" + String(s2.c) + " b=" + String(s2.b))
 
     print("=== ssprk3_test PASSED ===")

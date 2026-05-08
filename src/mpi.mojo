@@ -96,34 +96,14 @@ def any_tag() -> Int:
 # ----------------------------------------------------------------------
 
 
-def isend_float(
-    buf: UnsafePointer[Float32, MutAnyOrigin],
-    count: Int,
-    dest: Int,
-    tag: Int,
-    request_out: UnsafePointer[Int64, MutAnyOrigin],
-) raises:
-    var rc = Int(
-        external_call["mxm_mpi_isend_float", c_int](
-            buf, c_int(count), c_int(dest), c_int(tag), request_out
-        )
-    )
+def isend_float(buf: UnsafePointer[Float32, MutAnyOrigin], count: Int, dest: Int, tag: Int, request_out: UnsafePointer[Int64, MutAnyOrigin]) raises:
+    var rc = Int(external_call["mxm_mpi_isend_float", c_int](buf, c_int(count), c_int(dest), c_int(tag), request_out))
     if rc != 0:
         raise Error("MPI_Isend failed, rc=" + String(rc))
 
 
-def irecv_float(
-    buf: UnsafePointer[Float32, MutAnyOrigin],
-    count: Int,
-    src: Int,
-    tag: Int,
-    request_out: UnsafePointer[Int64, MutAnyOrigin],
-) raises:
-    var rc = Int(
-        external_call["mxm_mpi_irecv_float", c_int](
-            buf, c_int(count), c_int(src), c_int(tag), request_out
-        )
-    )
+def irecv_float(buf: UnsafePointer[Float32, MutAnyOrigin], count: Int, src: Int, tag: Int, request_out: UnsafePointer[Int64, MutAnyOrigin]) raises:
+    var rc = Int(external_call["mxm_mpi_irecv_float", c_int](buf, c_int(count), c_int(src), c_int(tag), request_out))
     if rc != 0:
         raise Error("MPI_Irecv failed, rc=" + String(rc))
 
@@ -134,18 +114,12 @@ def waitall(n: Int, requests: UnsafePointer[Int64, MutAnyOrigin]) raises:
         raise Error("MPI_Waitall failed, rc=" + String(rc))
 
 
-def fill_request_null(
-    requests: UnsafePointer[Int64, MutAnyOrigin],
-    n: Int,
-):
+def fill_request_null(requests: UnsafePointer[Int64, MutAnyOrigin], n: Int):
     """Set `n` request slots to MPI_REQUEST_NULL so a subsequent
     `waitall` treats them as no-ops.  Can't zero-init from Mojo:
     MPI_REQUEST_NULL is implementation-defined (a sentinel pointer,
     not 0) so we route through the C shim."""
-    _ = external_call["mxm_mpi_fill_request_null", NoneType](
-        requests,
-        c_int(n),
-    )
+    _ = external_call["mxm_mpi_fill_request_null", NoneType](requests, c_int(n))
 
 
 def sendrecv_float(
@@ -158,18 +132,7 @@ def sendrecv_float(
     src: Int,
     recvtag: Int,
 ) raises:
-    var rc = Int(
-        external_call["mxm_mpi_sendrecv_float", c_int](
-            sendbuf,
-            c_int(sendcount),
-            c_int(dest),
-            c_int(sendtag),
-            recvbuf,
-            c_int(recvcount),
-            c_int(src),
-            c_int(recvtag),
-        )
-    )
+    var rc = Int(external_call["mxm_mpi_sendrecv_float", c_int](sendbuf, c_int(sendcount), c_int(dest), c_int(sendtag), recvbuf, c_int(recvcount), c_int(src), c_int(recvtag)))
     if rc != 0:
         raise Error("MPI_Sendrecv failed, rc=" + String(rc))
 
@@ -179,74 +142,34 @@ def sendrecv_float(
 # ----------------------------------------------------------------------
 
 
-def allreduce_float_min(
-    sendbuf: UnsafePointer[Float32, MutAnyOrigin],
-    recvbuf: UnsafePointer[Float32, MutAnyOrigin],
-    count: Int,
-) raises:
-    var rc = Int(
-        external_call["mxm_mpi_allreduce_float_min", c_int](
-            sendbuf, recvbuf, c_int(count)
-        )
-    )
+def allreduce_float_min(sendbuf: UnsafePointer[Float32, MutAnyOrigin], recvbuf: UnsafePointer[Float32, MutAnyOrigin], count: Int) raises:
+    var rc = Int(external_call["mxm_mpi_allreduce_float_min", c_int](sendbuf, recvbuf, c_int(count)))
     if rc != 0:
         raise Error("MPI_Allreduce(MIN) failed, rc=" + String(rc))
 
 
-def allreduce_float_max(
-    sendbuf: UnsafePointer[Float32, MutAnyOrigin],
-    recvbuf: UnsafePointer[Float32, MutAnyOrigin],
-    count: Int,
-) raises:
-    var rc = Int(
-        external_call["mxm_mpi_allreduce_float_max", c_int](
-            sendbuf, recvbuf, c_int(count)
-        )
-    )
+def allreduce_float_max(sendbuf: UnsafePointer[Float32, MutAnyOrigin], recvbuf: UnsafePointer[Float32, MutAnyOrigin], count: Int) raises:
+    var rc = Int(external_call["mxm_mpi_allreduce_float_max", c_int](sendbuf, recvbuf, c_int(count)))
     if rc != 0:
         raise Error("MPI_Allreduce(MAX) failed, rc=" + String(rc))
 
 
-def allreduce_float_sum(
-    sendbuf: UnsafePointer[Float32, MutAnyOrigin],
-    recvbuf: UnsafePointer[Float32, MutAnyOrigin],
-    count: Int,
-) raises:
-    var rc = Int(
-        external_call["mxm_mpi_allreduce_float_sum", c_int](
-            sendbuf, recvbuf, c_int(count)
-        )
-    )
+def allreduce_float_sum(sendbuf: UnsafePointer[Float32, MutAnyOrigin], recvbuf: UnsafePointer[Float32, MutAnyOrigin], count: Int) raises:
+    var rc = Int(external_call["mxm_mpi_allreduce_float_sum", c_int](sendbuf, recvbuf, c_int(count)))
     if rc != 0:
         raise Error("MPI_Allreduce(SUM) failed, rc=" + String(rc))
 
 
-def allreduce_double_sum(
-    sendbuf: UnsafePointer[Float64, MutAnyOrigin],
-    recvbuf: UnsafePointer[Float64, MutAnyOrigin],
-    count: Int,
-) raises:
+def allreduce_double_sum(sendbuf: UnsafePointer[Float64, MutAnyOrigin], recvbuf: UnsafePointer[Float64, MutAnyOrigin], count: Int) raises:
     """Float64 (double-precision) sum allreduce.  Use this for
     domain-integrated diagnostics where the Float32 SUM would lose
     precision from summing O(1M) nodal values."""
-    var rc = Int(
-        external_call["mxm_mpi_allreduce_double_sum", c_int](
-            sendbuf, recvbuf, c_int(count)
-        )
-    )
+    var rc = Int(external_call["mxm_mpi_allreduce_double_sum", c_int](sendbuf, recvbuf, c_int(count)))
     if rc != 0:
         raise Error("MPI_Allreduce(DOUBLE SUM) failed, rc=" + String(rc))
 
 
-def allreduce_int_sum(
-    sendbuf: UnsafePointer[Int32, MutAnyOrigin],
-    recvbuf: UnsafePointer[Int32, MutAnyOrigin],
-    count: Int,
-) raises:
-    var rc = Int(
-        external_call["mxm_mpi_allreduce_int_sum", c_int](
-            sendbuf, recvbuf, c_int(count)
-        )
-    )
+def allreduce_int_sum(sendbuf: UnsafePointer[Int32, MutAnyOrigin], recvbuf: UnsafePointer[Int32, MutAnyOrigin], count: Int) raises:
+    var rc = Int(external_call["mxm_mpi_allreduce_int_sum", c_int](sendbuf, recvbuf, c_int(count)))
     if rc != 0:
         raise Error("MPI_Allreduce(int SUM) failed, rc=" + String(rc))

@@ -118,10 +118,7 @@ def langmuir_ic_kernel(
     q[base + 1] = rho_e0 * u_pert
     q[base + 2] = Float32(0.0)
     q[base + 3] = Float32(0.0)
-    q[base + 4] = (
-        p_e0 / (gamma_e - Float32(1.0))
-        + Float32(0.5) * rho_e0 * u_pert * u_pert
-    )
+    q[base + 4] = p_e0 / (gamma_e - Float32(1.0)) + Float32(0.5) * rho_e0 * u_pert * u_pert
     q[base + 5] = rho_i0
     q[base + 6] = Float32(0.0)
     q[base + 7] = Float32(0.0)
@@ -140,9 +137,7 @@ def main() raises:
         print("bench_two_fluid_langmuir_3d_p3: runs at np=1 only")
         return
 
-    print(
-        "bench_two_fluid_langmuir_3d_p3 (plasma oscillation at P=3, one period)"
-    )
+    print("bench_two_fluid_langmuir_3d_p3 (plasma oscillation at P=3, one period)")
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -156,21 +151,8 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var bcs = BoundaryConditions.periodic()
-    var mesh = Mesh[P](
-        ctx=ctx,
-        part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ),
-        Lx=LX,
-        Ly=LY,
-        Lz=LZ,
-        bcs=bcs,
-    )
-    var halo = HaloExchange(
-        ctx=ctx,
-        part=mesh.part,
-        nc=FiveMomentTwoFluid.NUM_COMPONENTS,
-        d_perm=mesh.d_perm.unsafe_ptr(),
-        bcs=bcs,
-    )
+    var mesh = Mesh[P](ctx=ctx, part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ), Lx=LX, Ly=LY, Lz=LZ, bcs=bcs)
+    var halo = HaloExchange(ctx=ctx, part=mesh.part, nc=FiveMomentTwoFluid.NUM_COMPONENTS, d_perm=mesh.d_perm.unsafe_ptr(), bcs=bcs)
     var physics = FiveMomentTwoFluid(
         gamma_e=GAMMA_E,
         gamma_i=GAMMA_I,
@@ -185,15 +167,7 @@ def main() raises:
         min_density=MIN_DENSITY,
         min_pressure=MIN_PRESSURE,
     )
-    var solver = Solver[FiveMomentTwoFluid, P](
-        ctx=ctx^,
-        mesh=mesh^,
-        halo=halo^,
-        physics=physics^,
-        D_ref=D_ref^,
-        Lift_ref=Lift_ref^,
-        node_weights=node_weights^,
-    )
+    var solver = Solver[FiveMomentTwoFluid, P](ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^, D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^)
 
     solver.ctx.enqueue_function[langmuir_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -220,20 +194,7 @@ def main() raises:
     var dt_est = CFL * h / (wave * Float32(2 * P + 1))
     var num_steps = Int(T_FINAL / dt_est) + 1
     var dt = T_FINAL / Float32(num_steps)
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        NP,
-        "  omega_p =",
-        omega_p,
-        "  T_period =",
-        T_FINAL,
-        "  steps=",
-        num_steps,
-        "  dt=",
-        dt,
-    )
+    print("  P=", P, "  NP=", NP, "  omega_p =", omega_p, "  T_period =", T_FINAL, "  steps=", num_steps, "  dt=", dt)
 
     for _ in range(num_steps):
         solver.step_ssprk3(dt, nvtx)
@@ -279,39 +240,13 @@ def main() raises:
     if Ex_rel < 0.0:
         Ex_rel = -Ex_rel
 
-    print(
-        "  <rho_e u_e>(T) =",
-        mean_mom,
-        "  (analytic ~",
-        mom_ic,
-        ", rel err",
-        mom_err,
-        ")",
-    )
-    print(
-        "  <E_x>(T)       =",
-        mean_Ex,
-        "  (analytic ~ 0, rel to A*m_e*n0*omega_p:",
-        Ex_rel,
-        ")",
-    )
+    print("  <rho_e u_e>(T) =", mean_mom, "  (analytic ~", mom_ic, ", rel err", mom_err, ")")
+    print("  <E_x>(T)       =", mean_Ex, "  (analytic ~ 0, rel to A*m_e*n0*omega_p:", Ex_rel, ")")
 
     if mom_err > DRIFT_TOL_REL:
-        raise Error(
-            String("bench_two_fluid_langmuir_3d_p3 FAILED: ")
-            + "rho_e u_e rel drift "
-            + String(mom_err)
-            + " exceeds "
-            + String(DRIFT_TOL_REL)
-        )
+        raise Error(String("bench_two_fluid_langmuir_3d_p3 FAILED: ") + "rho_e u_e rel drift " + String(mom_err) + " exceeds " + String(DRIFT_TOL_REL))
     if Ex_rel > DRIFT_TOL_REL:
-        raise Error(
-            String("bench_two_fluid_langmuir_3d_p3 FAILED: ")
-            + "Ex drift "
-            + String(Ex_rel)
-            + " exceeds "
-            + String(DRIFT_TOL_REL)
-        )
+        raise Error(String("bench_two_fluid_langmuir_3d_p3 FAILED: ") + "Ex drift " + String(Ex_rel) + " exceeds " + String(DRIFT_TOL_REL))
 
     print("=== bench_two_fluid_langmuir_3d_p3 PASSED ===")
     mpi.finalize()

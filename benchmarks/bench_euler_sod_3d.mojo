@@ -45,12 +45,7 @@ from src import mpi
 from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
-from src.boundary import (
-    BoundaryConditions,
-    BC_INTERIOR,
-    BC_WALL,
-    BC_OUTFLOW,
-)
+from src.boundary import BoundaryConditions, BC_INTERIOR, BC_WALL, BC_OUTFLOW
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
@@ -78,12 +73,7 @@ comptime BOUNDS_SLACK: Float32 = Float32(1.0e-3)
 comptime MASS_TOL_REL: Float64 = 5.0e-3
 
 
-def sod_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def sod_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
     if idx >= total:
@@ -92,9 +82,7 @@ def sod_ic_kernel(
     var nn = idx % N_P
     var e = Int(owned_elem_ids[i])
     var px = elem_node_xyz[(e * N_P + nn) * 3 + 0]
-    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(
-        0.5
-    )
+    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(0.5)
     var rho = RHO_L + s * (RHO_R - RHO_L)
     var p = P_L + s * (P_R - P_L)
     var E = p / (GAMMA - Float32(1.0))
@@ -123,45 +111,11 @@ def main() raises:
     var refs = build_reference_operators(nvtx)
     var ctx = DeviceContext()
 
-    var bcs = BoundaryConditions(
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-    )
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = Euler(
-        GAMMA,
-        Float32(1.0e-6),
-        Float32(1.0e-6),
-        FLUX_HLLEC,
-        False,
-    )
-    var solver = Solver[Euler](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var bcs = BoundaryConditions(BC_OUTFLOW, BC_OUTFLOW, BC_WALL, BC_WALL, BC_WALL, BC_WALL)
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = Euler(GAMMA, Float32(1.0e-6), Float32(1.0e-6), FLUX_HLLEC, False)
+    var solver = Solver[Euler](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
     solver.enable_cell_limiter(True, Float32(0.1))
 
     solver.ctx.enqueue_function[sod_ic_kernel](
@@ -224,25 +178,11 @@ def main() raises:
     # but for a well-limited P=2 scheme it should stay above RHO_R -
     # slack.
     if rho_max > RHO_L + BOUNDS_SLACK:
-        raise Error(
-            String("bench_euler_sod_3d FAILED: rho_max ")
-            + String(rho_max)
-            + " overshot RHO_L="
-            + String(RHO_L)
-        )
+        raise Error(String("bench_euler_sod_3d FAILED: rho_max ") + String(rho_max) + " overshot RHO_L=" + String(RHO_L))
     if rho_min < Float32(0.0):
-        raise Error(
-            String("bench_euler_sod_3d FAILED: rho_min ")
-            + String(rho_min)
-            + " negative (positivity lost)"
-        )
+        raise Error(String("bench_euler_sod_3d FAILED: rho_min ") + String(rho_min) + " negative (positivity lost)")
     if rho_min < RHO_R - BOUNDS_SLACK:
-        raise Error(
-            String("bench_euler_sod_3d FAILED: rho_min ")
-            + String(rho_min)
-            + " undershot RHO_R="
-            + String(RHO_R)
-        )
+        raise Error(String("bench_euler_sod_3d FAILED: rho_min ") + String(rho_min) + " undershot RHO_R=" + String(RHO_R))
 
     # Mass conservation: outflow at t=0.20 has barely started (shock
     # at x~0.85), so mass drift should be << 1%.
@@ -251,13 +191,7 @@ def main() raises:
         dmass = -dmass
     var rel = dmass / mass_ic
     if rel > MASS_TOL_REL:
-        raise Error(
-            String("bench_euler_sod_3d FAILED: mass drift ")
-            + String(rel * 100.0)
-            + "%% > tol "
-            + String(MASS_TOL_REL * 100.0)
-            + "%%"
-        )
+        raise Error(String("bench_euler_sod_3d FAILED: mass drift ") + String(rel * 100.0) + "%% > tol " + String(MASS_TOL_REL * 100.0) + "%%")
 
     print("=== bench_euler_sod_3d PASSED ===")
     mpi.finalize()

@@ -48,23 +48,11 @@ struct BoundaryConditions(ImplicitlyCopyable, Movable):
 
     @staticmethod
     def periodic() -> Self:
-        return Self(
-            BC_INTERIOR,
-            BC_INTERIOR,
-            BC_INTERIOR,
-            BC_INTERIOR,
-            BC_INTERIOR,
-            BC_INTERIOR,
-        )
+        return Self(BC_INTERIOR, BC_INTERIOR, BC_INTERIOR, BC_INTERIOR, BC_INTERIOR, BC_INTERIOR)
 
     def all_periodic(self) -> Bool:
         return (
-            self.bc_x_lo == BC_INTERIOR
-            and self.bc_x_hi == BC_INTERIOR
-            and self.bc_y_lo == BC_INTERIOR
-            and self.bc_y_hi == BC_INTERIOR
-            and self.bc_z_lo == BC_INTERIOR
-            and self.bc_z_hi == BC_INTERIOR
+            self.bc_x_lo == BC_INTERIOR and self.bc_x_hi == BC_INTERIOR and self.bc_y_lo == BC_INTERIOR and self.bc_y_hi == BC_INTERIOR and self.bc_z_lo == BC_INTERIOR and self.bc_z_hi == BC_INTERIOR
         )
 
 
@@ -85,9 +73,4 @@ struct BoundaryConditions2D(ImplicitlyCopyable, Movable):
         return Self(BC_INTERIOR, BC_INTERIOR, BC_INTERIOR, BC_INTERIOR)
 
     def all_periodic(self) -> Bool:
-        return (
-            self.bc_x_lo == BC_INTERIOR
-            and self.bc_x_hi == BC_INTERIOR
-            and self.bc_y_lo == BC_INTERIOR
-            and self.bc_y_hi == BC_INTERIOR
-        )
+        return self.bc_x_lo == BC_INTERIOR and self.bc_x_hi == BC_INTERIOR and self.bc_y_lo == BC_INTERIOR and self.bc_y_hi == BC_INTERIOR

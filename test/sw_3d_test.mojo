@@ -48,13 +48,7 @@ comptime V0: Float32 = -0.2
 comptime CONST_TOL: Float32 = Float32(1.0e-5)
 
 
-def fill_constant_kernel[
-    P: Int
-](
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-):
+def fill_constant_kernel[P: Int](q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int):
     comptime NP = num_tet_nodes(P)
     var idx = Int(global_idx.x)
     var total = num_owned * NP
@@ -78,42 +72,16 @@ def check[P: Int](mut nvtx: NvtxContext) raises:
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(0, 1, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        ShallowWater.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
+    var mesh = Mesh[P](ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ, BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx, mesh.part, ShallowWater.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
     var physics = ShallowWater(GRAVITY, H_MIN)
-    var solver = Solver[ShallowWater, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var solver = Solver[ShallowWater, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
     var num_owned = solver.num_owned_elements
     var n_dof = num_owned * NP
 
     comptime fill_kernel = fill_constant_kernel[P]
-    solver.ctx.enqueue_function[fill_kernel, fill_kernel](
-        solver.d_q.unsafe_ptr(),
-        solver.mesh.d_owned_elem_ids.unsafe_ptr(),
-        num_owned,
-        grid_dim=ceildiv(num_owned * NP, IC_BLOCK),
-        block_dim=IC_BLOCK,
-    )
+    solver.ctx.enqueue_function[fill_kernel, fill_kernel](solver.d_q.unsafe_ptr(), solver.mesh.d_owned_elem_ids.unsafe_ptr(), num_owned, grid_dim=ceildiv(num_owned * NP, IC_BLOCK), block_dim=IC_BLOCK)
     solver.ctx.synchronize()
 
     var ic_vals = List[Float32]()
@@ -140,36 +108,15 @@ def check[P: Int](mut nvtx: NvtxContext) raises:
         for k in range(n_dof):
             var v = scratch[k]
             if isnan(v) or isinf(v):
-                raise Error(
-                    "sw_3d_test P="
-                    + String(P)
-                    + ": non-finite at component "
-                    + String(c_idx)
-                )
+                raise Error("sw_3d_test P=" + String(P) + ": non-finite at component " + String(c_idx))
             var d = v - ic_vals[c_idx]
             var ad = d if d >= Float32(0.0) else -d
             if ad > max_err:
                 max_err = ad
 
-    print(
-        "    max |q - IC| over",
-        NUM_STEPS,
-        "steps =",
-        max_err,
-        "  (tol",
-        CONST_TOL,
-        ")",
-    )
+    print("    max |q - IC| over", NUM_STEPS, "steps =", max_err, "  (tol", CONST_TOL, ")")
     if max_err > CONST_TOL:
-        raise Error(
-            "sw_3d_test P="
-            + String(P)
-            + " FAILED: constant state shifted by "
-            + String(max_err)
-            + " over "
-            + String(NUM_STEPS)
-            + " steps"
-        )
+        raise Error("sw_3d_test P=" + String(P) + " FAILED: constant state shifted by " + String(max_err) + " over " + String(NUM_STEPS) + " steps")
 
 
 def main() raises:

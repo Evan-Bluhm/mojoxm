@@ -27,16 +27,9 @@ from std.gpu.host import DeviceContext, DeviceBuffer
 from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
-from src.local_mesh_2d_gpu_mhd_glm import (
-    mhd_glm_rk_stage_2d,
-    launch_mhd_glm_psi_damp_2d,
-)
+from src.local_mesh_2d_gpu_mhd_glm import mhd_glm_rk_stage_2d, launch_mhd_glm_psi_damp_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -91,9 +84,7 @@ def _run(NX: Int) raises -> Bool:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -113,11 +104,7 @@ def _run(NX: Int) raises -> Bool:
     var c_h_f = Float32(C_H)
     var alpha_d_f = Float32(ALPHA_D)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             mhd_glm_rk_stage_2d[P](
@@ -140,13 +127,7 @@ def _run(NX: Int) raises -> Bool:
                 dt=dt,
             )
         comptime NP_t = num_tri_nodes_2d(P)
-        launch_mhd_glm_psi_damp_2d[NP_t](
-            ctx,
-            d_q.unsafe_ptr(),
-            gpu_mesh.num_elements,
-            alpha_d_f,
-            dt,
-        )
+        launch_mhd_glm_psi_damp_2d[NP_t](ctx, d_q.unsafe_ptr(), gpu_mesh.num_elements, alpha_d_f, dt)
     ctx.synchronize()
 
     ctx.enqueue_copy(hbuf_q, d_q)
@@ -183,36 +164,11 @@ def _run(NX: Int) raises -> Bool:
             max_state_err = d_E
 
     var rel_err = max_psi_err / Float64(A0)
-    print(
-        "  N=",
-        NX,
-        "  steps=",
-        num_steps,
-        "  psi_expect=",
-        psi_expect,
-        "  max |psi-expect|=",
-        max_psi_err,
-        "  rel=",
-        rel_err,
-        "  max state drift=",
-        max_state_err,
-    )
+    print("  N=", NX, "  steps=", num_steps, "  psi_expect=", psi_expect, "  max |psi-expect|=", max_psi_err, "  rel=", rel_err, "  max state drift=", max_state_err)
     if rel_err > PSI_TOL_REL:
-        raise Error(
-            String("bench_mhd_glm_psi_damp_2d_p4 FAILED at NX=")
-            + String(NX)
-            + ": psi rel err "
-            + String(rel_err)
-            + " > tol "
-            + String(PSI_TOL_REL)
-        )
+        raise Error(String("bench_mhd_glm_psi_damp_2d_p4 FAILED at NX=") + String(NX) + ": psi rel err " + String(rel_err) + " > tol " + String(PSI_TOL_REL))
     if max_state_err > STATE_TOL:
-        raise Error(
-            String("bench_mhd_glm_psi_damp_2d_p4 FAILED at NX=")
-            + String(NX)
-            + ": non-psi state drifted by "
-            + String(max_state_err)
-        )
+        raise Error(String("bench_mhd_glm_psi_damp_2d_p4 FAILED at NX=") + String(NX) + ": non-psi state drifted by " + String(max_state_err))
     return True
 
 
@@ -220,16 +176,7 @@ def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
     mpi.init()
     print("bench_mhd_glm_psi_damp_2d_p4 (GLM operator-splitting decay at P=4)")
-    print(
-        "  P=",
-        P,
-        "  alpha_d=",
-        ALPHA_D,
-        "  T=",
-        T_FINAL,
-        "  expected psi/A0 = exp(-alpha_d*T) = ",
-        exp(-Float64(ALPHA_D) * Float64(T_FINAL)),
-    )
+    print("  P=", P, "  alpha_d=", ALPHA_D, "  T=", T_FINAL, "  expected psi/A0 = exp(-alpha_d*T) = ", exp(-Float64(ALPHA_D) * Float64(T_FINAL)))
 
     _ = _run(8)
     _ = _run(12)

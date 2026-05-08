@@ -43,43 +43,13 @@ def check[P: Int](mut nvtx: NvtxContext, rank: Int, size: Int) raises:
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
-    var mesh = Mesh[P](
-        ctx=ctx,
-        part=build_partition(rank=rank, nprocs=size, nx=2, ny=2, nz=2),
-        Lx=1.0,
-        Ly=1.0,
-        Lz=1.0,
-        bcs=BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx=ctx,
-        part=mesh.part,
-        nc=Advection.NUM_COMPONENTS,
-        d_perm=mesh.d_perm.unsafe_ptr(),
-    )
-    var physics = Advection(
-        vx=Float32(1.0),
-        vy=Float32(0.0),
-        vz=Float32(0.0),
-    )
-    var solver = Solver[Advection, P](
-        ctx=ctx^,
-        mesh=mesh^,
-        halo=halo^,
-        physics=physics^,
-        D_ref=D_ref^,
-        Lift_ref=Lift_ref^,
-        node_weights=node_weights^,
-    )
+    var mesh = Mesh[P](ctx=ctx, part=build_partition(rank=rank, nprocs=size, nx=2, ny=2, nz=2), Lx=1.0, Ly=1.0, Lz=1.0, bcs=BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx=ctx, part=mesh.part, nc=Advection.NUM_COMPONENTS, d_perm=mesh.d_perm.unsafe_ptr())
+    var physics = Advection(vx=Float32(1.0), vy=Float32(0.0), vz=Float32(0.0))
+    var solver = Solver[Advection, P](ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^, D_ref=D_ref^, Lift_ref=Lift_ref^, node_weights=node_weights^)
 
     var output_dir = String("/tmp/frame_writer_multi_test_out_p") + String(P)
-    var writer = FrameWriter[Advection, P](
-        solver=solver,
-        nvtx=nvtx,
-        output_dir=output_dir,
-        component=0,
-        max_concurrent=2,
-    )
+    var writer = FrameWriter[Advection, P](solver=solver, nvtx=nvtx, output_dir=output_dir, component=0, max_concurrent=2)
 
     # Two synthetic constant fields per frame -- enough to verify the
     # multi-field XML and binary appended-data path.
@@ -99,34 +69,16 @@ def check[P: Int](mut nvtx: NvtxContext, rank: Int, size: Int) raises:
     var fields_f1 = List[List[Float64]]()
     fields_f1.append(f0.copy())
     fields_f1.append(f1.copy())
-    writer.write_frame_multi(
-        solver=solver,
-        t=Float64(0.0),
-        field_names=names,
-        field_data=fields_f1,
-        nvtx=nvtx,
-    )
+    writer.write_frame_multi(solver=solver, t=Float64(0.0), field_names=names, field_data=fields_f1, nvtx=nvtx)
 
     var fields_f2 = List[List[Float64]]()
     fields_f2.append(f0.copy())
     fields_f2.append(f1.copy())
-    writer.write_frame_multi(
-        solver=solver,
-        t=Float64(0.5),
-        field_names=names,
-        field_data=fields_f2,
-        nvtx=nvtx,
-    )
+    writer.write_frame_multi(solver=solver, t=Float64(0.5), field_names=names, field_data=fields_f2, nvtx=nvtx)
 
     # --- Check num_frames_written tracks the writes ---
     if writer.num_frames_written() != 2:
-        raise Error(
-            "frame_writer_multi_test P="
-            + String(P)
-            + ": num_frames_written="
-            + String(writer.num_frames_written())
-            + " after 2 write_frame_multi calls (expected 2)"
-        )
+        raise Error("frame_writer_multi_test P=" + String(P) + ": num_frames_written=" + String(writer.num_frames_written()) + " after 2 write_frame_multi calls (expected 2)")
 
     var pvd_path = output_dir + "/solution.pvd"
     writer.finalize(pvd_path=pvd_path, nvtx=nvtx)

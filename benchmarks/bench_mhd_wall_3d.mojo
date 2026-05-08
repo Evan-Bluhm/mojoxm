@@ -37,11 +37,7 @@ from src import mpi
 from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
-from src.boundary import (
-    BoundaryConditions,
-    BC_WALL,
-    BC_INTERIOR,
-)
+from src.boundary import BoundaryConditions, BC_WALL, BC_INTERIOR
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.mhd import IdealMHD
@@ -72,12 +68,7 @@ comptime IC_BLOCK = 256
 comptime REL_TOL: Float64 = 1.0e-3
 
 
-def uniform_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def uniform_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
     if idx >= total:
@@ -111,21 +102,7 @@ def main() raises:
         return
 
     print("bench_mhd_wall_3d (BC_WALL preservation, GLM disabled)")
-    print(
-        "  P=",
-        P,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "x",
-        NZ,
-        "   B0=",
-        B0,
-        "   T=",
-        T_FINAL,
-        "  (u=0; B aligned to x; walls in y,z)",
-    )
+    print("  P=", P, "  mesh=", NX, "x", NY, "x", NZ, "   B0=", B0, "   T=", T_FINAL, "  (u=0; B aligned to x; walls in y,z)")
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -142,37 +119,10 @@ def main() raises:
         BC_WALL,
         BC_WALL,  # -z, +z reflecting
     )
-    var mesh = Mesh(
-        ctx=ctx,
-        part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ),
-        Lx=LX,
-        Ly=LY,
-        Lz=LZ,
-        bcs=bcs,
-    )
-    var halo = HaloExchange(
-        ctx=ctx,
-        part=mesh.part,
-        nc=IdealMHD.NUM_COMPONENTS,
-        d_perm=mesh.d_perm.unsafe_ptr(),
-        bcs=bcs,
-    )
-    var physics = IdealMHD(
-        gamma=GAMMA,
-        min_density=MIN_DENSITY,
-        min_pressure=MIN_PRESSURE,
-        c_h=C_H,
-        alpha_d=ALPHA_D,
-    )
-    var solver = Solver[IdealMHD](
-        ctx=ctx^,
-        mesh=mesh^,
-        halo=halo^,
-        physics=physics^,
-        D_ref=refs.D_ref^,
-        Lift_ref=refs.Lift_ref^,
-        node_weights=refs.node_weights^,
-    )
+    var mesh = Mesh(ctx=ctx, part=build_partition(rank=rank, nprocs=size, nx=NX, ny=NY, nz=NZ), Lx=LX, Ly=LY, Lz=LZ, bcs=bcs)
+    var halo = HaloExchange(ctx=ctx, part=mesh.part, nc=IdealMHD.NUM_COMPONENTS, d_perm=mesh.d_perm.unsafe_ptr(), bcs=bcs)
+    var physics = IdealMHD(gamma=GAMMA, min_density=MIN_DENSITY, min_pressure=MIN_PRESSURE, c_h=C_H, alpha_d=ALPHA_D)
+    var solver = Solver[IdealMHD](ctx=ctx^, mesh=mesh^, halo=halo^, physics=physics^, D_ref=refs.D_ref^, Lift_ref=refs.Lift_ref^, node_weights=refs.node_weights^)
 
     solver.ctx.enqueue_function[uniform_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -185,12 +135,8 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * IdealMHD.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -208,12 +154,8 @@ def main() raises:
         solver.step_ssprk3(dt_used, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -241,12 +183,7 @@ def main() raises:
     print("  max relative drift   =", max_drift, "  (threshold", REL_TOL, ")")
 
     if max_drift > REL_TOL:
-        raise Error(
-            "bench_mhd_wall_3d FAILED: max relative drift "
-            + String(max_drift)
-            + " > "
-            + String(REL_TOL)
-        )
+        raise Error("bench_mhd_wall_3d FAILED: max relative drift " + String(max_drift) + " > " + String(REL_TOL))
 
     print("=== bench_mhd_wall_3d PASSED ===")
     mpi.finalize()

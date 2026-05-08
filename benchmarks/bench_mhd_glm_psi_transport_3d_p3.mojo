@@ -65,12 +65,7 @@ comptime PI_F = Float32(3.14159265358979323846)
 comptime L2_MAX_REL: Float64 = 5.0e-4
 
 
-def transport_ic_kernel_p3(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def transport_ic_kernel_p3(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -106,27 +101,8 @@ def main() raises:
         print("bench_mhd_glm_psi_transport_3d_p3: runs at np=1 only")
         return
 
-    print(
-        "bench_mhd_glm_psi_transport_3d_p3 (3D GLM linear psi/Bx wave at P=3)"
-    )
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        NP,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "x",
-        NZ,
-        "   c_h=",
-        C_H,
-        "   T=",
-        T_FINAL,
-        "   amplitude=",
-        AMPLITUDE,
-    )
+    print("bench_mhd_glm_psi_transport_3d_p3 (3D GLM linear psi/Bx wave at P=3)")
+    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "   c_h=", C_H, "   T=", T_FINAL, "   amplitude=", AMPLITUDE)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -140,37 +116,10 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var bcs = BoundaryConditions.periodic()
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = IdealMHD(
-        GAMMA,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-        C_H,
-        ALPHA_D,
-    )
-    var solver = Solver[IdealMHD, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var mesh = Mesh[P](ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, IdealMHD.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = IdealMHD(GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D)
+    var solver = Solver[IdealMHD, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
     solver.ctx.enqueue_function[transport_ic_kernel_p3](
         solver.d_q.unsafe_ptr(),
@@ -183,12 +132,8 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * IdealMHD.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -206,12 +151,8 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -237,12 +178,7 @@ def main() raises:
 
     var amp_bound = AMPLITUDE * Float32(1.1)
     if psi_max > amp_bound:
-        raise Error(
-            String("bench_mhd_glm_psi_transport_3d_p3 FAILED: psi_max ")
-            + String(psi_max)
-            + " exceeds 1.1 * AMPLITUDE "
-            + String(amp_bound)
-        )
+        raise Error(String("bench_mhd_glm_psi_transport_3d_p3 FAILED: psi_max ") + String(psi_max) + " exceeds 1.1 * AMPLITUDE " + String(amp_bound))
 
     var l2 = sqrt(sum_sq / Float64(n_owned_dof))
     var l2_ic = sqrt(sum_ic / Float64(n_owned_dof))
@@ -250,12 +186,7 @@ def main() raises:
     print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
 
     if rel_l2 > L2_MAX_REL:
-        raise Error(
-            "bench_mhd_glm_psi_transport_3d_p3 FAILED: rel L2 "
-            + String(rel_l2)
-            + " > "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_mhd_glm_psi_transport_3d_p3 FAILED: rel L2 " + String(rel_l2) + " > " + String(L2_MAX_REL))
 
     print("=== bench_mhd_glm_psi_transport_3d_p3 PASSED ===")
     mpi.finalize()

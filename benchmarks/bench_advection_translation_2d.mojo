@@ -30,11 +30,7 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_advection import advection_rk_stage_2d
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.ssprk3 import ssprk3_stage_plans
 
@@ -88,12 +84,8 @@ def _run(N: Int) raises -> Float64:
     var host_ic = List[Float32]()
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            var x = Float32(
-                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
-            )
-            var y = Float32(
-                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
-            )
+            var x = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0])
+            var y = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1])
             var v = _gauss(x, y)
             host_q.append(v)
             host_ic.append(v)
@@ -101,9 +93,7 @@ def _run(N: Int) raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -117,11 +107,7 @@ def _run(N: Int) raises -> Float64:
     var num_steps = Int(T_FINAL / dt_est) + 1
     var dt = T_FINAL / Float32(num_steps)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             advection_rk_stage_2d[P](
@@ -181,25 +167,11 @@ def main() raises:
 
     # Single-resolution L2 at the target N=32.
     if err32 > L2_MAX_REL_AT_32:
-        raise Error(
-            "bench_advection_translation_2d FAILED: rel L2 at N=32 "
-            + String(err32)
-            + " exceeds "
-            + String(L2_MAX_REL_AT_32)
-        )
+        raise Error("bench_advection_translation_2d FAILED: rel L2 at N=32 " + String(err32) + " exceeds " + String(L2_MAX_REL_AT_32))
 
     # Strict monotone decrease under refinement.
     if not (err16 > err32 and err32 > err64):
-        raise Error(
-            "bench_advection_translation_2d FAILED: L2 did not decrease "
-            + "monotonically under refinement (16: "
-            + String(err16)
-            + ", 32: "
-            + String(err32)
-            + ", 64: "
-            + String(err64)
-            + ")"
-        )
+        raise Error("bench_advection_translation_2d FAILED: L2 did not decrease " + "monotonically under refinement (16: " + String(err16) + ", 32: " + String(err32) + ", 64: " + String(err64) + ")")
 
     # Observed rate 16->32 and 32->64.  Assert at least one pair
     # makes RATE_MIN -- that's enough to catch a bug that destroys the
@@ -207,26 +179,9 @@ def main() raises:
     # dissipation that dominates the truncation error).
     var rate_1632 = log(err16 / err32) / log(2.0)
     var rate_3264 = log(err32 / err64) / log(2.0)
-    print(
-        "  observed rates: log2(e16/e32) =",
-        rate_1632,
-        "  log2(e32/e64) =",
-        rate_3264,
-        "  (P+1 =",
-        P + 1,
-        ", floor",
-        RATE_MIN,
-        ")",
-    )
+    print("  observed rates: log2(e16/e32) =", rate_1632, "  log2(e32/e64) =", rate_3264, "  (P+1 =", P + 1, ", floor", RATE_MIN, ")")
     if rate_1632 < RATE_MIN and rate_3264 < RATE_MIN:
-        raise Error(
-            "bench_advection_translation_2d FAILED: observed rates "
-            + String(rate_1632)
-            + " and "
-            + String(rate_3264)
-            + " both below "
-            + String(RATE_MIN)
-        )
+        raise Error("bench_advection_translation_2d FAILED: observed rates " + String(rate_1632) + " and " + String(rate_3264) + " both below " + String(RATE_MIN))
 
     print("=== bench_advection_translation_2d PASSED ===")
     mpi.finalize()

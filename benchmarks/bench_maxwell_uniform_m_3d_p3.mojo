@@ -60,22 +60,7 @@ def main() raises:
         return
 
     print("bench_maxwell_uniform_m_3d_p3 (uniform M source at P=3)")
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        NP,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "x",
-        NZ,
-        "   Mz=",
-        MZ,
-        "   T=",
-        T_FINAL,
-    )
+    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "   Mz=", MZ, "   T=", T_FINAL)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -89,21 +74,8 @@ def main() raises:
     var node_weights = to_float32(re.node_weights)
 
     var bcs = BoundaryConditions.periodic()
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Maxwell.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
+    var mesh = Mesh[P](ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, Maxwell.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
     var physics = Maxwell(
         C_LIGHT,
         Float32(0.0),
@@ -113,15 +85,7 @@ def main() raises:
         Float32(0.0),
         MZ,  # M = (0, 0, Mz)
     )
-    var solver = Solver[Maxwell, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var solver = Solver[Maxwell, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
 
     # IC: all components zero.  d_q is created zero-initialised by
     # solver construction, so no IC kernel needed.
@@ -138,13 +102,8 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -161,20 +120,7 @@ def main() raises:
         var bx = q_ptr[i * 6 + 3]
         var by = q_ptr[i * 6 + 4]
         var bz = q_ptr[i * 6 + 5]
-        if (
-            isnan(ex)
-            or isinf(ex)
-            or isnan(ey)
-            or isinf(ey)
-            or isnan(ez)
-            or isinf(ez)
-            or isnan(bx)
-            or isinf(bx)
-            or isnan(by)
-            or isinf(by)
-            or isnan(bz)
-            or isinf(bz)
-        ):
+        if isnan(ex) or isinf(ex) or isnan(ey) or isinf(ey) or isnan(ez) or isinf(ez) or isnan(bx) or isinf(bx) or isnan(by) or isinf(by) or isnan(bz) or isinf(bz):
             raise Error("bench_maxwell_uniform_m_3d_p3: non-finite output")
         var bz_dev = Float64(bz - bz_exact)
         if bz_dev < 0.0:
@@ -182,13 +128,7 @@ def main() raises:
         if bz_dev > max_bz_dev:
             max_bz_dev = bz_dev
         var other_max = Float64(0.0)
-        var values = [
-            Float64(ex),
-            Float64(ey),
-            Float64(ez),
-            Float64(bx),
-            Float64(by),
-        ]
+        var values = [Float64(ex), Float64(ey), Float64(ez), Float64(bx), Float64(by)]
         for k in range(5):
             var v = values[k]
             if v < 0.0:
@@ -202,35 +142,13 @@ def main() raises:
     if bz_rel < 0.0:
         bz_rel = -bz_rel
     print("  Bz exact       =", bz_exact)
-    print(
-        "  max |Bz - Bz_exact| / |Bz_exact| =",
-        bz_rel,
-        "  (threshold",
-        BZ_REL_TOL,
-        ")",
-    )
-    print(
-        "  max |Ex, Ey, Ez, Bx, By| =",
-        max_other,
-        "  (threshold",
-        ZERO_COMPONENT_TOL,
-        ")",
-    )
+    print("  max |Bz - Bz_exact| / |Bz_exact| =", bz_rel, "  (threshold", BZ_REL_TOL, ")")
+    print("  max |Ex, Ey, Ez, Bx, By| =", max_other, "  (threshold", ZERO_COMPONENT_TOL, ")")
 
     if bz_rel > BZ_REL_TOL:
-        raise Error(
-            "bench_maxwell_uniform_m_3d_p3 FAILED: Bz deviation "
-            + String(bz_rel)
-            + " > "
-            + String(BZ_REL_TOL)
-        )
+        raise Error("bench_maxwell_uniform_m_3d_p3 FAILED: Bz deviation " + String(bz_rel) + " > " + String(BZ_REL_TOL))
     if max_other > ZERO_COMPONENT_TOL:
-        raise Error(
-            "bench_maxwell_uniform_m_3d_p3 FAILED: zero-component leak "
-            + String(max_other)
-            + " > "
-            + String(ZERO_COMPONENT_TOL)
-        )
+        raise Error("bench_maxwell_uniform_m_3d_p3 FAILED: zero-component leak " + String(max_other) + " > " + String(ZERO_COMPONENT_TOL))
 
     print("=== bench_maxwell_uniform_m_3d_p3 PASSED ===")
     mpi.finalize()

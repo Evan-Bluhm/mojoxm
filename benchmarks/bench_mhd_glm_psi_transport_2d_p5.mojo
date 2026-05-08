@@ -28,11 +28,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd_glm import mhd_glm_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -94,9 +90,7 @@ def _run(NX: Int) raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -115,11 +109,7 @@ def _run(NX: Int) raises -> Float64:
     var min_p = Float32(1.0e-6)
     var c_h_f = Float32(C_H)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             mhd_glm_rk_stage_2d[P](
@@ -166,12 +156,7 @@ def _run(NX: Int) raises -> Float64:
 
     var amp_bound = Float32(AMPLITUDE) * Float32(1.1)
     if psi_max > amp_bound:
-        raise Error(
-            String("bench_mhd_glm_psi_transport_2d_p5 FAILED: psi_max ")
-            + String(psi_max)
-            + " exceeds 1.1 * AMPLITUDE "
-            + String(amp_bound)
-        )
+        raise Error(String("bench_mhd_glm_psi_transport_2d_p5 FAILED: psi_max ") + String(psi_max) + " exceeds 1.1 * AMPLITUDE " + String(amp_bound))
 
     var l2 = sqrt(sum_sq / Float64(n_q))
     var l2_ic = sqrt(sum_ic / Float64(n_q))
@@ -182,18 +167,7 @@ def main() raises:
     comptime assert has_accelerator(), "Requires GPU"
     mpi.init()
     print("bench_mhd_glm_psi_transport_2d_p5 (GLM linear psi/Bx wave, P=5)")
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        num_tri_nodes_2d(P),
-        "  c_h=",
-        C_H,
-        "  T=",
-        T_FINAL,
-        "  amplitude=",
-        AMPLITUDE,
-    )
+    print("  P=", P, "  NP=", num_tri_nodes_2d(P), "  c_h=", C_H, "  T=", T_FINAL, "  amplitude=", AMPLITUDE)
 
     var err8 = _run(8)
     print("  N=8   rel L2 =", err8)
@@ -203,26 +177,11 @@ def main() raises:
     print("  N=16  rel L2 =", err16)
 
     if err8 > L2_MAX_REL:
-        raise Error(
-            "bench_mhd_glm_psi_transport_2d_p5 FAILED: NX=8 rel L2 "
-            + String(err8)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_mhd_glm_psi_transport_2d_p5 FAILED: NX=8 rel L2 " + String(err8) + " exceeds " + String(L2_MAX_REL))
     if err12 > L2_MAX_REL:
-        raise Error(
-            "bench_mhd_glm_psi_transport_2d_p5 FAILED: NX=12 rel L2 "
-            + String(err12)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_mhd_glm_psi_transport_2d_p5 FAILED: NX=12 rel L2 " + String(err12) + " exceeds " + String(L2_MAX_REL))
     if err16 > L2_MAX_REL:
-        raise Error(
-            "bench_mhd_glm_psi_transport_2d_p5 FAILED: NX=16 rel L2 "
-            + String(err16)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_mhd_glm_psi_transport_2d_p5 FAILED: NX=16 rel L2 " + String(err16) + " exceeds " + String(L2_MAX_REL))
 
     print("=== bench_mhd_glm_psi_transport_2d_p5 PASSED ===")
     mpi.finalize()

@@ -125,9 +125,7 @@ def vortex_ic_kernel(
     # T = 1 - (gamma-1) eps^2 / (8 gamma pi^2) * exp(1 - r^2).  Rewritten
     # via eps_over_2pi (= eps/(2 pi)) so eps^2/(8 gamma pi^2) becomes
     # eps_over_2pi^2 / (2 gamma) -- one expression, formatter-clean.
-    var T = Float32(1.0) - g1 * eps_over_2pi * eps_over_2pi / (
-        Float32(2.0) * gamma
-    ) * exp(Float32(1.0) - r2)
+    var T = Float32(1.0) - g1 * eps_over_2pi * eps_over_2pi / (Float32(2.0) * gamma) * exp(Float32(1.0) - r2)
     var rho = pow(T, Float32(1.0) / g1)
     var p = pow(rho, gamma)
     var E = p / g1 + Float32(0.5) * rho * (u * u + v * v + w * w)
@@ -158,23 +156,9 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print(
-            "euler_vortex: GPU DG Euler, P2 tet, HLLEC flux,", size, "rank(s)"
-        )
-        print(
-            "  global mesh: ",
-            NX,
-            "x",
-            NY,
-            "x",
-            NZ,
-            " cells -> ",
-            NX * NY * NZ * 6,
-            "tets",
-        )
-        print(
-            "  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P
-        )
+        print("euler_vortex: GPU DG Euler, P2 tet, HLLEC flux,", size, "rank(s)")
+        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
+        print("  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P)
 
     var nvtx = NvtxContext()
     if rank == 0:
@@ -187,71 +171,21 @@ def main() raises:
     nvtx.pop_range()
 
     nvtx.push_range("build_mesh")
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, BoundaryConditions.periodic())
     nvtx.pop_range()
 
     nvtx.push_range("halo_setup")
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
+    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
     nvtx.pop_range()
 
     if rank == 0:
-        print(
-            "  proc-grid: ",
-            mesh.part.px,
-            "x",
-            mesh.part.py,
-            "x",
-            mesh.part.pz,
-            "  owned cubes per rank: ",
-            mesh.part.nx,
-            "x",
-            mesh.part.ny,
-            "x",
-            mesh.part.nz,
-        )
-        print(
-            "  per-rank: ",
-            mesh.num_owned_elements,
-            "owned elements (halo=",
-            mesh.num_halo_elements,
-            ", interior=",
-            mesh.num_interior_elements,
-            ")",
-        )
+        print("  proc-grid: ", mesh.part.px, "x", mesh.part.py, "x", mesh.part.pz, "  owned cubes per rank: ", mesh.part.nx, "x", mesh.part.ny, "x", mesh.part.nz)
+        print("  per-rank: ", mesh.num_owned_elements, "owned elements (halo=", mesh.num_halo_elements, ", interior=", mesh.num_interior_elements, ")")
 
-    var physics = Euler(
-        GAMMA,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-        FLUX_HLLEC,
-        True,
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-    )
+    var physics = Euler(GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True, Float32(0.0), Float32(0.0), Float32(0.0))
 
     nvtx.push_range("solver_setup")
-    var solver = Solver[Euler](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[Euler](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
     nvtx.pop_range()
 
     nvtx.push_range("initial_condition")
@@ -290,30 +224,13 @@ def main() raises:
     diag_linear.append(NamedComponent("momentum_y", 2))
     diag_linear.append(NamedComponent("momentum_z", 3))
     diag_linear.append(NamedComponent("total_energy", 4))
-    var diag = DiagnosticsWriter[Euler](
-        solver,
-        "output/diagnostics.csv",
-        diag_linear,
-        List[NamedComponent](),
-        List[NamedComponent](),
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[Euler](solver, "output/diagnostics.csv", diag_linear, List[NamedComponent](), List[NamedComponent](), LX, LY, LZ)
 
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Euler](
-        solver,
-        writer,
-        diag,
-        dt,
-        T_FINAL,
-        NUM_FRAMES,
-        nvtx,
-    )
+    var result = run_ssprk3_loop_with_diagnostics[Euler](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
 
     writer.finalize("output/solution.pvd", nvtx)
 
@@ -360,19 +277,9 @@ def main() raises:
         names.append(String("rho"))
         names.append(String("p"))
         names.append(String("|v|"))
-        write_snapshot_3d_multi(
-            solver=solver,
-            field_names=names,
-            field_data=fields,
-            path=String("output/snapshot_t_final.vtu"),
-            nvtx=nvtx,
-        )
+        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
         if rank == 0:
-            print(
-                "  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=",
-                T_FINAL,
-                ")",
-            )
+            print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
 
     if rank == 0:
         result.print_summary()

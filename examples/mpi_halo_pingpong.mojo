@@ -32,13 +32,7 @@ comptime NC = 1  # scalar field for this test
 comptime IC_BLOCK = 256
 
 
-def init_q_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-    total_dof: Int,
-    rank_f: Float32,
-):
+def init_q_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int, total_dof: Int, rank_f: Float32):
     var tid = Int(global_idx.x)
     if tid >= total_dof:
         return
@@ -46,12 +40,7 @@ def init_q_kernel(
     q[tid] = Float32(0.0)
 
 
-def fill_owned_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-    rank_f: Float32,
-):
+def fill_owned_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int, rank_f: Float32):
     var idx = Int(global_idx.x)
     if idx >= num_owned * 10:
         return
@@ -68,20 +57,8 @@ def main() raises:
     var size = mpi.world_size()
 
     var ctx = DeviceContext()
-    var patch = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LX,
-        LX,
-        BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx,
-        patch.part,
-        NC,
-        patch.d_perm.unsafe_ptr(),
-    )
+    var patch = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LX, LX, BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx, patch.part, NC, patch.d_perm.unsafe_ptr())
 
     # Allocate scalar q on the local mesh (NC=1).
     var total_dof = patch.local.num_elements * 10 * NC
@@ -132,22 +109,8 @@ def main() raises:
     def _dof_at(cube_cell: Int, tet: Int, nn: Int) capturing -> Int:
         return (cube_cell * 6 + tet) * 10 + nn
 
-    var neighbours = [
-        patch.part.neighbour_minus_x,
-        patch.part.neighbour_plus_x,
-        patch.part.neighbour_minus_y,
-        patch.part.neighbour_plus_y,
-        patch.part.neighbour_minus_z,
-        patch.part.neighbour_plus_z,
-    ]
-    var names = [
-        String("-x"),
-        String("+x"),
-        String("-y"),
-        String("+y"),
-        String("-z"),
-        String("+z"),
-    ]
+    var neighbours = [patch.part.neighbour_minus_x, patch.part.neighbour_plus_x, patch.part.neighbour_minus_y, patch.part.neighbour_plus_y, patch.part.neighbour_minus_z, patch.part.neighbour_plus_z]
+    var names = [String("-x"), String("+x"), String("-y"), String("+y"), String("-z"), String("+z")]
 
     # Ghost-ring first-cube local cell index per direction.
     # -x: (lcx=0, lcy=1, lcz=1) -> cell = 0 + loc_nx*(1 + loc_ny*1)
@@ -179,23 +142,7 @@ def main() raises:
                 var ok = encoded_rank == expected_rank
                 if not ok:
                     any_fail = True
-                print(
-                    "[rank",
-                    rank,
-                    "]",
-                    names[d],
-                    " ghost_dof0=",
-                    got,
-                    " -> sender_rank=",
-                    encoded_rank,
-                    " (expected ",
-                    expected_rank,
-                    ")",
-                    " offset=",
-                    encoded_offset,
-                    " ok=",
-                    ok,
-                )
+                print("[rank", rank, "]", names[d], " ghost_dof0=", got, " -> sender_rank=", encoded_rank, " (expected ", expected_rank, ")", " offset=", encoded_offset, " ok=", ok)
             if not any_fail:
                 print("[rank", rank, "] all 6 directions OK")
         mpi.barrier_world()

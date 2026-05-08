@@ -53,11 +53,7 @@ struct SSPRK3StagePlan(Copyable, Movable):
     var c: Float32
 
 
-def ssprk3_stage_plans(
-    d_q: UnsafePointer[Float32, MutAnyOrigin],
-    d_q1: UnsafePointer[Float32, MutAnyOrigin],
-    d_q2: UnsafePointer[Float32, MutAnyOrigin],
-) raises -> List[SSPRK3StagePlan]:
+def ssprk3_stage_plans(d_q: UnsafePointer[Float32, MutAnyOrigin], d_q1: UnsafePointer[Float32, MutAnyOrigin], d_q2: UnsafePointer[Float32, MutAnyOrigin]) raises -> List[SSPRK3StagePlan]:
     """Return the three SSPRK3 stages' (q_in, q_a, q_b, q_out, a, b,
     c) routings for the standard d_q / d_q1 / d_q2 buffer trio.  Use
     in a step-inner loop:
@@ -74,39 +70,9 @@ def ssprk3_stage_plans(
     Maxwell / IdealMHD / GLM-MHD) and every P."""
     var plans = List[SSPRK3StagePlan]()
     # Stage 1: q1 = q + dt * L(q)
-    plans.append(
-        SSPRK3StagePlan(
-            q_in=d_q,
-            q_a=d_q,
-            q_b=d_q,
-            q_out=d_q1,
-            a=Float32(1.0),
-            b=Float32(0.0),
-            c=Float32(1.0),
-        )
-    )
+    plans.append(SSPRK3StagePlan(q_in=d_q, q_a=d_q, q_b=d_q, q_out=d_q1, a=Float32(1.0), b=Float32(0.0), c=Float32(1.0)))
     # Stage 2: q2 = (3/4)*q + (1/4)*(q1 + dt*L(q1))
-    plans.append(
-        SSPRK3StagePlan(
-            q_in=d_q1,
-            q_a=d_q,
-            q_b=d_q1,
-            q_out=d_q2,
-            a=Float32(0.75),
-            b=Float32(0.25),
-            c=Float32(0.25),
-        )
-    )
+    plans.append(SSPRK3StagePlan(q_in=d_q1, q_a=d_q, q_b=d_q1, q_out=d_q2, a=Float32(0.75), b=Float32(0.25), c=Float32(0.25)))
     # Stage 3: q  = (1/3)*q + (2/3)*(q2 + dt*L(q2))
-    plans.append(
-        SSPRK3StagePlan(
-            q_in=d_q2,
-            q_a=d_q,
-            q_b=d_q2,
-            q_out=d_q,
-            a=Float32(1.0 / 3.0),
-            b=Float32(2.0 / 3.0),
-            c=Float32(2.0 / 3.0),
-        )
-    )
+    plans.append(SSPRK3StagePlan(q_in=d_q2, q_a=d_q, q_b=d_q2, q_out=d_q, a=Float32(1.0 / 3.0), b=Float32(2.0 / 3.0), c=Float32(2.0 / 3.0)))
     return plans^

@@ -59,13 +59,7 @@ comptime CFL = Float32(0.2)
 comptime IC_BLOCK = 256
 
 
-def cavity_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-    Ly: Float32,
-):
+def cavity_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int, Ly: Float32):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
     if idx >= total:
@@ -97,22 +91,8 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print(
-            "maxwell_cavity: GPU DG Maxwell, P2 tet, Rusanov,",
-            size,
-            "rank(s)",
-        )
-        print(
-            "  global mesh: ",
-            NX,
-            "x",
-            NY,
-            "x",
-            NZ,
-            " cells -> ",
-            NX * NY * NZ * 6,
-            "tets",
-        )
+        print("maxwell_cavity: GPU DG Maxwell, P2 tet, Rusanov,", size, "rank(s)")
+        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
 
     var nvtx = NvtxContext()
 
@@ -130,21 +110,8 @@ def main() raises:
         BC_INTERIOR,  # -z, +z
     )
 
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Maxwell.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, Maxwell.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
     var physics = Maxwell(
         C_LIGHT,
         Float32(0.0),
@@ -154,15 +121,7 @@ def main() raises:
         Float32(0.0),
         Float32(0.0),  # M = 0
     )
-    var solver = Solver[Maxwell](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[Maxwell](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[cavity_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -204,30 +163,13 @@ def main() raises:
     diag_squared.append(NamedComponent("Bx_sq", 3))
     diag_squared.append(NamedComponent("By_sq", 4))
     diag_squared.append(NamedComponent("Bz_sq", 5))
-    var diag = DiagnosticsWriter[Maxwell](
-        solver,
-        "output/diagnostics.csv",
-        List[NamedComponent](),
-        diag_squared,
-        List[NamedComponent](),
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[Maxwell](solver, "output/diagnostics.csv", List[NamedComponent](), diag_squared, List[NamedComponent](), LX, LY, LZ)
 
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Maxwell](
-        solver,
-        writer,
-        diag,
-        dt,
-        T_FINAL,
-        NUM_FRAMES,
-        nvtx,
-    )
+    var result = run_ssprk3_loop_with_diagnostics[Maxwell](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
 
     writer.finalize("output/solution.pvd", nvtx)
 
@@ -280,30 +222,15 @@ def main() raises:
         names.append(String("Ex"))
         names.append(String("|E|"))
         names.append(String("|B|"))
-        write_snapshot_3d_multi(
-            solver=solver,
-            field_names=names,
-            field_data=fields,
-            path=String("output/snapshot_t_final.vtu"),
-            nvtx=nvtx,
-        )
+        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
         if rank == 0:
-            print(
-                "  wrote output/snapshot_t_final.vtu (Ex + |E| + |B|, t=",
-                T_FINAL,
-                ")",
-            )
+            print("  wrote output/snapshot_t_final.vtu (Ex + |E| + |B|, t=", T_FINAL, ")")
 
     # Round-trip L2 + energy diagnostics are rank-local sums; at np>1
     # they'd need an allreduce to be meaningful, so gate on np=1.
     if size == 1:
         var energy_final = _em_energy(solver, nvtx)
-        print(
-            "  EM energy at t=",
-            T_FINAL,
-            " :",
-            energy_final,
-        )
+        print("  EM energy at t=", T_FINAL, " :", energy_final)
         var h_fin = List[Float32]()
         for _ in range(solver.num_owned_elements * N_P):
             h_fin.append(Float32(0.0))
@@ -335,10 +262,7 @@ def main() raises:
 # for a closed PEC cavity with no sources, the semi-discrete Maxwell
 # system conserves it to roundoff; Rusanov dissipation causes a slow,
 # monotonic decay.
-def _em_energy(
-    mut solver: Solver[Maxwell],
-    mut nvtx: NvtxContext,
-) raises -> Float32:
+def _em_energy(mut solver: Solver[Maxwell], mut nvtx: NvtxContext) raises -> Float32:
     var num_owned = solver.num_owned_elements
     var total_dof = num_owned * N_P
     var tot: Float64 = 0.0
@@ -351,6 +275,4 @@ def _em_energy(
         for i in range(total_dof):
             var v = Float64(h_buf[i])
             tot += weight * v * v
-    return Float32(
-        0.5 * tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ)
-    )
+    return Float32(0.5 * tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ))

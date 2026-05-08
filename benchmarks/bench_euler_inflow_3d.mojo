@@ -34,12 +34,7 @@ from src import mpi
 from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
-from src.boundary import (
-    BoundaryConditions,
-    BC_INTERIOR,
-    BC_INFLOW,
-    BC_OUTFLOW,
-)
+from src.boundary import BoundaryConditions, BC_INTERIOR, BC_INFLOW, BC_OUTFLOW
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
@@ -73,12 +68,7 @@ comptime RHOVW_TOL: Float64 = 1.0e-3
 comptime E_REL_TOL: Float64 = 2.0e-3
 
 
-def uniform_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def uniform_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
     if idx >= total:
@@ -109,18 +99,7 @@ def main() raises:
         return
 
     print("bench_euler_inflow_3d (3D Euler BC_INFLOW preservation)")
-    print(
-        "  P= 2   mesh=",
-        NX,
-        "x",
-        NY,
-        "x",
-        NZ,
-        "   M=",
-        U0 / sqrt(GAMMA * P0 / RHO0),
-        "   T=",
-        T_FINAL,
-    )
+    print("  P= 2   mesh=", NX, "x", NY, "x", NZ, "   M=", U0 / sqrt(GAMMA * P0 / RHO0), "   T=", T_FINAL)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -135,21 +114,8 @@ def main() raises:
         BC_INTERIOR,
         BC_INTERIOR,  # -z, +z (periodic)
     )
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
     # Inflow ghost matches the IC exactly so the analytic solution
     # is the IC for all time.
     var rho0_inflow = RHO0
@@ -172,15 +138,7 @@ def main() raises:
         rhow0_inflow,
         E0,
     )
-    var solver = Solver[Euler](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[Euler](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[uniform_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -207,13 +165,8 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -228,18 +181,7 @@ def main() raises:
         var rhov_now = q_ptr[i * 5 + 2]
         var rhow_now = q_ptr[i * 5 + 3]
         var E_now = q_ptr[i * 5 + 4]
-        if (
-            isnan(rho_now)
-            or isinf(rho_now)
-            or isnan(rhou_now)
-            or isinf(rhou_now)
-            or isnan(rhov_now)
-            or isinf(rhov_now)
-            or isnan(rhow_now)
-            or isinf(rhow_now)
-            or isnan(E_now)
-            or isinf(E_now)
-        ):
+        if isnan(rho_now) or isinf(rho_now) or isnan(rhou_now) or isinf(rhou_now) or isnan(rhov_now) or isinf(rhov_now) or isnan(rhow_now) or isinf(rhow_now) or isnan(E_now) or isinf(E_now):
             raise Error("bench_euler_inflow_3d: non-finite output")
         var d_rho = Float64(rho_now - RHO0)
         if d_rho < 0.0:
@@ -270,63 +212,19 @@ def main() raises:
     var rho_rel = max_rho_dev / Float64(RHO0)
     var rhou_rel = max_rhou_dev / Float64(RHO0 * U0)
     var E_rel = max_E_dev / Float64(E0)
-    print(
-        "  max |rho - rho0| / rho0       =",
-        rho_rel,
-        "  (threshold",
-        RHO_REL_TOL,
-        ")",
-    )
-    print(
-        "  max |rhou - rho0*u0| / rho0*u0=",
-        rhou_rel,
-        "  (threshold",
-        RHOU_REL_TOL,
-        ")",
-    )
-    print(
-        "  max |rho*v|, |rho*w|          =",
-        max_rhovw,
-        "  (threshold",
-        RHOVW_TOL,
-        ")",
-    )
-    print(
-        "  max |E - E0| / E0             =",
-        E_rel,
-        "  (threshold",
-        E_REL_TOL,
-        ")",
-    )
+    print("  max |rho - rho0| / rho0       =", rho_rel, "  (threshold", RHO_REL_TOL, ")")
+    print("  max |rhou - rho0*u0| / rho0*u0=", rhou_rel, "  (threshold", RHOU_REL_TOL, ")")
+    print("  max |rho*v|, |rho*w|          =", max_rhovw, "  (threshold", RHOVW_TOL, ")")
+    print("  max |E - E0| / E0             =", E_rel, "  (threshold", E_REL_TOL, ")")
 
     if rho_rel > RHO_REL_TOL:
-        raise Error(
-            "bench_euler_inflow_3d FAILED: rho rel err "
-            + String(rho_rel)
-            + " > "
-            + String(RHO_REL_TOL)
-        )
+        raise Error("bench_euler_inflow_3d FAILED: rho rel err " + String(rho_rel) + " > " + String(RHO_REL_TOL))
     if rhou_rel > RHOU_REL_TOL:
-        raise Error(
-            "bench_euler_inflow_3d FAILED: rhou rel err "
-            + String(rhou_rel)
-            + " > "
-            + String(RHOU_REL_TOL)
-        )
+        raise Error("bench_euler_inflow_3d FAILED: rhou rel err " + String(rhou_rel) + " > " + String(RHOU_REL_TOL))
     if max_rhovw > RHOVW_TOL:
-        raise Error(
-            "bench_euler_inflow_3d FAILED: rhov/rhow drift "
-            + String(max_rhovw)
-            + " > "
-            + String(RHOVW_TOL)
-        )
+        raise Error("bench_euler_inflow_3d FAILED: rhov/rhow drift " + String(max_rhovw) + " > " + String(RHOVW_TOL))
     if E_rel > E_REL_TOL:
-        raise Error(
-            "bench_euler_inflow_3d FAILED: E rel err "
-            + String(E_rel)
-            + " > "
-            + String(E_REL_TOL)
-        )
+        raise Error("bench_euler_inflow_3d FAILED: E rel err " + String(E_rel) + " > " + String(E_REL_TOL))
 
     print("=== bench_euler_inflow_3d PASSED ===")
     mpi.finalize()

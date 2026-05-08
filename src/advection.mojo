@@ -31,13 +31,7 @@ struct Advection(ImplicitlyCopyable, Physics):
     # use BC_OUTFLOW / BC_WALL are unaffected.
     var inflow_q: Float32
 
-    def __init__(
-        out self,
-        vx: Float32,
-        vy: Float32,
-        vz: Float32,
-        inflow_q: Float32 = Float32(0.0),
-    ):
+    def __init__(out self, vx: Float32, vy: Float32, vz: Float32, inflow_q: Float32 = Float32(0.0)):
         self.vx = vx
         self.vy = vy
         self.vz = vz
@@ -46,9 +40,7 @@ struct Advection(ImplicitlyCopyable, Physics):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[
-        origin: MutOrigin
-    ](self, target: UnsafePointer[NoneType, origin]):
+    def _to_device_type[origin: MutOrigin](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -65,11 +57,7 @@ struct Advection(ImplicitlyCopyable, Physics):
     # Returns a CFL-based dt estimate from this cell; the caller may
     # disregard it for advection where the face-flux constraint is
     # already tighter.
-    def internal_flux(
-        self,
-        q: UnsafePointer[Float32, MutAnyOrigin],
-        flux: UnsafePointer[Float32, MutAnyOrigin],
-    ) -> Float32:
+    def internal_flux(self, q: UnsafePointer[Float32, MutAnyOrigin], flux: UnsafePointer[Float32, MutAnyOrigin]) -> Float32:
         var q0 = q[0]
         flux[0 * 1 + 0] = self.vx * q0  # F^x_0
         flux[1 * 1 + 0] = self.vy * q0  # F^y_0
@@ -107,15 +95,7 @@ struct Advection(ImplicitlyCopyable, Physics):
     #   numerically unstable when v.n < 0 along part of the boundary
     #   (it pulled spurious flux into the domain proportional to
     #   q_int).  See README Limitations for the bug discovery.
-    def boundary_flux(
-        self,
-        q_int: UnsafePointer[Float32, MutAnyOrigin],
-        bc_type: Int32,
-        nx: Float32,
-        ny: Float32,
-        nz: Float32,
-        flux: UnsafePointer[Float32, MutAnyOrigin],
-    ) -> Float32:
+    def boundary_flux(self, q_int: UnsafePointer[Float32, MutAnyOrigin], bc_type: Int32, nx: Float32, ny: Float32, nz: Float32, flux: UnsafePointer[Float32, MutAnyOrigin]) -> Float32:
         var nc = self.vx * nx + self.vy * ny + self.vz * nz
         var absnc = nc if nc >= Float32(0.0) else -nc
         var q_ghost: Float32
@@ -128,24 +108,12 @@ struct Advection(ImplicitlyCopyable, Physics):
             # half so the flux upwinds purely from the interior when
             # vn >= 0 and is exactly zero when vn < 0.
             q_ghost = Float32(0.0)
-        flux[0] = Float32(0.5) * (
-            (nc + absnc) * q_int[0] + (nc - absnc) * q_ghost
-        )
+        flux[0] = Float32(0.5) * ((nc + absnc) * q_int[0] + (nc - absnc) * q_ghost)
         return absnc
 
     # Pure hyperbolic conservation law -- no source.
-    def source_term(
-        self,
-        q: UnsafePointer[Float32, MutAnyOrigin],
-        x: Float32,
-        y: Float32,
-        z: Float32,
-        source_out: UnsafePointer[Float32, MutAnyOrigin],
-    ):
+    def source_term(self, q: UnsafePointer[Float32, MutAnyOrigin], x: Float32, y: Float32, z: Float32, source_out: UnsafePointer[Float32, MutAnyOrigin]):
         source_out[0] = Float32(0.0)
 
-    def limit_state(
-        self,
-        q: UnsafePointer[Float32, MutAnyOrigin],
-    ):
+    def limit_state(self, q: UnsafePointer[Float32, MutAnyOrigin]):
         pass

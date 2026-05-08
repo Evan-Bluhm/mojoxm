@@ -93,17 +93,7 @@ def launch_advection_volume_rhs_2d[
 ) raises:
     var total = num_elements * NP
     comptime _kernel = advection_volume_rhs_kernel_2d[NP]
-    ctx.enqueue_function[_kernel](
-        q,
-        elem_invJ,
-        D_ref,
-        num_elements,
-        vx,
-        vy,
-        vol_out,
-        grid_dim=ceildiv(total, 256),
-        block_dim=256,
-    )
+    ctx.enqueue_function[_kernel](q, elem_invJ, D_ref, num_elements, vx, vy, vol_out, grid_dim=ceildiv(total, 256), block_dim=256)
 
 
 # ----------------------------------------------------------------------
@@ -327,20 +317,7 @@ def launch_advection_face_flux_2d[
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = advection_face_flux_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel](
-        q,
-        face_elem,
-        face_elem_node,
-        face_normal,
-        face_bc_type,
-        num_faces,
-        vx,
-        vy,
-        inflow_q,
-        fstar_out,
-        grid_dim=ceildiv(total, 256),
-        block_dim=256,
-    )
+    ctx.enqueue_function[_kernel](q, face_elem, face_elem_node, face_normal, face_bc_type, num_faces, vx, vy, inflow_q, fstar_out, grid_dim=ceildiv(total, 256), block_dim=256)
 
 
 # ----------------------------------------------------------------------

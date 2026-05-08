@@ -45,11 +45,7 @@ comptime CONST_TOL: Float32 = Float32(1.0e-6)
 comptime MEAN_TOL: Float32 = Float32(1.0e-5)
 
 
-def fill_constant_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-):
+def fill_constant_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -65,11 +61,7 @@ def fill_constant_kernel(
     q[base + 4] = Float32(2.5)
 
 
-def fill_perturbed_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-):
+def fill_perturbed_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -107,36 +99,10 @@ def main() raises:
     for k in range(NP):
         node_weights_host.append(node_weights[k])
 
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(0, 1, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
-    var physics = Euler(
-        Float32(1.4),
-        Float32(1.0e-6),
-        Float32(1.0e-6),
-        FLUX_HLLEC,
-        False,
-    )
-    var solver = Solver[Euler, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var mesh = Mesh[P](ctx, build_partition(0, 1, NX, NY, NZ), LX, LY, LZ, BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
+    var physics = Euler(Float32(1.4), Float32(1.0e-6), Float32(1.0e-6), FLUX_HLLEC, False)
+    var solver = Solver[Euler, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
     solver.enable_cell_limiter(True, Float32(0.0))  # raw BJ, eps=0
 
     var num_owned = solver.num_owned_elements
@@ -165,18 +131,9 @@ def main() raises:
         var ad = d if d >= Float32(0.0) else -d
         if ad > max_err_const:
             max_err_const = ad
-    print(
-        "  constant-state max |rho - 1| =",
-        max_err_const,
-        "  (tol",
-        CONST_TOL,
-        ")",
-    )
+    print("  constant-state max |rho - 1| =", max_err_const, "  (tol", CONST_TOL, ")")
     if max_err_const > CONST_TOL:
-        raise Error(
-            "limiter_3d_test_p3 FAILED: constant state altered by limiter by "
-            + String(max_err_const)
-        )
+        raise Error("limiter_3d_test_p3 FAILED: constant state altered by limiter by " + String(max_err_const))
 
     # --- Test 2: perturbed state -> verify cell-mean preservation.
     solver.ctx.enqueue_function[fill_perturbed_kernel, fill_perturbed_kernel](
@@ -209,19 +166,9 @@ def main() raises:
         var ad = d if d >= Float32(0.0) else -d
         if ad > max_mean_drift:
             max_mean_drift = ad
-    print(
-        "  perturbed cell-mean max drift =",
-        max_mean_drift,
-        "  (tol",
-        MEAN_TOL,
-        ")",
-    )
+    print("  perturbed cell-mean max drift =", max_mean_drift, "  (tol", MEAN_TOL, ")")
     if max_mean_drift > MEAN_TOL:
-        raise Error(
-            "limiter_3d_test_p3 FAILED: cell mean drifted by "
-            + String(max_mean_drift)
-            + " under BJ limiter (conservation broken)"
-        )
+        raise Error("limiter_3d_test_p3 FAILED: cell mean drifted by " + String(max_mean_drift) + " under BJ limiter (conservation broken)")
 
     var max_change: Float32 = 0.0
     for e in range(num_owned):
@@ -232,18 +179,9 @@ def main() raises:
             var ad = d if d >= Float32(0.0) else -d
             if ad > max_change:
                 max_change = ad
-    print(
-        "  perturbed q max change vs IC =",
-        max_change,
-        "  (proves limiter fired)",
-    )
+    print("  perturbed q max change vs IC =", max_change, "  (proves limiter fired)")
     if max_change < Float32(0.01):
-        raise Error(
-            "limiter_3d_test_p3 FAILED: limiter appears not to have modified q"
-            " (max_change="
-            + String(max_change)
-            + "); test setup may be invalid"
-        )
+        raise Error("limiter_3d_test_p3 FAILED: limiter appears not to have modified q (max_change=" + String(max_change) + "); test setup may be invalid")
 
     print("=== limiter_3d_test_p3 PASSED ===")
     mpi.finalize()

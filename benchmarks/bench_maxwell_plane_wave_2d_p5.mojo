@@ -34,11 +34,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 from src.boundary import BoundaryConditions2D
 
@@ -70,18 +66,7 @@ def main() raises:
         return
 
     print("bench_maxwell_plane_wave_2d_p5 (2D TM plane wave, P=5, periodic)")
-    print(
-        "  P=",
-        P,
-        "  NP=",
-        num_tri_nodes_2d(P),
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "  T=",
-        T_FINAL,
-    )
+    print("  P=", P, "  NP=", num_tri_nodes_2d(P), "  mesh=", NX, "x", NY, "  T=", T_FINAL)
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -122,9 +107,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for i in range(n_q):
@@ -139,11 +122,7 @@ def main() raises:
     var dt = Float32(T_FINAL / Float64(num_steps))
     print("  dt=", dt, "  steps=", num_steps)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             maxwell_rk_stage_2d[P](
@@ -175,9 +154,7 @@ def main() raises:
                 var k_idx = (elem * NP_p + nn) * NC + c
                 var v = hptr_q[k_idx]
                 if isnan(v) or isinf(v):
-                    raise Error(
-                        "bench_maxwell_plane_wave_2d_p5: non-finite output"
-                    )
+                    raise Error("bench_maxwell_plane_wave_2d_p5: non-finite output")
                 var err = Float64(v - host_ic[k_idx])
                 sum_sq += err * err
                 var ic = Float64(host_ic[k_idx])
@@ -193,29 +170,12 @@ def main() raises:
     var l2_ic = sqrt(sum_ic / Float64(n_q))
     var rel = l2 / l2_ic
     print("  rel L2(state) =", rel, "  (threshold", L2_MAX_REL, ")")
-    print(
-        "  max |Ex|/|Ey|/|Bx|/|Bz| =",
-        max_zero_leak,
-        "  (threshold",
-        ZERO_COMPONENT_MAX,
-        ")",
-    )
+    print("  max |Ex|/|Ey|/|Bx|/|Bz| =", max_zero_leak, "  (threshold", ZERO_COMPONENT_MAX, ")")
 
     if rel > L2_MAX_REL:
-        raise Error(
-            String("bench_maxwell_plane_wave_2d_p5 FAILED: rel L2 ")
-            + String(rel)
-            + " > "
-            + String(L2_MAX_REL)
-        )
+        raise Error(String("bench_maxwell_plane_wave_2d_p5 FAILED: rel L2 ") + String(rel) + " > " + String(L2_MAX_REL))
     if max_zero_leak > ZERO_COMPONENT_MAX:
-        raise Error(
-            String("bench_maxwell_plane_wave_2d_p5 FAILED: zero-component ")
-            + "leakage "
-            + String(max_zero_leak)
-            + " > "
-            + String(ZERO_COMPONENT_MAX)
-        )
+        raise Error(String("bench_maxwell_plane_wave_2d_p5 FAILED: zero-component ") + "leakage " + String(max_zero_leak) + " > " + String(ZERO_COMPONENT_MAX))
 
     print("=== bench_maxwell_plane_wave_2d_p5 PASSED ===")
     mpi.finalize()

@@ -67,12 +67,7 @@ comptime PI_F: Float32 = 3.14159265358979323846
 comptime L2_MAX_REL: Float64 = 1.0e-3
 
 
-def entropy_wave_ic_kernel(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def entropy_wave_ic_kernel(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * N_P
     if idx >= total:
@@ -90,9 +85,7 @@ def entropy_wave_ic_kernel(
     var v = V0
     var w = W0
     var p = P0
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (
-        u * u + v * v + w * w
-    )
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
 
     var base = (e * N_P + nn) * 5
     q[base + 0] = rho
@@ -110,36 +103,10 @@ def _run(N: Int) raises -> Float64:
     var refs = build_reference_operators(nvtx)
     var ctx = DeviceContext()
 
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, N, N, N),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
-    var physics = Euler(
-        GAMMA,
-        Float32(1.0e-6),
-        Float32(1.0e-6),
-        FLUX_HLLEC,
-        False,
-    )
-    var solver = Solver[Euler](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, N, N, N), LX, LY, LZ, BoundaryConditions.periodic())
+    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
+    var physics = Euler(GAMMA, Float32(1.0e-6), Float32(1.0e-6), FLUX_HLLEC, False)
+    var solver = Solver[Euler](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
 
     solver.ctx.enqueue_function[entropy_wave_ic_kernel](
         solver.d_q.unsafe_ptr(),
@@ -152,13 +119,8 @@ def _run(N: Int) raises -> Float64:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * Euler.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -176,13 +138,8 @@ def _run(N: Int) raises -> Float64:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q,
-        solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -221,26 +178,11 @@ def main() raises:
     print("  N=16  rel L2 =", err16)
 
     if err8 > L2_MAX_REL:
-        raise Error(
-            "bench_euler_smooth_wave_3d FAILED: N=8 rel L2 "
-            + String(err8)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_euler_smooth_wave_3d FAILED: N=8 rel L2 " + String(err8) + " exceeds " + String(L2_MAX_REL))
     if err12 > L2_MAX_REL:
-        raise Error(
-            "bench_euler_smooth_wave_3d FAILED: N=12 rel L2 "
-            + String(err12)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_euler_smooth_wave_3d FAILED: N=12 rel L2 " + String(err12) + " exceeds " + String(L2_MAX_REL))
     if err16 > L2_MAX_REL:
-        raise Error(
-            "bench_euler_smooth_wave_3d FAILED: N=16 rel L2 "
-            + String(err16)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_euler_smooth_wave_3d FAILED: N=16 rel L2 " + String(err16) + " exceeds " + String(L2_MAX_REL))
 
     # Convergence rate between the two highest resolutions.  log is
     # natural log, but the ratio log(e_N/e_2N) / log(2N/N) is the same
@@ -248,12 +190,7 @@ def main() raises:
     var rate_12_16 = log(err12 / err16) / log(16.0 / 12.0)
     print("  rate (N=12 -> 16) =", rate_12_16, "  (expected >= 2.0 at P=2)")
     if rate_12_16 < 2.0:
-        raise Error(
-            String("bench_euler_smooth_wave_3d FAILED: convergence ")
-            + "rate "
-            + String(rate_12_16)
-            + " between N=12 and N=16 is below 2.0"
-        )
+        raise Error(String("bench_euler_smooth_wave_3d FAILED: convergence ") + "rate " + String(rate_12_16) + " between N=12 and N=16 is below 2.0")
 
     print("=== bench_euler_smooth_wave_3d PASSED ===")
     mpi.finalize()

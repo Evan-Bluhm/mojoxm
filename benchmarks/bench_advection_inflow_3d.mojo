@@ -27,19 +27,9 @@ from std.math import sqrt, ceildiv, isnan, isinf
 
 from src import mpi
 from src.partition import build_partition
-from src.reference import (
-    ReferenceElement,
-    num_tet_nodes,
-    build_reference_operators,
-    N_P,
-)
+from src.reference import ReferenceElement, num_tet_nodes, build_reference_operators, N_P
 from src.mesh import Mesh
-from src.boundary import (
-    BoundaryConditions,
-    BC_INFLOW,
-    BC_OUTFLOW,
-    BC_WALL,
-)
+from src.boundary import BoundaryConditions, BC_INFLOW, BC_OUTFLOW, BC_WALL
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.advection import Advection
@@ -78,18 +68,7 @@ def main() raises:
         return
 
     print("bench_advection_inflow_3d (BC_INFLOW + BC_OUTFLOW + BC_WALL)")
-    print(
-        "  P=2  mesh=",
-        NX,
-        "x",
-        NY,
-        "x",
-        NZ,
-        "  T=",
-        T_FINAL,
-        "  inflow_q=",
-        INFLOW_Q,
-    )
+    print("  P=2  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL, "  inflow_q=", INFLOW_Q)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -104,31 +83,10 @@ def main() raises:
         BC_WALL,
         BC_WALL,  # z
     )
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, Advection.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
     var physics = Advection(VX, VY, VZ, INFLOW_Q)
-    var solver = Solver[Advection](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[Advection](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
     # IC: q = 0 everywhere (default solver state).
     solver.d_q.enqueue_fill(Float32(0.0))
     solver.ctx.synchronize()
@@ -166,29 +124,12 @@ def main() raises:
     var mean_err = mean_q - Float64(INFLOW_Q)
     if mean_err < 0.0:
         mean_err = -mean_err
-    print(
-        "  max |q - inflow_q| =",
-        max_err,
-        "  mean q =",
-        mean_q,
-        "  |mean - 1| =",
-        mean_err,
-    )
+    print("  max |q - inflow_q| =", max_err, "  mean q =", mean_q, "  |mean - 1| =", mean_err)
 
     if max_err > Q_TOL:
-        raise Error(
-            String("bench_advection_inflow_3d FAILED: max |q-1| ")
-            + String(max_err)
-            + " > "
-            + String(Q_TOL)
-        )
+        raise Error(String("bench_advection_inflow_3d FAILED: max |q-1| ") + String(max_err) + " > " + String(Q_TOL))
     if mean_err > MEAN_TOL:
-        raise Error(
-            String("bench_advection_inflow_3d FAILED: |<q>-1| ")
-            + String(mean_err)
-            + " > "
-            + String(MEAN_TOL)
-        )
+        raise Error(String("bench_advection_inflow_3d FAILED: |<q>-1| ") + String(mean_err) + " > " + String(MEAN_TOL))
 
     print("=== bench_advection_inflow_3d PASSED ===")
     mpi.finalize()

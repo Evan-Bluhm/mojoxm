@@ -35,14 +35,7 @@ def main() raises:
     var size = mpi.world_size()
 
     var ctx = DeviceContext()
-    var patch = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
+    var patch = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, BoundaryConditions.periodic())
 
     for r in range(size):
         if r == rank:
@@ -76,12 +69,7 @@ def main() raises:
                 patch.halo_primary_count[4],
                 patch.halo_primary_count[5],
                 " sum=",
-                patch.halo_primary_count[0]
-                + patch.halo_primary_count[1]
-                + patch.halo_primary_count[2]
-                + patch.halo_primary_count[3]
-                + patch.halo_primary_count[4]
-                + patch.halo_primary_count[5],
+                patch.halo_primary_count[0] + patch.halo_primary_count[1] + patch.halo_primary_count[2] + patch.halo_primary_count[3] + patch.halo_primary_count[4] + patch.halo_primary_count[5],
             )
         mpi.barrier_world()
 

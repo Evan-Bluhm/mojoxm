@@ -20,11 +20,7 @@ from src import mpi
 from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd import mhd_rk_stage_2d
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -65,9 +61,7 @@ def check[P: Int]() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu.num_faces * NFP_e * NC)
     var hbuf = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr = hbuf.unsafe_ptr()
 
@@ -165,13 +159,7 @@ def check[P: Int]() raises:
             max_err = local_max
     print("    MHD Rusanov max |q - q_IC| =", max_err)
     if max_err > Float32(1.0e-4):
-        raise Error(
-            "MHD P="
-            + String(P)
-            + ": constant state not preserved (max err "
-            + String(max_err)
-            + ")"
-        )
+        raise Error("MHD P=" + String(P) + ": constant state not preserved (max err " + String(max_err) + ")")
 
 
 def main() raises:

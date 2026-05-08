@@ -56,12 +56,7 @@ from src import mpi
 from src.partition import build_partition
 from src.reference import N_P, build_reference_operators
 from src.mesh import Mesh
-from src.boundary import (
-    BoundaryConditions,
-    BC_INTERIOR,
-    BC_WALL,
-    BC_OUTFLOW,
-)
+from src.boundary import BoundaryConditions, BC_INTERIOR, BC_WALL, BC_OUTFLOW
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.euler import Euler, FLUX_HLLEC
@@ -130,9 +125,7 @@ def sod_ic_kernel(
     # Smooth right-state fraction s in [0, 1]; sharp-limit equivalent
     # when smooth_width -> 0.  The factor (tanh + 1) * 0.5 maps the
     # symmetric tanh to a 0->1 ramp centered at x = 0.5.
-    var s = (tanh((px - Float32(0.5)) / smooth_width) + Float32(1.0)) * Float32(
-        0.5
-    )
+    var s = (tanh((px - Float32(0.5)) / smooth_width) + Float32(1.0)) * Float32(0.5)
     var rho = rho_l + s * (rho_r - rho_l)
     var p = p_l + s * (p_r - p_l)
     var E = p / (gamma - Float32(1.0))  # velocities are zero
@@ -162,22 +155,8 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print(
-            "euler_sod: GPU DG Euler, P2 tet, HLLEC flux,",
-            size,
-            "rank(s)",
-        )
-        print(
-            "  global mesh: ",
-            NX,
-            "x",
-            NY,
-            "x",
-            NZ,
-            " cells -> ",
-            NX * NY * NZ * 6,
-            "tets",
-        )
+        print("euler_sod: GPU DG Euler, P2 tet, HLLEC flux,", size, "rank(s)")
+        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
         print("  BCs: x = transmissive outflow, y/z = slip walls")
 
     var nvtx = NvtxContext()
@@ -197,44 +176,14 @@ def main() raises:
     )
 
     nvtx.push_range("build_mesh")
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
     nvtx.pop_range()
 
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Euler.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
+    var halo = HaloExchange(ctx, mesh.part, Euler.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
 
-    var physics = Euler(
-        GAMMA,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-        FLUX_HLLEC,
-        True,
-        Float32(0.0),
-        Float32(0.0),
-        Float32(0.0),
-    )
+    var physics = Euler(GAMMA, MIN_DENSITY, MIN_PRESSURE, FLUX_HLLEC, True, Float32(0.0), Float32(0.0), Float32(0.0))
 
-    var solver = Solver[Euler](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[Euler](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
     # Shock stabilization: Barth-Jespersen slope limiter after every
     # RK stage.  Damps each element's nodal deviations by the tightest
     # theta that keeps every nodal value within the min/max cell
@@ -281,30 +230,13 @@ def main() raises:
     diag_linear.append(NamedComponent("total_energy", 4))
     var diag_maxabs = List[NamedComponent]()
     diag_maxabs.append(NamedComponent("max_density", 0))
-    var diag = DiagnosticsWriter[Euler](
-        solver,
-        "output/diagnostics.csv",
-        diag_linear,
-        List[NamedComponent](),
-        diag_maxabs,
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[Euler](solver, "output/diagnostics.csv", diag_linear, List[NamedComponent](), diag_maxabs, LX, LY, LZ)
 
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Euler](
-        solver,
-        writer,
-        diag,
-        dt,
-        T_FINAL,
-        NUM_FRAMES,
-        nvtx,
-    )
+    var result = run_ssprk3_loop_with_diagnostics[Euler](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
 
     writer.finalize("output/solution.pvd", nvtx)
 
@@ -350,19 +282,9 @@ def main() raises:
         names.append(String("rho"))
         names.append(String("p"))
         names.append(String("|v|"))
-        write_snapshot_3d_multi(
-            solver=solver,
-            field_names=names,
-            field_data=fields,
-            path=String("output/snapshot_t_final.vtu"),
-            nvtx=nvtx,
-        )
+        write_snapshot_3d_multi(solver=solver, field_names=names, field_data=fields, path=String("output/snapshot_t_final.vtu"), nvtx=nvtx)
         if rank == 0:
-            print(
-                "  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=",
-                T_FINAL,
-                ")",
-            )
+            print("  wrote output/snapshot_t_final.vtu (rho + p + |v|, t=", T_FINAL, ")")
 
     if rank == 0:
         result.print_summary()
@@ -383,10 +305,7 @@ def main() raises:
     mpi.finalize()
 
 
-def _validate_boundary_states(
-    mut solver: Solver[Euler],
-    mut nvtx: NvtxContext,
-) raises:
+def _validate_boundary_states(mut solver: Solver[Euler], mut nvtx: NvtxContext) raises:
     var num_owned = solver.num_owned_elements
     var h_q = List[Float32]()
     for _ in range(num_owned * N_P):
@@ -417,24 +336,8 @@ def _validate_boundary_states(
                     rho_right_min = r
                 if r > rho_right_max:
                     rho_right_max = r
-    print(
-        "  density at -x boundary cells: [",
-        rho_left_min,
-        ",",
-        rho_left_max,
-        "]  (expected ~",
-        RHO_L,
-        ")",
-    )
-    print(
-        "  density at +x boundary cells: [",
-        rho_right_min,
-        ",",
-        rho_right_max,
-        "]  (expected ~",
-        RHO_R,
-        ")",
-    )
+    print("  density at -x boundary cells: [", rho_left_min, ",", rho_left_max, "]  (expected ~", RHO_L, ")")
+    print("  density at +x boundary cells: [", rho_right_min, ",", rho_right_max, "]  (expected ~", RHO_R, ")")
 
 
 # ----------------------------------------------------------------------
@@ -448,11 +351,7 @@ def _validate_boundary_states(
 # ----------------------------------------------------------------------
 
 
-def _dump_density_line(
-    mut solver: Solver[Euler],
-    mut nvtx: NvtxContext,
-    out_path: String,
-) raises:
+def _dump_density_line(mut solver: Solver[Euler], mut nvtx: NvtxContext, out_path: String) raises:
     var num_owned = solver.num_owned_elements
     var total_dof = num_owned * N_P
     var h_q = List[Float32]()

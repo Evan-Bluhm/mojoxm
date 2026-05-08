@@ -143,20 +143,8 @@ def main() raises:
 
     if rank == 0:
         print("advection_gaussian: GPU DG advection, P2 tet,", size, "rank(s)")
-        print(
-            "  global mesh: ",
-            NX,
-            "x",
-            NY,
-            "x",
-            NZ,
-            " cells -> ",
-            NX * NY * NZ * 6,
-            "tets",
-        )
-        print(
-            "  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P
-        )
+        print("  global mesh: ", NX, "x", NY, "x", NZ, " cells -> ", NX * NY * NZ * 6, "tets")
+        print("  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P)
 
     var nvtx = NvtxContext()
     if rank == 0:
@@ -169,69 +157,26 @@ def main() raises:
     nvtx.pop_range()
 
     nvtx.push_range("build_mesh")
-    var mesh = Mesh(
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        BoundaryConditions.periodic(),
-    )
+    var mesh = Mesh(ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, BoundaryConditions.periodic())
     nvtx.pop_range()
 
     nvtx.push_range("halo_setup")
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        Advection.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-    )
+    var halo = HaloExchange(ctx, mesh.part, Advection.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr())
     nvtx.pop_range()
 
     if rank == 0:
-        print(
-            "  proc-grid: ",
-            mesh.part.px,
-            "x",
-            mesh.part.py,
-            "x",
-            mesh.part.pz,
-            "  owned cubes per rank: ",
-            mesh.part.nx,
-            "x",
-            mesh.part.ny,
-            "x",
-            mesh.part.nz,
-        )
-        print(
-            "  per-rank: ",
-            mesh.num_owned_elements,
-            "owned elements (halo=",
-            mesh.num_halo_elements,
-            ", interior=",
-            mesh.num_interior_elements,
-            ")",
-        )
+        print("  proc-grid: ", mesh.part.px, "x", mesh.part.py, "x", mesh.part.pz, "  owned cubes per rank: ", mesh.part.nx, "x", mesh.part.ny, "x", mesh.part.nz)
+        print("  per-rank: ", mesh.num_owned_elements, "owned elements (halo=", mesh.num_halo_elements, ", interior=", mesh.num_interior_elements, ")")
 
     var physics = Advection(VX, VY, VZ)
 
     nvtx.push_range("solver_setup")
-    var solver = Solver[Advection](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        refs.D_ref^,
-        refs.Lift_ref^,
-        refs.node_weights^,
-    )
+    var solver = Solver[Advection](ctx^, mesh^, halo^, physics^, refs.D_ref^, refs.Lift_ref^, refs.node_weights^)
     nvtx.pop_range()
 
     # Initial condition on owned elements.
     nvtx.push_range("initial_condition")
-    var inv_two_sigma2 = Float32(1.0) / (
-        Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA
-    )
+    var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
     solver.ctx.enqueue_function[gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
@@ -265,30 +210,13 @@ def main() raises:
     diag_comps.append(NamedComponent("mass", 0))
     var diag_squared = List[NamedComponent]()
     diag_squared.append(NamedComponent("l2_squared", 0))
-    var diag = DiagnosticsWriter[Advection](
-        solver,
-        "output/diagnostics.csv",
-        diag_comps,
-        diag_squared,
-        List[NamedComponent](),
-        LX,
-        LY,
-        LZ,
-    )
+    var diag = DiagnosticsWriter[Advection](solver, "output/diagnostics.csv", diag_comps, diag_squared, List[NamedComponent](), LX, LY, LZ)
 
     var dt = choose_dt()
     if rank == 0:
         print("  dt =", dt, " (", Int(T_FINAL / dt), " steps estimated)")
 
-    var result = run_ssprk3_loop_with_diagnostics[Advection](
-        solver,
-        writer,
-        diag,
-        dt,
-        T_FINAL,
-        NUM_FRAMES,
-        nvtx,
-    )
+    var result = run_ssprk3_loop_with_diagnostics[Advection](solver, writer, diag, dt, T_FINAL, NUM_FRAMES, nvtx)
 
     writer.finalize("output/solution.pvd", nvtx)
 

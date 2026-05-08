@@ -61,15 +61,7 @@ def main() raises:
                 " owned=",
                 part.num_owned_cubes(),
             )
-            print(
-                "  neighbours -x/+x/-y/+y/-z/+z =",
-                part.neighbour_minus_x,
-                part.neighbour_plus_x,
-                part.neighbour_minus_y,
-                part.neighbour_plus_y,
-                part.neighbour_minus_z,
-                part.neighbour_plus_z,
-            )
+            print("  neighbours -x/+x/-y/+y/-z/+z =", part.neighbour_minus_x, part.neighbour_plus_x, part.neighbour_minus_y, part.neighbour_plus_y, part.neighbour_minus_z, part.neighbour_plus_z)
         mpi.barrier_world()
 
     mpi.finalize()

@@ -41,18 +41,9 @@ from std.math import sqrt, ceildiv, tanh, isnan, isinf
 
 from src import mpi
 from src.partition import build_partition
-from src.reference import (
-    ReferenceElement,
-    to_float32,
-    num_tet_nodes,
-)
+from src.reference import ReferenceElement, to_float32, num_tet_nodes
 from src.mesh import Mesh
-from src.boundary import (
-    BoundaryConditions,
-    BC_INTERIOR,
-    BC_WALL,
-    BC_OUTFLOW,
-)
+from src.boundary import BoundaryConditions, BC_INTERIOR, BC_WALL, BC_OUTFLOW
 from src.halo_exchange import HaloExchange
 from src.solver import Solver
 from src.mhd import IdealMHD
@@ -93,12 +84,7 @@ comptime RHO_MAX_OK: Float32 = Float32(1.6)
 comptime MASS_TOL_REL: Float64 = 2.5e-2
 
 
-def brio_wu_ic_kernel_p3(
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin],
-    num_owned: Int,
-):
+def brio_wu_ic_kernel_p3(q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], elem_node_xyz: UnsafePointer[Float32, MutAnyOrigin], num_owned: Int):
     var idx = Int(global_idx.x)
     var total = num_owned * NP
     if idx >= total:
@@ -107,17 +93,13 @@ def brio_wu_ic_kernel_p3(
     var nn = idx % NP
     var e = Int(owned_elem_ids[i])
     var px = elem_node_xyz[(e * NP + nn) * 3 + 0]
-    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(
-        0.5
-    )
+    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(0.5)
     var rho = RHO_L + s * (RHO_R - RHO_L)
     var p = P_L + s * (P_R - P_L)
     var by = BY_L + s * (BY_R - BY_L)
     var bx = BX
     var bz = Float32(0.0)
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (
-        bx * bx + by * by + bz * bz
-    )
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (bx * bx + by * by + bz * bz)
     var base = (e * NP + nn) * 9
     q[base + 0] = rho
     q[base + 1] = Float32(0.0)
@@ -140,9 +122,7 @@ def main() raises:
         return
 
     print("bench_mhd_brio_wu_3d_p3 (3D Brio-Wu MHD at P=3)")
-    print(
-        "  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL
-    )
+    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -153,45 +133,11 @@ def main() raises:
     var Lift_ref = to_float32(re.Lift_ref)
     var node_weights = to_float32(re.node_weights)
 
-    var bcs = BoundaryConditions(
-        BC_OUTFLOW,
-        BC_OUTFLOW,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-        BC_WALL,
-    )
-    var mesh = Mesh[P](
-        ctx,
-        build_partition(rank, size, NX, NY, NZ),
-        LX,
-        LY,
-        LZ,
-        bcs,
-    )
-    var halo = HaloExchange(
-        ctx,
-        mesh.part,
-        IdealMHD.NUM_COMPONENTS,
-        mesh.d_perm.unsafe_ptr(),
-        bcs,
-    )
-    var physics = IdealMHD(
-        GAMMA,
-        MIN_DENSITY,
-        MIN_PRESSURE,
-        C_H,
-        ALPHA_D,
-    )
-    var solver = Solver[IdealMHD, P](
-        ctx^,
-        mesh^,
-        halo^,
-        physics^,
-        D_ref^,
-        Lift_ref^,
-        node_weights^,
-    )
+    var bcs = BoundaryConditions(BC_OUTFLOW, BC_OUTFLOW, BC_WALL, BC_WALL, BC_WALL, BC_WALL)
+    var mesh = Mesh[P](ctx, build_partition(rank, size, NX, NY, NZ), LX, LY, LZ, bcs)
+    var halo = HaloExchange(ctx, mesh.part, IdealMHD.NUM_COMPONENTS, mesh.d_perm.unsafe_ptr(), bcs)
+    var physics = IdealMHD(GAMMA, MIN_DENSITY, MIN_PRESSURE, C_H, ALPHA_D)
+    var solver = Solver[IdealMHD, P](ctx^, mesh^, halo^, physics^, D_ref^, Lift_ref^, node_weights^)
     solver.enable_cell_limiter(True, Float32(0.1))
 
     solver.ctx.enqueue_function[brio_wu_ic_kernel_p3](
@@ -272,46 +218,20 @@ def main() raises:
     print("  mass(IC)=", mass_ic, "  mass(t=T)=", mass_fin)
 
     if bx_max_err > BX_TOL:
-        raise Error(
-            String("bench_mhd_brio_wu_3d_p3 FAILED: Bx drifted ")
-            + String(bx_max_err)
-            + " > tol "
-            + String(BX_TOL)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d_p3 FAILED: Bx drifted ") + String(bx_max_err) + " > tol " + String(BX_TOL))
     if psi_max > PSI_TOL:
-        raise Error(
-            String("bench_mhd_brio_wu_3d_p3 FAILED: psi ")
-            + String(psi_max)
-            + " > tol "
-            + String(PSI_TOL)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d_p3 FAILED: psi ") + String(psi_max) + " > tol " + String(PSI_TOL))
     if rho_min < RHO_MIN_OK:
-        raise Error(
-            String("bench_mhd_brio_wu_3d_p3 FAILED: rho_min ")
-            + String(rho_min)
-            + " < "
-            + String(RHO_MIN_OK)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d_p3 FAILED: rho_min ") + String(rho_min) + " < " + String(RHO_MIN_OK))
     if rho_max > RHO_MAX_OK:
-        raise Error(
-            String("bench_mhd_brio_wu_3d_p3 FAILED: rho_max ")
-            + String(rho_max)
-            + " > "
-            + String(RHO_MAX_OK)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d_p3 FAILED: rho_max ") + String(rho_max) + " > " + String(RHO_MAX_OK))
 
     var dmass = mass_fin - mass_ic
     if dmass < 0.0:
         dmass = -dmass
     var rel = dmass / mass_ic
     if rel > MASS_TOL_REL:
-        raise Error(
-            String("bench_mhd_brio_wu_3d_p3 FAILED: mass drift ")
-            + String(rel * 100.0)
-            + "%% > tol "
-            + String(MASS_TOL_REL * 100.0)
-            + "%%"
-        )
+        raise Error(String("bench_mhd_brio_wu_3d_p3 FAILED: mass drift ") + String(rel * 100.0) + "%% > tol " + String(MASS_TOL_REL * 100.0) + "%%")
 
     print("=== bench_mhd_brio_wu_3d_p3 PASSED ===")
     mpi.finalize()

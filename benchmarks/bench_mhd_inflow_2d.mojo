@@ -27,18 +27,9 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_mhd import mhd_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
-from src.boundary import (
-    BoundaryConditions2D,
-    BC_INFLOW,
-    BC_OUTFLOW,
-    BC_INTERIOR,
-)
+from src.boundary import BoundaryConditions2D, BC_INFLOW, BC_OUTFLOW, BC_INTERIOR
 
 
 comptime P = 2
@@ -70,20 +61,7 @@ def main() raises:
         return
 
     print("bench_mhd_inflow_2d (BC_INFLOW preservation, plain MHD NC=6)")
-    print(
-        "  P=",
-        P,
-        "  mesh=",
-        NX,
-        "x",
-        NY,
-        "   U0=",
-        U0,
-        "   B0=",
-        B0,
-        "   T=",
-        T_FINAL,
-    )
+    print("  P=", P, "  mesh=", NX, "x", NY, "   U0=", U0, "   B0=", B0, "   T=", T_FINAL)
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -120,9 +98,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -138,11 +114,7 @@ def main() raises:
     var dt = Float32(T_FINAL / Float64(num_steps))
     print("  c_f=", cf, "  steps=", num_steps, "  dt=", dt)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             mhd_rk_stage_2d[P](
@@ -192,12 +164,7 @@ def main() raises:
     print("  max relative drift   =", max_drift, "  (threshold", REL_TOL, ")")
 
     if max_drift > REL_TOL:
-        raise Error(
-            "bench_mhd_inflow_2d FAILED: max relative drift "
-            + String(max_drift)
-            + " > "
-            + String(REL_TOL)
-        )
+        raise Error("bench_mhd_inflow_2d FAILED: max relative drift " + String(max_drift) + " > " + String(REL_TOL))
 
     print("=== bench_mhd_inflow_2d PASSED ===")
     mpi.finalize()

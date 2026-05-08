@@ -33,12 +33,7 @@
 # Run with: `make test-reference` (hooked into the top-level Makefile).
 # ======================================================================
 
-from src.reference import (
-    ReferenceElement,
-    mat_inv,
-    num_tet_nodes,
-    num_tri_nodes,
-)
+from src.reference import ReferenceElement, mat_inv, num_tet_nodes, num_tri_nodes
 from std.math import sqrt
 
 
@@ -69,15 +64,7 @@ def _test_sizes(P: Int) raises:
     var expected_np = (P + 1) * (P + 2) * (P + 3) // 6
     var expected_nfp = (P + 1) * (P + 2) // 2
     if np != expected_np:
-        raise Error(
-            "P="
-            + String(P)
-            + ": num_tet_nodes mismatch ("
-            + String(np)
-            + " vs "
-            + String(expected_np)
-            + ")"
-        )
+        raise Error("P=" + String(P) + ": num_tet_nodes mismatch (" + String(np) + " vs " + String(expected_np) + ")")
     if nfp != expected_nfp:
         raise Error("P=" + String(P) + ": num_tri_nodes mismatch")
     print("  P=", P, " sizes OK (N_P=", np, ", N_FP=", nfp, ")")
@@ -126,19 +113,8 @@ def _test_node_positions(re: ReferenceElement, P: Int) raises:
     var min_d = sqrt(min_d2)
     var expected_d = 0.5 / Float64(P)  # half a grid spacing lower bound
     if min_d < expected_d * 0.99:
-        raise Error(
-            "min node distance "
-            + String(min_d)
-            + " < expected "
-            + String(expected_d)
-        )
-    print(
-        "  node positions OK (",
-        n_nodes,
-        " nodes, min sep=",
-        Float32(min_d),
-        ")",
-    )
+        raise Error("min node distance " + String(min_d) + " < expected " + String(expected_d))
+    print("  node positions OK (", n_nodes, " nodes, min sep=", Float32(min_d), ")")
 
 
 def _test_face_to_elem_coverage(re: ReferenceElement) raises:
@@ -150,15 +126,7 @@ def _test_face_to_elem_coverage(re: ReferenceElement) raises:
         for l in range(n_fp):
             var e = Int(re.face_to_elem[f * n_fp + l])
             if e < 0 or e >= n_nodes:
-                raise Error(
-                    "face_to_elem["
-                    + String(f)
-                    + ","
-                    + String(l)
-                    + "] = "
-                    + String(e)
-                    + " is out of range"
-                )
+                raise Error("face_to_elem[" + String(f) + "," + String(l) + "] = " + String(e) + " is out of range")
     print("  face_to_elem coverage OK")
 
 
@@ -185,13 +153,7 @@ def _test_node_weights_partition(re: ReferenceElement, P: Int, np: Int) raises:
     var wsum_err = wsum - 1.0
     var a_wsum_err = wsum_err if wsum_err >= 0.0 else -wsum_err
     if a_wsum_err > 1.0e-12:
-        raise Error(
-            "P="
-            + String(P)
-            + ": node_weights sum "
-            + String(wsum)
-            + " != 1 (partition of unity broken)"
-        )
+        raise Error("P=" + String(P) + ": node_weights sum " + String(wsum) + " != 1 (partition of unity broken)")
     if P == 2:
         var v_target = -1.0 / 20.0
         var e_target = 1.0 / 5.0
@@ -200,25 +162,13 @@ def _test_node_weights_partition(re: ReferenceElement, P: Int, np: Int) raises:
             var err = w - v_target
             var a_err = err if err >= 0.0 else -err
             if a_err > 1.0e-12:
-                raise Error(
-                    "P=2 vertex "
-                    + String(i)
-                    + " weight "
-                    + String(w)
-                    + " expected -1/20"
-                )
+                raise Error("P=2 vertex " + String(i) + " weight " + String(w) + " expected -1/20")
         for i in range(4, 10):
             var w = re.node_weights[i]
             var err = w - e_target
             var a_err = err if err >= 0.0 else -err
             if a_err > 1.0e-12:
-                raise Error(
-                    "P=2 edge-midpoint "
-                    + String(i)
-                    + " weight "
-                    + String(w)
-                    + " expected 1/5"
-                )
+                raise Error("P=2 edge-midpoint " + String(i) + " weight " + String(w) + " expected 1/5")
     print("  node_weights partition-of-unity OK (sum=", wsum, ")")
 
 
@@ -257,14 +207,7 @@ def _test_mat_inv() raises:
         if d < 0.0:
             d = -d
         if d > tol:
-            raise Error(
-                "mat_inv 2x2 mismatch at index "
-                + String(k)
-                + ": got "
-                + String(ainv[k])
-                + " expected "
-                + String(expect_a[k])
-            )
+            raise Error("mat_inv 2x2 mismatch at index " + String(k) + ": got " + String(ainv[k]) + " expected " + String(expect_a[k]))
 
     # (2) Identity of size 3.
     var ident = List[Float64]()
@@ -280,14 +223,7 @@ def _test_mat_inv() raises:
             if d < 0.0:
                 d = -d
             if d > tol:
-                raise Error(
-                    "mat_inv I3 mismatch at ("
-                    + String(i)
-                    + ","
-                    + String(j)
-                    + "): got "
-                    + String(got)
-                )
+                raise Error("mat_inv I3 mismatch at (" + String(i) + "," + String(j) + "): got " + String(got))
 
     # (3) Pivoting required: [[0, 2], [3, 4]].  Inverse is
     #     [[-2/3, 1/3], [1/2, 0]].  The (0,0) zero forces a row swap
@@ -308,14 +244,7 @@ def _test_mat_inv() raises:
         if d < 0.0:
             d = -d
         if d > tol:
-            raise Error(
-                "mat_inv pivot 2x2 mismatch at index "
-                + String(k)
-                + ": got "
-                + String(binv[k])
-                + " expected "
-                + String(expect_b[k])
-            )
+            raise Error("mat_inv pivot 2x2 mismatch at index " + String(k) + ": got " + String(binv[k]) + " expected " + String(expect_b[k]))
 
     print("  mat_inv direct invariants OK (2x2, I3, pivoting case)")
 

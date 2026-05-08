@@ -33,11 +33,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_sw import sw_rk_stage_hll_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -98,9 +94,7 @@ def _run(NX: Int) raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -118,11 +112,7 @@ def _run(NX: Int) raises -> Float64:
     var h_min_f = Float32(H_MIN)
     # BC_INFLOW ghosts (unused under periodic BCs but required by signature).
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q.unsafe_ptr(),
-        d_q1.unsafe_ptr(),
-        d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q.unsafe_ptr(), d_q1.unsafe_ptr(), d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             sw_rk_stage_hll_2d[P](
@@ -173,15 +163,7 @@ def _run(NX: Int) raises -> Float64:
         dmass = -dmass
     var mass_rel = dmass / mass_ic_local
     if mass_rel > MASS_TOL_REL:
-        raise Error(
-            String("bench_shallow_water_wave_2d FAILED: mass drift ")
-            + String(mass_rel)
-            + " > tol "
-            + String(MASS_TOL_REL)
-            + " (at NX="
-            + String(NX)
-            + ")"
-        )
+        raise Error(String("bench_shallow_water_wave_2d FAILED: mass drift ") + String(mass_rel) + " > tol " + String(MASS_TOL_REL) + " (at NX=" + String(NX) + ")")
 
     return rel_l2
 
@@ -206,26 +188,11 @@ def main() raises:
     print("  NX=64  rel L2 =", err64)
 
     if err32 > L2_MAX_REL:
-        raise Error(
-            "bench_shallow_water_wave_2d FAILED: NX=32 rel L2 "
-            + String(err32)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_shallow_water_wave_2d FAILED: NX=32 rel L2 " + String(err32) + " exceeds " + String(L2_MAX_REL))
     if err48 > L2_MAX_REL:
-        raise Error(
-            "bench_shallow_water_wave_2d FAILED: NX=48 rel L2 "
-            + String(err48)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_shallow_water_wave_2d FAILED: NX=48 rel L2 " + String(err48) + " exceeds " + String(L2_MAX_REL))
     if err64 > L2_MAX_REL:
-        raise Error(
-            "bench_shallow_water_wave_2d FAILED: NX=64 rel L2 "
-            + String(err64)
-            + " exceeds "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_shallow_water_wave_2d FAILED: NX=64 rel L2 " + String(err64) + " exceeds " + String(L2_MAX_REL))
 
     print("=== bench_shallow_water_wave_2d PASSED ===")
     mpi.finalize()

@@ -26,11 +26,7 @@ from src.local_mesh_2d import LocalMesh2D
 from src.local_mesh_2d_gpu import LocalMesh2DGpu
 from src.local_mesh_2d_gpu_maxwell import maxwell_rk_stage_2d
 from src.ssprk3 import ssprk3_stage_plans
-from src.reference_2d import (
-    ReferenceElement2D,
-    num_tri_nodes_2d,
-    num_edge_nodes,
-)
+from src.reference_2d import ReferenceElement2D, num_tri_nodes_2d, num_edge_nodes
 from src.reference_2d_gpu import ReferenceElement2DGpu
 
 
@@ -77,9 +73,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -93,11 +87,7 @@ def main() raises:
     var dt = Float32(T_FINAL / Float64(num_steps))
     print("  dt=", dt, "  steps=", num_steps)
 
-    var stage_plans = ssprk3_stage_plans(
-        d_q=d_q.unsafe_ptr(),
-        d_q1=d_q1.unsafe_ptr(),
-        d_q2=d_q2.unsafe_ptr(),
-    )
+    var stage_plans = ssprk3_stage_plans(d_q=d_q.unsafe_ptr(), d_q1=d_q1.unsafe_ptr(), d_q2=d_q2.unsafe_ptr())
     for _ in range(num_steps):
         for stage in stage_plans:
             maxwell_rk_stage_2d[P](
@@ -132,20 +122,7 @@ def main() raises:
         var bx = hptr_q[i * 6 + 3]
         var by = hptr_q[i * 6 + 4]
         var bz = hptr_q[i * 6 + 5]
-        if (
-            isnan(ex)
-            or isinf(ex)
-            or isnan(ey)
-            or isinf(ey)
-            or isnan(ez)
-            or isinf(ez)
-            or isnan(bx)
-            or isinf(bx)
-            or isnan(by)
-            or isinf(by)
-            or isnan(bz)
-            or isinf(bz)
-        ):
+        if isnan(ex) or isinf(ex) or isnan(ey) or isinf(ey) or isnan(ez) or isinf(ez) or isnan(bx) or isinf(bx) or isnan(by) or isinf(by) or isnan(bz) or isinf(bz):
             raise Error("bench_maxwell_uniform_j_2d_p3: non-finite output")
         var d_ex = Float64(ex) - Ex_expect
         if d_ex < 0.0:
@@ -170,37 +147,13 @@ def main() raises:
             max_zero = av_bz
 
     print("  Ex(T) expected =", Ex_expect)
-    print(
-        "  max |Ex - exact| / |Ex_exact| =",
-        max_ex_rel,
-        "  (threshold",
-        EX_REL_TOL,
-        ")",
-    )
-    print(
-        "  max |Ey,Ez,Bx,By,Bz| =",
-        max_zero,
-        "  (threshold",
-        ZERO_COMPONENT_TOL,
-        ")",
-    )
+    print("  max |Ex - exact| / |Ex_exact| =", max_ex_rel, "  (threshold", EX_REL_TOL, ")")
+    print("  max |Ey,Ez,Bx,By,Bz| =", max_zero, "  (threshold", ZERO_COMPONENT_TOL, ")")
 
     if max_ex_rel > EX_REL_TOL:
-        raise Error(
-            String("bench_maxwell_uniform_j_2d_p3 FAILED: Ex rel err ")
-            + String(max_ex_rel)
-            + " > "
-            + String(EX_REL_TOL)
-        )
+        raise Error(String("bench_maxwell_uniform_j_2d_p3 FAILED: Ex rel err ") + String(max_ex_rel) + " > " + String(EX_REL_TOL))
     if max_zero > ZERO_COMPONENT_TOL:
-        raise Error(
-            String(
-                "bench_maxwell_uniform_j_2d_p3 FAILED: zero-component drift "
-            )
-            + String(max_zero)
-            + " > "
-            + String(ZERO_COMPONENT_TOL)
-        )
+        raise Error(String("bench_maxwell_uniform_j_2d_p3 FAILED: zero-component drift ") + String(max_zero) + " > " + String(ZERO_COMPONENT_TOL))
 
     print("=== bench_maxwell_uniform_j_2d_p3 PASSED ===")
     mpi.finalize()
