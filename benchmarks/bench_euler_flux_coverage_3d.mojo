@@ -105,7 +105,9 @@ def entropy_wave_ic_kernel(
     var v = V0
     var w = W0
     var p = P0
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (
+        u * u + v * v + w * w
+    )
 
     var base = (e * N_P + nn) * 5
     q[base + 0] = rho
@@ -155,7 +157,7 @@ def _run(flux_type: Int, entropy_fix: Bool = False) raises -> Float64:
         refs.node_weights^,
     )
 
-    solver.ctx.enqueue_function[entropy_wave_ic_kernel, entropy_wave_ic_kernel](
+    solver.ctx.enqueue_function[entropy_wave_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -166,7 +168,9 @@ def _run(flux_type: Int, entropy_fix: Bool = False) raises -> Float64:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * Euler.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_ic,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -188,7 +192,9 @@ def _run(flux_type: Int, entropy_fix: Bool = False) raises -> Float64:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),

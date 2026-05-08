@@ -171,7 +171,7 @@ def launch_bj_limit_compute_theta_2d[
     theta_out: UnsafePointer[Float32, MutAnyOrigin],
 ) raises:
     comptime _kernel = bj_limit_compute_theta_kernel_2d[NP, NC]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q,
         cell_mean,
         elem_faces,
@@ -195,7 +195,7 @@ def launch_bj_limit_apply_2d[
 ) raises:
     comptime _kernel = bj_limit_apply_kernel_2d[NP, NC]
     var total = num_elements * NP * NC
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q,
         cell_mean,
         theta_in,

@@ -115,7 +115,9 @@ def main() raises:
         print("bench_two_fluid_walls_3d_p3: runs at np=1 only")
         return
 
-    print("bench_two_fluid_walls_3d_p3 (3D Two-Fluid BC_WALL preservation, P=3)")
+    print(
+        "bench_two_fluid_walls_3d_p3 (3D Two-Fluid BC_WALL preservation, P=3)"
+    )
     print(
         "  P=",
         P,
@@ -189,7 +191,7 @@ def main() raises:
         node_weights=node_weights^,
     )
 
-    solver.ctx.enqueue_function[fill_constant_kernel, fill_constant_kernel](
+    solver.ctx.enqueue_function[fill_constant_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.num_owned_elements,
@@ -199,8 +201,12 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * NC
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
-    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
+    solver.ctx.enqueue_copy(
+        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
+    )
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -220,8 +226,12 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
-    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
+    solver.ctx.enqueue_copy(
+        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
+    )
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -239,7 +249,12 @@ def main() raises:
     print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
 
     if max_drift > DRIFT_TOL:
-        raise Error("bench_two_fluid_walls_3d_p3 FAILED: max drift " + String(max_drift) + " > " + String(DRIFT_TOL))
+        raise Error(
+            "bench_two_fluid_walls_3d_p3 FAILED: max drift "
+            + String(max_drift)
+            + " > "
+            + String(DRIFT_TOL)
+        )
 
     print("=== bench_two_fluid_walls_3d_p3 PASSED ===")
     mpi.finalize()

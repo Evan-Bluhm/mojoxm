@@ -100,8 +100,12 @@ def main() raises:
     var host_ic = List[Float32]()
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            var x = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0])
-            var y = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1])
+            var x = Float32(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
+            )
+            var y = Float32(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
+            )
             var v = _gauss(x, y)
             host_q.append(v)
             host_ic.append(v)
@@ -241,6 +245,8 @@ def main() raises:
         paths,
         times,
     )
-    print("  wrote output/solution_adv2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames")
+    print(
+        "  wrote output/solution_adv2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames"
+    )
 
     mpi.finalize()

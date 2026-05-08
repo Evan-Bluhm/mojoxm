@@ -81,9 +81,15 @@ def sw_vol_lift_combine_rk_kernel_2d[
         var Fy2 = my * v + p
         var D_r = D_ref[0 * NP * NP + i * NP + j]
         var D_s = D_ref[1 * NP * NP + i * NP + j]
-        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (iJ10 * Fx0 + iJ11 * Fy0) * D_s
-        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (iJ10 * Fx1 + iJ11 * Fy1) * D_s
-        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (iJ10 * Fx2 + iJ11 * Fy2) * D_s
+        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (
+            iJ10 * Fx0 + iJ11 * Fy0
+        ) * D_s
+        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (
+            iJ10 * Fx1 + iJ11 * Fy1
+        ) * D_s
+        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (
+            iJ10 * Fx2 + iJ11 * Fy2
+        ) * D_s
 
     # ---- Lift contribution (NC=3).
     var inv_2A = elem_inv_2A[elem]
@@ -141,7 +147,7 @@ def launch_sw_vol_lift_2d[
 ) raises:
     var total = num_elements * NP
     comptime _kernel = sw_vol_lift_combine_rk_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q_in,
         elem_invJ,
         D_ref,
@@ -266,9 +272,15 @@ def sw_face_flux_kernel_2d[
     var alpha: Float32 = speedL if speedL > speedR else speedR
     var half = Float32(0.5)
     var out = (fid * NFP + m) * 3
-    fstar_out[out + 0] = half * ((FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny) - half * alpha * (qR0 - qL0)
-    fstar_out[out + 1] = half * ((FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny) - half * alpha * (qR1 - qL1)
-    fstar_out[out + 2] = half * ((FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny) - half * alpha * (qR2 - qL2)
+    fstar_out[out + 0] = half * (
+        (FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny
+    ) - half * alpha * (qR0 - qL0)
+    fstar_out[out + 1] = half * (
+        (FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny
+    ) - half * alpha * (qR1 - qL1)
+    fstar_out[out + 2] = half * (
+        (FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny
+    ) - half * alpha * (qR2 - qL2)
 
 
 def launch_sw_face_flux_2d[
@@ -290,7 +302,7 @@ def launch_sw_face_flux_2d[
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = sw_face_flux_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q,
         face_elem,
         face_elem_node,
@@ -436,9 +448,15 @@ def sw_face_flux_hll_kernel_2d[
         fstar_out[out + 2] = FnR2
     else:
         var inv = Float32(1.0) / (S_R - S_L)
-        fstar_out[out + 0] = (S_R * FnL0 - S_L * FnR0 + S_L * S_R * (qR0 - qL0)) * inv
-        fstar_out[out + 1] = (S_R * FnL1 - S_L * FnR1 + S_L * S_R * (qR1 - qL1)) * inv
-        fstar_out[out + 2] = (S_R * FnL2 - S_L * FnR2 + S_L * S_R * (qR2 - qL2)) * inv
+        fstar_out[out + 0] = (
+            S_R * FnL0 - S_L * FnR0 + S_L * S_R * (qR0 - qL0)
+        ) * inv
+        fstar_out[out + 1] = (
+            S_R * FnL1 - S_L * FnR1 + S_L * S_R * (qR1 - qL1)
+        ) * inv
+        fstar_out[out + 2] = (
+            S_R * FnL2 - S_L * FnR2 + S_L * S_R * (qR2 - qL2)
+        ) * inv
 
 
 def launch_sw_face_flux_hll_2d[
@@ -460,7 +478,7 @@ def launch_sw_face_flux_hll_2d[
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = sw_face_flux_hll_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q,
         face_elem,
         face_elem_node,

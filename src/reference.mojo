@@ -109,7 +109,12 @@ def integrate_ref_tet(p: List[Monomial]) raises -> Float64:
     for i in range(len(p)):
         var m = p[i]
         var denom_n = m.a0 + m.a1 + m.a2 + m.a3 + 3
-        var num = factorial(m.a0) * factorial(m.a1) * factorial(m.a2) * factorial(m.a3)
+        var num = (
+            factorial(m.a0)
+            * factorial(m.a1)
+            * factorial(m.a2)
+            * factorial(m.a3)
+        )
         s += m.c * num / factorial(denom_n)
     return s
 
@@ -190,10 +195,18 @@ def _tet_node_exponents(P: Int) raises -> List[Monomial]:
         for a0v in range(P - 2, 0, -1):
             for a1v in range(P - a0v - 1, 0, -1):
                 var a2v = P - a0v - a1v
-                var exp0 = a0v if ni[0] == 0 else (a1v if ni[1] == 0 else (a2v if ni[2] == 0 else 0))
-                var exp1 = a0v if ni[0] == 1 else (a1v if ni[1] == 1 else (a2v if ni[2] == 1 else 0))
-                var exp2 = a0v if ni[0] == 2 else (a1v if ni[1] == 2 else (a2v if ni[2] == 2 else 0))
-                var exp3 = a0v if ni[0] == 3 else (a1v if ni[1] == 3 else (a2v if ni[2] == 3 else 0))
+                var exp0 = a0v if ni[0] == 0 else (
+                    a1v if ni[1] == 0 else (a2v if ni[2] == 0 else 0)
+                )
+                var exp1 = a0v if ni[0] == 1 else (
+                    a1v if ni[1] == 1 else (a2v if ni[2] == 1 else 0)
+                )
+                var exp2 = a0v if ni[0] == 2 else (
+                    a1v if ni[1] == 2 else (a2v if ni[2] == 2 else 0)
+                )
+                var exp3 = a0v if ni[0] == 3 else (
+                    a1v if ni[1] == 3 else (a2v if ni[2] == 3 else 0)
+                )
                 out.append(Monomial(exp0, exp1, exp2, exp3, 0.0))
     if P < 4:
         return out^
@@ -431,13 +444,21 @@ def _poly_drdx(p: List[Monomial], k: Int) raises -> List[Monomial]:
     for idx in range(len(p)):
         var m = p[idx]
         if m.a0 > 0:
-            out.append(Monomial(m.a0 - 1, m.a1, m.a2, m.a3, m.c * Float64(m.a0) * dl0))
+            out.append(
+                Monomial(m.a0 - 1, m.a1, m.a2, m.a3, m.c * Float64(m.a0) * dl0)
+            )
         if m.a1 > 0 and dl1 != 0.0:
-            out.append(Monomial(m.a0, m.a1 - 1, m.a2, m.a3, m.c * Float64(m.a1) * dl1))
+            out.append(
+                Monomial(m.a0, m.a1 - 1, m.a2, m.a3, m.c * Float64(m.a1) * dl1)
+            )
         if m.a2 > 0 and dl2 != 0.0:
-            out.append(Monomial(m.a0, m.a1, m.a2 - 1, m.a3, m.c * Float64(m.a2) * dl2))
+            out.append(
+                Monomial(m.a0, m.a1, m.a2 - 1, m.a3, m.c * Float64(m.a2) * dl2)
+            )
         if m.a3 > 0 and dl3 != 0.0:
-            out.append(Monomial(m.a0, m.a1, m.a2, m.a3 - 1, m.c * Float64(m.a3) * dl3))
+            out.append(
+                Monomial(m.a0, m.a1, m.a2, m.a3 - 1, m.c * Float64(m.a3) * dl3)
+            )
     return out^
 
 
@@ -493,7 +514,9 @@ def _face_to_element_node(
             var e1 = P if v_idx == 1 else 0
             var e2 = P if v_idx == 2 else 0
             var e3 = P if v_idx == 3 else 0
-            out[f * N_FP_P + l_idx] = Int32(_lookup_tet_node(tet_nodes, e0, e1, e2, e3))
+            out[f * N_FP_P + l_idx] = Int32(
+                _lookup_tet_node(tet_nodes, e0, e1, e2, e3)
+            )
 
         if P < 2:
             continue
@@ -515,7 +538,9 @@ def _face_to_element_node(
                 var exp1 = P - k if a_i == 1 else (k if b_i == 1 else 0)
                 var exp2 = P - k if a_i == 2 else (k if b_i == 2 else 0)
                 var exp3 = P - k if a_i == 3 else (k if b_i == 3 else 0)
-                out[f * N_FP_P + pos] = Int32(_lookup_tet_node(tet_nodes, exp0, exp1, exp2, exp3))
+                out[f * N_FP_P + pos] = Int32(
+                    _lookup_tet_node(tet_nodes, exp0, exp1, exp2, exp3)
+                )
                 pos += 1
 
         if P < 3:
@@ -525,11 +550,21 @@ def _face_to_element_node(
         for a0v in range(P - 2, 0, -1):
             for a1v in range(P - a0v - 1, 0, -1):
                 var a2v = P - a0v - a1v
-                var exp0 = a0v if vA == 0 else (a1v if vB == 0 else (a2v if vC == 0 else 0))
-                var exp1 = a0v if vA == 1 else (a1v if vB == 1 else (a2v if vC == 1 else 0))
-                var exp2 = a0v if vA == 2 else (a1v if vB == 2 else (a2v if vC == 2 else 0))
-                var exp3 = a0v if vA == 3 else (a1v if vB == 3 else (a2v if vC == 3 else 0))
-                out[f * N_FP_P + pos] = Int32(_lookup_tet_node(tet_nodes, exp0, exp1, exp2, exp3))
+                var exp0 = a0v if vA == 0 else (
+                    a1v if vB == 0 else (a2v if vC == 0 else 0)
+                )
+                var exp1 = a0v if vA == 1 else (
+                    a1v if vB == 1 else (a2v if vC == 1 else 0)
+                )
+                var exp2 = a0v if vA == 2 else (
+                    a1v if vB == 2 else (a2v if vC == 2 else 0)
+                )
+                var exp3 = a0v if vA == 3 else (
+                    a1v if vB == 3 else (a2v if vC == 3 else 0)
+                )
+                out[f * N_FP_P + pos] = Int32(
+                    _lookup_tet_node(tet_nodes, exp0, exp1, exp2, exp3)
+                )
                 pos += 1
     return out^
 
@@ -618,7 +653,9 @@ struct ReferenceElement[P: Int = 2](Copyable, Movable):
                 var dpi = _poly_drdx(tet_phi[i], k)
                 for j in range(N_P_P):
                     var prod = poly_mul(dpi, tet_phi[j])
-                    S[k * N_P_P * N_P_P + i * N_P_P + j] = integrate_ref_tet(prod)
+                    S[k * N_P_P * N_P_P + i * N_P_P + j] = integrate_ref_tet(
+                        prod
+                    )
 
         # D_ref[k] = M_inv @ S[k].
         self.D_ref = List[Float64]()
@@ -629,7 +666,10 @@ struct ReferenceElement[P: Int = 2](Copyable, Movable):
                 for j in range(N_P_P):
                     var sum: Float64 = 0.0
                     for ip in range(N_P_P):
-                        sum += M_inv[i * N_P_P + ip] * S[k * N_P_P * N_P_P + ip * N_P_P + j]
+                        sum += (
+                            M_inv[i * N_P_P + ip]
+                            * S[k * N_P_P * N_P_P + ip * N_P_P + j]
+                        )
                     self.D_ref[k * N_P_P * N_P_P + i * N_P_P + j] = sum
 
         # 6. Reference-triangle mass matrix M_tri (size N_FP x N_FP).
@@ -657,7 +697,9 @@ struct ReferenceElement[P: Int = 2](Copyable, Movable):
                 if i < 0:
                     raise Error("ReferenceElement: face_to_elem lookup failed")
                 for m in range(N_FP_P):
-                    L_raw[f * N_P_P * N_FP_P + i * N_FP_P + m] = 2.0 * M_tri[l * N_FP_P + m]
+                    L_raw[f * N_P_P * N_FP_P + i * N_FP_P + m] = (
+                        2.0 * M_tri[l * N_FP_P + m]
+                    )
 
         # Lift_ref[f, i, m] = M_inv @ L_raw[f].
         self.Lift_ref = List[Float64]()
@@ -668,7 +710,10 @@ struct ReferenceElement[P: Int = 2](Copyable, Movable):
                 for m in range(N_FP_P):
                     var sum: Float64 = 0.0
                     for ip in range(N_P_P):
-                        sum += M_inv[i * N_P_P + ip] * L_raw[f * N_P_P * N_FP_P + ip * N_FP_P + m]
+                        sum += (
+                            M_inv[i * N_P_P + ip]
+                            * L_raw[f * N_P_P * N_FP_P + ip * N_FP_P + m]
+                        )
                     self.Lift_ref[f * N_P_P * N_FP_P + i * N_FP_P + m] = sum
 
         # 9. Node weights = integral of each basis function over the

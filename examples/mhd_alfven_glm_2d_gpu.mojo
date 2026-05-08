@@ -324,7 +324,9 @@ def main() raises:
             var ap = psi_field[i] if psi_field[i] >= 0.0 else -psi_field[i]
             if ap > psi_peak:
                 psi_peak = ap
-        print("    frame", fi, "/", NUM_FRAMES, " t=", t, "  |psi|_max=", psi_peak)
+        print(
+            "    frame", fi, "/", NUM_FRAMES, " t=", t, "  |psi|_max=", psi_peak
+        )
     var run_end = perf_counter_ns()
 
     var total_sec = Float64(run_end - run_start) * 1.0e-9

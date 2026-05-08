@@ -75,7 +75,9 @@ def main() raises:
         return
 
     print("bench_euler_channel_steady_2d (Mach-2 channel steady state)")
-    print("  P=", P, "  mesh=", NX, "x", NY, "  BC: -x INFLOW, +x OUTFLOW, y WALL")
+    print(
+        "  P=", P, "  mesh=", NX, "x", NY, "  BC: -x INFLOW, +x OUTFLOW, y WALL"
+    )
 
     comptime NP_p = num_tri_nodes_2d(P)
     comptime NFP_e = num_edge_nodes(P)
@@ -109,7 +111,9 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e * NC
+    )
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -187,7 +191,9 @@ def main() raises:
 
     print("  steps=", num_steps, "  dt=", dt)
     print("  max |rho - rho_inflow|  =", rho_drift_max, " (tol", DRIFT_TOL, ")")
-    print("  max |mx - rhou_inflow|  =", rhou_drift_max, " (tol", DRIFT_TOL, ")")
+    print(
+        "  max |mx - rhou_inflow|  =", rhou_drift_max, " (tol", DRIFT_TOL, ")"
+    )
 
     if rho_drift_max > DRIFT_TOL:
         raise Error(

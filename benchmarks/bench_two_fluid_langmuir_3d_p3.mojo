@@ -118,7 +118,10 @@ def langmuir_ic_kernel(
     q[base + 1] = rho_e0 * u_pert
     q[base + 2] = Float32(0.0)
     q[base + 3] = Float32(0.0)
-    q[base + 4] = p_e0 / (gamma_e - Float32(1.0)) + Float32(0.5) * rho_e0 * u_pert * u_pert
+    q[base + 4] = (
+        p_e0 / (gamma_e - Float32(1.0))
+        + Float32(0.5) * rho_e0 * u_pert * u_pert
+    )
     q[base + 5] = rho_i0
     q[base + 6] = Float32(0.0)
     q[base + 7] = Float32(0.0)
@@ -137,7 +140,9 @@ def main() raises:
         print("bench_two_fluid_langmuir_3d_p3: runs at np=1 only")
         return
 
-    print("bench_two_fluid_langmuir_3d_p3 (plasma oscillation at P=3, one period)")
+    print(
+        "bench_two_fluid_langmuir_3d_p3 (plasma oscillation at P=3, one period)"
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -190,7 +195,7 @@ def main() raises:
         node_weights=node_weights^,
     )
 
-    solver.ctx.enqueue_function[langmuir_ic_kernel, langmuir_ic_kernel](
+    solver.ctx.enqueue_function[langmuir_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),

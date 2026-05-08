@@ -139,8 +139,10 @@ def main() raises:
         refs.node_weights^,
     )
 
-    var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
-    solver.ctx.enqueue_function[gaussian_ic_kernel, gaussian_ic_kernel](
+    var inv_two_sigma2 = Float32(1.0) / (
+        Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA
+    )
+    solver.ctx.enqueue_function[gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -207,7 +209,10 @@ def main() raises:
     )
     if rel > DRAIN_TOL_REL:
         raise Error(
-            String("bench_advection_outflow_3d FAILED: residual mass ") + String(rel) + " > " + String(DRAIN_TOL_REL)
+            String("bench_advection_outflow_3d FAILED: residual mass ")
+            + String(rel)
+            + " > "
+            + String(DRAIN_TOL_REL)
         )
 
     print("=== bench_advection_outflow_3d PASSED ===")

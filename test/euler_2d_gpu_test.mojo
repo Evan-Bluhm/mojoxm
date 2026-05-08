@@ -76,7 +76,12 @@ def _check_constant(
     # bound, but still catches sign / scale bugs (those would push
     # err into the O(dt * f) range which is >> 1e-4 for these values).
     if max_err > Float32(1.0e-4):
-        raise Error(label + ": constant state not preserved (max err " + String(max_err) + ")")
+        raise Error(
+            label
+            + ": constant state not preserved (max err "
+            + String(max_err)
+            + ")"
+        )
 
 
 def check[P: Int]() raises:
@@ -101,7 +106,9 @@ def check[P: Int]() raises:
     var gamma = Float32(1.4)
     var mx0 = rho0 * u0
     var my0 = rho0 * v0
-    var E0 = p0 / (gamma - Float32(1.0)) + Float32(0.5) * rho0 * (u0 * u0 + v0 * v0)
+    var E0 = p0 / (gamma - Float32(1.0)) + Float32(0.5) * rho0 * (
+        u0 * u0 + v0 * v0
+    )
     var min_rho = Float32(1.0e-8)
     var min_p = Float32(1.0e-8)
 
@@ -109,7 +116,9 @@ def check[P: Int]() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu.num_faces * NFP_e * NC)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu.num_faces * NFP_e * NC
+    )
     var hbuf = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr = hbuf.unsafe_ptr()
 
@@ -272,7 +281,10 @@ def main() raises:
         mpi.finalize()
         print("euler_2d_gpu_test: runs at np=1 only")
         return
-    print("euler_2d_gpu_test (constant-state preservation, Rusanov + HLLC, P=2..5)")
+    print(
+        "euler_2d_gpu_test (constant-state preservation, Rusanov + HLLC,"
+        " P=2..5)"
+    )
     check[2]()
     check[3]()
     check[4]()

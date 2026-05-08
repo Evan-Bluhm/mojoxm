@@ -74,7 +74,9 @@ struct _Iovec(ImplicitlyCopyable, Movable):
 #
 # Signature matches `void *(*)(void *)`: argument and return are both
 # opaque pointers in the MutAnyOrigin universe.
-def _writer_entry(arg: UnsafePointer[Int8, MutAnyOrigin]) -> UnsafePointer[Int8, MutAnyOrigin]:
+def _writer_entry(
+    arg: UnsafePointer[Int8, MutAnyOrigin]
+) -> UnsafePointer[Int8, MutAnyOrigin]:
     var job_ptr = arg.bitcast[_WriteJob]()
     var segs = job_ptr[].segs
     var nsegs = job_ptr[].nsegs
@@ -86,7 +88,11 @@ def _writer_entry(arg: UnsafePointer[Int8, MutAnyOrigin]) -> UnsafePointer[Int8,
             var remaining = segs[s].nbytes
             var p = segs[s].ptr
             while remaining > 0:
-                var n = Int(external_call["write", c_ssize_t](fd, p, c_size_t(remaining)))
+                var n = Int(
+                    external_call["write", c_ssize_t](
+                        fd, p, c_size_t(remaining)
+                    )
+                )
                 if n <= 0:
                     break
                 remaining -= n
@@ -121,7 +127,9 @@ struct AsyncWriter(Movable):
         while len(self._thread_ids) >= self._max_concurrent:
             var oldest = self._thread_ids[0]
             _ = self._thread_ids.pop(0)
-            var retval = UnsafePointer[Int8, MutAnyOrigin](unsafe_from_address=0)
+            var retval = UnsafePointer[Int8, MutAnyOrigin](
+                unsafe_from_address=0
+            )
             _ = external_call["pthread_join", Int32](oldest, retval)
 
         # Copy path into a heap-allocated, null-terminated C string.
@@ -162,8 +170,12 @@ struct AsyncWriter(Movable):
 
     def wait_all(mut self):
         for i in range(len(self._thread_ids)):
-            var retval = UnsafePointer[Int8, MutAnyOrigin](unsafe_from_address=0)
-            _ = external_call["pthread_join", Int32](self._thread_ids[i], retval)
+            var retval = UnsafePointer[Int8, MutAnyOrigin](
+                unsafe_from_address=0
+            )
+            _ = external_call["pthread_join", Int32](
+                self._thread_ids[i], retval
+            )
         self._thread_ids.clear()
 
     def __del__(deinit self):

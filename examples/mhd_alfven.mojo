@@ -202,7 +202,7 @@ def main() raises:
         refs.node_weights^,
     )
 
-    solver.ctx.enqueue_function[alfven_ic_kernel, alfven_ic_kernel](
+    solver.ctx.enqueue_function[alfven_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),

@@ -103,7 +103,9 @@ def main() raises:
         print("bench_mhd_glm_psi_transport_3d_p5: runs at np=1 only")
         return
 
-    print("bench_mhd_glm_psi_transport_3d_p5 (3D GLM linear psi/Bx wave at P=5)")
+    print(
+        "bench_mhd_glm_psi_transport_3d_p5 (3D GLM linear psi/Bx wave at P=5)"
+    )
     print(
         "  P=",
         P,
@@ -165,7 +167,7 @@ def main() raises:
         node_weights=node_weights^,
     )
 
-    solver.ctx.enqueue_function[transport_ic_kernel_p5, transport_ic_kernel_p5](
+    solver.ctx.enqueue_function[transport_ic_kernel_p5](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -176,8 +178,12 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * IdealMHD.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
-    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
+    solver.ctx.enqueue_copy(
+        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
+    )
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -194,8 +200,12 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
-    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
+    solver.ctx.enqueue_copy(
+        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
+    )
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -234,7 +244,12 @@ def main() raises:
     print("  rel L2(state) =", rel_l2, "  (threshold", L2_MAX_REL, ")")
 
     if rel_l2 > L2_MAX_REL:
-        raise Error("bench_mhd_glm_psi_transport_3d_p5 FAILED: rel L2 " + String(rel_l2) + " > " + String(L2_MAX_REL))
+        raise Error(
+            "bench_mhd_glm_psi_transport_3d_p5 FAILED: rel L2 "
+            + String(rel_l2)
+            + " > "
+            + String(L2_MAX_REL)
+        )
 
     print("=== bench_mhd_glm_psi_transport_3d_p5 PASSED ===")
     mpi.finalize()

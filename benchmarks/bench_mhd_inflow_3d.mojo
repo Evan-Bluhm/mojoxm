@@ -203,7 +203,7 @@ def main() raises:
         node_weights=refs.node_weights^,
     )
 
-    solver.ctx.enqueue_function[uniform_ic_kernel, uniform_ic_kernel](
+    solver.ctx.enqueue_function[uniform_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -214,8 +214,12 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * IdealMHD.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
-    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
+    solver.ctx.enqueue_copy(
+        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
+    )
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -236,8 +240,12 @@ def main() raises:
         solver.step_ssprk3(dt_used, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
-    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
+    solver.ctx.enqueue_copy(
+        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
+    )
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -264,7 +272,12 @@ def main() raises:
     print("  max relative drift   =", max_drift, "  (threshold", REL_TOL, ")")
 
     if max_drift > REL_TOL:
-        raise Error("bench_mhd_inflow_3d FAILED: max relative drift " + String(max_drift) + " > " + String(REL_TOL))
+        raise Error(
+            "bench_mhd_inflow_3d FAILED: max relative drift "
+            + String(max_drift)
+            + " > "
+            + String(REL_TOL)
+        )
 
     print("=== bench_mhd_inflow_3d PASSED ===")
     mpi.finalize()

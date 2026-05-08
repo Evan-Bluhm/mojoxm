@@ -103,7 +103,11 @@ def isend_float(
     tag: Int,
     request_out: UnsafePointer[Int64, MutAnyOrigin],
 ) raises:
-    var rc = Int(external_call["mxm_mpi_isend_float", c_int](buf, c_int(count), c_int(dest), c_int(tag), request_out))
+    var rc = Int(
+        external_call["mxm_mpi_isend_float", c_int](
+            buf, c_int(count), c_int(dest), c_int(tag), request_out
+        )
+    )
     if rc != 0:
         raise Error("MPI_Isend failed, rc=" + String(rc))
 
@@ -115,7 +119,11 @@ def irecv_float(
     tag: Int,
     request_out: UnsafePointer[Int64, MutAnyOrigin],
 ) raises:
-    var rc = Int(external_call["mxm_mpi_irecv_float", c_int](buf, c_int(count), c_int(src), c_int(tag), request_out))
+    var rc = Int(
+        external_call["mxm_mpi_irecv_float", c_int](
+            buf, c_int(count), c_int(src), c_int(tag), request_out
+        )
+    )
     if rc != 0:
         raise Error("MPI_Irecv failed, rc=" + String(rc))
 
@@ -176,7 +184,11 @@ def allreduce_float_min(
     recvbuf: UnsafePointer[Float32, MutAnyOrigin],
     count: Int,
 ) raises:
-    var rc = Int(external_call["mxm_mpi_allreduce_float_min", c_int](sendbuf, recvbuf, c_int(count)))
+    var rc = Int(
+        external_call["mxm_mpi_allreduce_float_min", c_int](
+            sendbuf, recvbuf, c_int(count)
+        )
+    )
     if rc != 0:
         raise Error("MPI_Allreduce(MIN) failed, rc=" + String(rc))
 
@@ -186,7 +198,11 @@ def allreduce_float_max(
     recvbuf: UnsafePointer[Float32, MutAnyOrigin],
     count: Int,
 ) raises:
-    var rc = Int(external_call["mxm_mpi_allreduce_float_max", c_int](sendbuf, recvbuf, c_int(count)))
+    var rc = Int(
+        external_call["mxm_mpi_allreduce_float_max", c_int](
+            sendbuf, recvbuf, c_int(count)
+        )
+    )
     if rc != 0:
         raise Error("MPI_Allreduce(MAX) failed, rc=" + String(rc))
 
@@ -196,7 +212,11 @@ def allreduce_float_sum(
     recvbuf: UnsafePointer[Float32, MutAnyOrigin],
     count: Int,
 ) raises:
-    var rc = Int(external_call["mxm_mpi_allreduce_float_sum", c_int](sendbuf, recvbuf, c_int(count)))
+    var rc = Int(
+        external_call["mxm_mpi_allreduce_float_sum", c_int](
+            sendbuf, recvbuf, c_int(count)
+        )
+    )
     if rc != 0:
         raise Error("MPI_Allreduce(SUM) failed, rc=" + String(rc))
 
@@ -209,7 +229,11 @@ def allreduce_double_sum(
     """Float64 (double-precision) sum allreduce.  Use this for
     domain-integrated diagnostics where the Float32 SUM would lose
     precision from summing O(1M) nodal values."""
-    var rc = Int(external_call["mxm_mpi_allreduce_double_sum", c_int](sendbuf, recvbuf, c_int(count)))
+    var rc = Int(
+        external_call["mxm_mpi_allreduce_double_sum", c_int](
+            sendbuf, recvbuf, c_int(count)
+        )
+    )
     if rc != 0:
         raise Error("MPI_Allreduce(DOUBLE SUM) failed, rc=" + String(rc))
 
@@ -219,6 +243,10 @@ def allreduce_int_sum(
     recvbuf: UnsafePointer[Int32, MutAnyOrigin],
     count: Int,
 ) raises:
-    var rc = Int(external_call["mxm_mpi_allreduce_int_sum", c_int](sendbuf, recvbuf, c_int(count)))
+    var rc = Int(
+        external_call["mxm_mpi_allreduce_int_sum", c_int](
+            sendbuf, recvbuf, c_int(count)
+        )
+    )
     if rc != 0:
         raise Error("MPI_Allreduce(int SUM) failed, rc=" + String(rc))

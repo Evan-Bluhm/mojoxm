@@ -123,13 +123,27 @@ def mhd_glm_vol_lift_combine_rk_kernel_2d[
         var Fy6 = ch2 * By
         var D_r = D_ref[0 * NP * NP + i * NP + j]
         var D_s = D_ref[1 * NP * NP + i * NP + j]
-        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (iJ10 * Fx0 + iJ11 * Fy0) * D_s
-        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (iJ10 * Fx1 + iJ11 * Fy1) * D_s
-        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (iJ10 * Fx2 + iJ11 * Fy2) * D_s
-        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (iJ10 * Fx3 + iJ11 * Fy3) * D_s
-        acc4 += (iJ00 * Fx4 + iJ01 * Fy4) * D_r + (iJ10 * Fx4 + iJ11 * Fy4) * D_s
-        acc5 += (iJ00 * Fx5 + iJ01 * Fy5) * D_r + (iJ10 * Fx5 + iJ11 * Fy5) * D_s
-        acc6 += (iJ00 * Fx6 + iJ01 * Fy6) * D_r + (iJ10 * Fx6 + iJ11 * Fy6) * D_s
+        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (
+            iJ10 * Fx0 + iJ11 * Fy0
+        ) * D_s
+        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (
+            iJ10 * Fx1 + iJ11 * Fy1
+        ) * D_s
+        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (
+            iJ10 * Fx2 + iJ11 * Fy2
+        ) * D_s
+        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (
+            iJ10 * Fx3 + iJ11 * Fy3
+        ) * D_s
+        acc4 += (iJ00 * Fx4 + iJ01 * Fy4) * D_r + (
+            iJ10 * Fx4 + iJ11 * Fy4
+        ) * D_s
+        acc5 += (iJ00 * Fx5 + iJ01 * Fy5) * D_r + (
+            iJ10 * Fx5 + iJ11 * Fy5
+        ) * D_s
+        acc6 += (iJ00 * Fx6 + iJ01 * Fy6) * D_r + (
+            iJ10 * Fx6 + iJ11 * Fy6
+        ) * D_s
 
     # ---- Lift contribution (NC=7).
     var inv_2A = elem_inv_2A[elem]
@@ -205,7 +219,7 @@ def launch_mhd_glm_vol_lift_2d[
 ) raises:
     var total = num_elements * NP
     comptime _kernel = mhd_glm_vol_lift_combine_rk_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q_in,
         elem_invJ,
         D_ref,
@@ -403,13 +417,27 @@ def mhd_glm_face_flux_kernel_2d[
     var alpha: Float32 = speedL if speedL > speedR else speedR
     var half = Float32(0.5)
     var out = (fid * NFP + m) * 7
-    fstar_out[out + 0] = half * ((FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny) - half * alpha * (qR0 - qL0)
-    fstar_out[out + 1] = half * ((FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny) - half * alpha * (qR1 - qL1)
-    fstar_out[out + 2] = half * ((FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny) - half * alpha * (qR2 - qL2)
-    fstar_out[out + 3] = half * ((FxL3 + FxR3) * nx + (FyL3 + FyR3) * ny) - half * alpha * (qR3 - qL3)
-    fstar_out[out + 4] = half * ((FxL4 + FxR4) * nx + (FyL4 + FyR4) * ny) - half * alpha * (qR4 - qL4)
-    fstar_out[out + 5] = half * ((FxL5 + FxR5) * nx + (FyL5 + FyR5) * ny) - half * alpha * (qR5 - qL5)
-    fstar_out[out + 6] = half * ((FxL6 + FxR6) * nx + (FyL6 + FyR6) * ny) - half * alpha * (qR6 - qL6)
+    fstar_out[out + 0] = half * (
+        (FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny
+    ) - half * alpha * (qR0 - qL0)
+    fstar_out[out + 1] = half * (
+        (FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny
+    ) - half * alpha * (qR1 - qL1)
+    fstar_out[out + 2] = half * (
+        (FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny
+    ) - half * alpha * (qR2 - qL2)
+    fstar_out[out + 3] = half * (
+        (FxL3 + FxR3) * nx + (FyL3 + FyR3) * ny
+    ) - half * alpha * (qR3 - qL3)
+    fstar_out[out + 4] = half * (
+        (FxL4 + FxR4) * nx + (FyL4 + FyR4) * ny
+    ) - half * alpha * (qR4 - qL4)
+    fstar_out[out + 5] = half * (
+        (FxL5 + FxR5) * nx + (FyL5 + FyR5) * ny
+    ) - half * alpha * (qR5 - qL5)
+    fstar_out[out + 6] = half * (
+        (FxL6 + FxR6) * nx + (FyL6 + FyR6) * ny
+    ) - half * alpha * (qR6 - qL6)
 
 
 def launch_mhd_glm_face_flux_2d[
@@ -437,7 +465,7 @@ def launch_mhd_glm_face_flux_2d[
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = mhd_glm_face_flux_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q,
         face_elem,
         face_elem_node,
@@ -491,7 +519,7 @@ def launch_mhd_glm_psi_damp_2d[
     var decay = Float32(exp(-Float64(alpha_d) * Float64(dt)))
     var total = num_elements * NP
     comptime _kernel = mhd_glm_psi_damp_kernel_2d[NP]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q,
         num_elements,
         decay,

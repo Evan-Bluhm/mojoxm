@@ -130,7 +130,9 @@ def _write_bytes(
     var remaining = n
     var p = buf
     while remaining > 0:
-        var wrote = Int(external_call["write", c_ssize_t](fd, p, c_size_t(remaining)))
+        var wrote = Int(
+            external_call["write", c_ssize_t](fd, p, c_size_t(remaining))
+        )
         if wrote <= 0:
             raise Error("write() failed while dumping final q")
         remaining -= wrote
@@ -192,15 +194,21 @@ def dump_final_q(
     header[2] = UInt32(num_owned)
     header[3] = UInt32(1)  # NC for scalar advection
     header[4] = UInt32(N_P)
-    var header_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](header.unsafe_ptr())
+    var header_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
+        header.unsafe_ptr()
+    )
     _write_bytes(fd, header_ptr, 5 * 4)
 
     # Global element IDs.
-    var ids_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](id_buf.unsafe_ptr().bitcast[UInt8]())
+    var ids_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
+        id_buf.unsafe_ptr().bitcast[UInt8]()
+    )
     _write_bytes(fd, ids_ptr, num_owned * 4)
 
     # q values (Float32).
-    var q_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](q_buf.unsafe_ptr().bitcast[UInt8]())
+    var q_ptr = rebind[UnsafePointer[UInt8, MutAnyOrigin]](
+        q_buf.unsafe_ptr().bitcast[UInt8]()
+    )
     _write_bytes(fd, q_ptr, num_owned * N_P * 4)
 
     _ = external_call["close", c_int](c_int(fd))
@@ -254,7 +262,9 @@ def main() raises:
         node_weights^,
     )
 
-    var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
+    var inv_two_sigma2 = Float32(1.0) / (
+        Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA
+    )
     solver.ctx.enqueue_function[gaussian_ic_kernel, gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),

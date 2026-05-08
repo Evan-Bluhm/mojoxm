@@ -61,7 +61,9 @@ def main() raises:
         print("bench_euler_hydrostatic_2d_p3: runs at np=1 only")
         return
 
-    print("bench_euler_hydrostatic_2d_p3 (2D hydrostatic balance, gravity gate)")
+    print(
+        "bench_euler_hydrostatic_2d_p3 (2D hydrostatic balance, gravity gate)"
+    )
     print("  P=", P, "  mesh=", NX, "x", NY, "  gy=", GY_NEG, "  T=", T_FINAL)
 
     comptime NP_p = num_tri_nodes_2d(P)
@@ -85,7 +87,9 @@ def main() raises:
     var host_y = List[Float64]()
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            var y = Float64(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1])
+            var y = Float64(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
+            )
             var p_y = P0 + RHO0 * GY_NEG * y
             var rho = RHO0
             var E = p_y / (GAMMA - 1.0)  # u = v = 0 so KE = 0
@@ -99,7 +103,9 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e * NC
+    )
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -184,11 +190,18 @@ def main() raises:
             max_p_dev = p_dev_rel
 
     print("  max |v_mag|       =", max_v, "  (threshold", VMAX_TOL, ")")
-    print("  max |rho-rho0|/rho0 =", max_rho_dev, "  (threshold", RHO_REL_TOL, ")")
+    print(
+        "  max |rho-rho0|/rho0 =", max_rho_dev, "  (threshold", RHO_REL_TOL, ")"
+    )
     print("  max |p-p_exact|/p0  =", max_p_dev, "  (threshold", P_REL_TOL, ")")
 
     if max_v > VMAX_TOL:
-        raise Error(String("bench_euler_hydrostatic_2d_p3 FAILED: |v_mag| ") + String(max_v) + " > " + String(VMAX_TOL))
+        raise Error(
+            String("bench_euler_hydrostatic_2d_p3 FAILED: |v_mag| ")
+            + String(max_v)
+            + " > "
+            + String(VMAX_TOL)
+        )
     if max_rho_dev > RHO_REL_TOL:
         raise Error(
             String("bench_euler_hydrostatic_2d_p3 FAILED: density drift ")

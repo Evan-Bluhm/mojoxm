@@ -57,7 +57,9 @@ struct NvtxContext(Movable):
         if not self._enabled:
             return
         var cstr = name + String("\0")
-        var f = self._lib.get_function[def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> Int32]("nvtxRangePushA")
+        var f = self._lib.get_function[
+            def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> Int32
+        ]("nvtxRangePushA")
         _ = f(rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr()))
 
     def pop_range(mut self) raises:
@@ -70,7 +72,9 @@ struct NvtxContext(Movable):
         if not self._enabled:
             return
         var cstr = name + String("\0")
-        var f = self._lib.get_function[def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> NoneType]("nvtxMarkA")
+        var f = self._lib.get_function[
+            def(UnsafePointer[UInt8, ImmutAnyOrigin]) thin -> NoneType
+        ]("nvtxMarkA")
         f(rebind[UnsafePointer[UInt8, ImmutAnyOrigin]](cstr.unsafe_ptr()))
 
     def is_enabled(self) -> Bool:

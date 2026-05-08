@@ -81,8 +81,12 @@ def _run(N: Int) raises -> Float64:
     var host_ic = List[Float32]()
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            var x = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0])
-            var y = Float32(mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1])
+            var x = Float32(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 0]
+            )
+            var y = Float32(
+                mesh_coords.elem_node_xyz[(elem * NP_p + nn) * 2 + 1]
+            )
             var v = _gauss(x, y)
             host_q.append(v)
             host_ic.append(v)
@@ -90,7 +94,9 @@ def _run(N: Int) raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e
+    )
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):

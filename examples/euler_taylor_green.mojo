@@ -122,8 +122,12 @@ def taylor_green_ic_kernel(
     var w = Float32(0.0)
 
     var rho = rho0
-    var p = p0 + (rho0 * u0 * u0 / Float32(16.0)) * (c2x + c2y) * (c2z + Float32(2.0))
-    var E = p / (gamma - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
+    var p = p0 + (rho0 * u0 * u0 / Float32(16.0)) * (c2x + c2y) * (
+        c2z + Float32(2.0)
+    )
+    var E = p / (gamma - Float32(1.0)) + Float32(0.5) * rho * (
+        u * u + v * v + w * w
+    )
 
     var base = (e * N_P + nn) * 5
     q[base + 0] = rho
@@ -166,7 +170,9 @@ def main() raises:
             NX * NY * NZ * 6,
             "tets",
         )
-        print("  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P)
+        print(
+            "  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P
+        )
 
     var nvtx = NvtxContext()
     if rank == 0:
@@ -247,7 +253,7 @@ def main() raises:
     nvtx.pop_range()
 
     nvtx.push_range("initial_condition")
-    solver.ctx.enqueue_function[taylor_green_ic_kernel, taylor_green_ic_kernel](
+    solver.ctx.enqueue_function[taylor_green_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),

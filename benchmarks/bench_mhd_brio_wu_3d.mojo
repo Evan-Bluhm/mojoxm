@@ -114,13 +114,17 @@ def brio_wu_ic_kernel(
     var nn = idx % N_P
     var e = Int(owned_elem_ids[i])
     var px = elem_node_xyz[(e * N_P + nn) * 3 + 0]
-    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(0.5)
+    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(
+        0.5
+    )
     var rho = RHO_L + s * (RHO_R - RHO_L)
     var p = P_L + s * (P_R - P_L)
     var by = BY_L + s * (BY_R - BY_L)
     var bx = BX
     var bz = Float32(0.0)
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (bx * bx + by * by + bz * bz)
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (
+        bx * bx + by * by + bz * bz
+    )
     var base = (e * N_P + nn) * 9
     q[base + 0] = rho
     q[base + 1] = Float32(0.0)
@@ -193,7 +197,7 @@ def main() raises:
     # (rho ~ O(1), |B| ~ O(1)) are similarly scaled.
     solver.enable_cell_limiter(True, Float32(0.1))
 
-    solver.ctx.enqueue_function[brio_wu_ic_kernel, brio_wu_ic_kernel](
+    solver.ctx.enqueue_function[brio_wu_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -278,14 +282,32 @@ def main() raises:
 
     if bx_max_err > BX_TOL:
         raise Error(
-            String("bench_mhd_brio_wu_3d FAILED: Bx drifted ") + String(bx_max_err) + " > tol " + String(BX_TOL)
+            String("bench_mhd_brio_wu_3d FAILED: Bx drifted ")
+            + String(bx_max_err)
+            + " > tol "
+            + String(BX_TOL)
         )
     if psi_max > PSI_TOL:
-        raise Error(String("bench_mhd_brio_wu_3d FAILED: psi ") + String(psi_max) + " > tol " + String(PSI_TOL))
+        raise Error(
+            String("bench_mhd_brio_wu_3d FAILED: psi ")
+            + String(psi_max)
+            + " > tol "
+            + String(PSI_TOL)
+        )
     if rho_min < RHO_MIN_OK:
-        raise Error(String("bench_mhd_brio_wu_3d FAILED: rho_min ") + String(rho_min) + " < " + String(RHO_MIN_OK))
+        raise Error(
+            String("bench_mhd_brio_wu_3d FAILED: rho_min ")
+            + String(rho_min)
+            + " < "
+            + String(RHO_MIN_OK)
+        )
     if rho_max > RHO_MAX_OK:
-        raise Error(String("bench_mhd_brio_wu_3d FAILED: rho_max ") + String(rho_max) + " > " + String(RHO_MAX_OK))
+        raise Error(
+            String("bench_mhd_brio_wu_3d FAILED: rho_max ")
+            + String(rho_max)
+            + " > "
+            + String(RHO_MAX_OK)
+        )
 
     var dmass = mass_fin - mass_ic
     if dmass < 0.0:

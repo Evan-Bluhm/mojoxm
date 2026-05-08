@@ -97,10 +97,18 @@ def euler_vol_lift_combine_rk_kernel_2d[
         var Fy3 = v * (E + p)
         var D_r = D_ref[0 * NP * NP + i * NP + j]
         var D_s = D_ref[1 * NP * NP + i * NP + j]
-        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (iJ10 * Fx0 + iJ11 * Fy0) * D_s
-        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (iJ10 * Fx1 + iJ11 * Fy1) * D_s
-        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (iJ10 * Fx2 + iJ11 * Fy2) * D_s
-        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (iJ10 * Fx3 + iJ11 * Fy3) * D_s
+        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (
+            iJ10 * Fx0 + iJ11 * Fy0
+        ) * D_s
+        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (
+            iJ10 * Fx1 + iJ11 * Fy1
+        ) * D_s
+        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (
+            iJ10 * Fx2 + iJ11 * Fy2
+        ) * D_s
+        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (
+            iJ10 * Fx3 + iJ11 * Fy3
+        ) * D_s
 
     # ---- Lift contribution (NC=4, expanded inline).
     var inv_2A = elem_inv_2A[elem]
@@ -174,7 +182,7 @@ def launch_euler_vol_lift_2d[
 ) raises:
     var total = num_elements * NP
     comptime _kernel = euler_vol_lift_combine_rk_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q_in,
         elem_invJ,
         D_ref,
@@ -331,10 +339,18 @@ def euler_face_flux_kernel_2d[
     var alpha: Float32 = speedL if speedL > speedR else speedR
     var half = Float32(0.5)
     var out = (fid * NFP + m) * 4
-    fstar_out[out + 0] = half * ((FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny) - half * alpha * (qR0 - qL0)
-    fstar_out[out + 1] = half * ((FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny) - half * alpha * (qR1 - qL1)
-    fstar_out[out + 2] = half * ((FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny) - half * alpha * (qR2 - qL2)
-    fstar_out[out + 3] = half * ((FxL3 + FxR3) * nx + (FyL3 + FyR3) * ny) - half * alpha * (qR3 - qL3)
+    fstar_out[out + 0] = half * (
+        (FxL0 + FxR0) * nx + (FyL0 + FyR0) * ny
+    ) - half * alpha * (qR0 - qL0)
+    fstar_out[out + 1] = half * (
+        (FxL1 + FxR1) * nx + (FyL1 + FyR1) * ny
+    ) - half * alpha * (qR1 - qL1)
+    fstar_out[out + 2] = half * (
+        (FxL2 + FxR2) * nx + (FyL2 + FyR2) * ny
+    ) - half * alpha * (qR2 - qL2)
+    fstar_out[out + 3] = half * (
+        (FxL3 + FxR3) * nx + (FyL3 + FyR3) * ny
+    ) - half * alpha * (qR3 - qL3)
 
 
 def launch_euler_face_flux_2d[
@@ -358,7 +374,7 @@ def launch_euler_face_flux_2d[
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = euler_face_flux_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q,
         face_elem,
         face_elem_node,
@@ -520,7 +536,9 @@ def euler_face_flux_hllc_kernel_2d[
         var rho_s = rho_L * coef
         var u_s = uL + (S_star - unL) * nx
         var v_s = vL + (S_star - unL) * ny
-        var E_over_rho_s = qL3 / rho_L + (S_star - unL) * (S_star + pL / (rho_L * (S_L - unL)))
+        var E_over_rho_s = qL3 / rho_L + (S_star - unL) * (
+            S_star + pL / (rho_L * (S_L - unL))
+        )
         var qs0 = rho_s
         var qs1 = rho_s * u_s
         var qs2 = rho_s * v_s
@@ -534,7 +552,9 @@ def euler_face_flux_hllc_kernel_2d[
         var rho_s = rho_R * coef
         var u_s = uR + (S_star - unR) * nx
         var v_s = vR + (S_star - unR) * ny
-        var E_over_rho_s = qR3 / rho_R + (S_star - unR) * (S_star + pR / (rho_R * (S_R - unR)))
+        var E_over_rho_s = qR3 / rho_R + (S_star - unR) * (
+            S_star + pR / (rho_R * (S_R - unR))
+        )
         var qs0 = rho_s
         var qs1 = rho_s * u_s
         var qs2 = rho_s * v_s
@@ -566,7 +586,7 @@ def launch_euler_face_flux_hllc_2d[
 ) raises:
     var total = num_faces * NFP
     comptime _kernel = euler_face_flux_hllc_kernel_2d[NP, NFP]
-    ctx.enqueue_function[_kernel, _kernel](
+    ctx.enqueue_function[_kernel](
         q,
         face_elem,
         face_elem_node,

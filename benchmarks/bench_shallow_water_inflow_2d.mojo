@@ -129,7 +129,9 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e * NC
+    )
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -190,7 +192,14 @@ def main() raises:
         var h = hptr_q[i * 3 + 0]
         var hu = hptr_q[i * 3 + 1]
         var hv = hptr_q[i * 3 + 2]
-        if isnan(h) or isinf(h) or isnan(hu) or isinf(hu) or isnan(hv) or isinf(hv):
+        if (
+            isnan(h)
+            or isinf(h)
+            or isnan(hu)
+            or isinf(hu)
+            or isnan(hv)
+            or isinf(hv)
+        ):
             raise Error("bench_shallow_water_inflow_2d: non-finite output")
         var dh = Float64(h - H0)
         if dh < 0.0:
@@ -210,15 +219,32 @@ def main() raises:
 
     var hu_rel = max_hu_dev / Float64(H0 * U0)
     print("  max |h - H0|             =", max_h_dev, "  (threshold", H_TOL, ")")
-    print("  max |hu - H0*U0| / H0*U0 =", hu_rel, "  (threshold", HU_REL_TOL, ")")
+    print(
+        "  max |hu - H0*U0| / H0*U0 =", hu_rel, "  (threshold", HU_REL_TOL, ")"
+    )
     print("  max |hv|                 =", max_hv, "  (threshold", HV_TOL, ")")
 
     if max_h_dev > H_TOL:
-        raise Error("bench_shallow_water_inflow_2d FAILED: max |h - H0| " + String(max_h_dev) + " > " + String(H_TOL))
+        raise Error(
+            "bench_shallow_water_inflow_2d FAILED: max |h - H0| "
+            + String(max_h_dev)
+            + " > "
+            + String(H_TOL)
+        )
     if hu_rel > HU_REL_TOL:
-        raise Error("bench_shallow_water_inflow_2d FAILED: hu rel err " + String(hu_rel) + " > " + String(HU_REL_TOL))
+        raise Error(
+            "bench_shallow_water_inflow_2d FAILED: hu rel err "
+            + String(hu_rel)
+            + " > "
+            + String(HU_REL_TOL)
+        )
     if max_hv > HV_TOL:
-        raise Error("bench_shallow_water_inflow_2d FAILED: max |hv| " + String(max_hv) + " > " + String(HV_TOL))
+        raise Error(
+            "bench_shallow_water_inflow_2d FAILED: max |hv| "
+            + String(max_hv)
+            + " > "
+            + String(HV_TOL)
+        )
 
     print("=== bench_shallow_water_inflow_2d PASSED ===")
     mpi.finalize()

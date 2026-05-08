@@ -164,7 +164,7 @@ def main() raises:
         refs.node_weights^,
     )
 
-    solver.ctx.enqueue_function[cavity_ic_kernel, cavity_ic_kernel](
+    solver.ctx.enqueue_function[cavity_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -351,4 +351,6 @@ def _em_energy(
         for i in range(total_dof):
             var v = Float64(h_buf[i])
             tot += weight * v * v
-    return Float32(0.5 * tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ))
+    return Float32(
+        0.5 * tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ)
+    )

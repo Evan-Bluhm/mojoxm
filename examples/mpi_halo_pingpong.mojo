@@ -86,7 +86,7 @@ def main() raises:
     # Allocate scalar q on the local mesh (NC=1).
     var total_dof = patch.local.num_elements * 10 * NC
     var d_q = ctx.enqueue_create_buffer[DType.float32](total_dof)
-    ctx.enqueue_function[init_q_kernel, init_q_kernel](
+    ctx.enqueue_function[init_q_kernel](
         d_q.unsafe_ptr(),
         patch.d_owned_elem_ids.unsafe_ptr(),
         patch.num_owned_elements,
@@ -96,7 +96,7 @@ def main() raises:
         block_dim=IC_BLOCK,
     )
     # Then fill owned DOFs with the rank-identifying pattern.
-    ctx.enqueue_function[fill_owned_kernel, fill_owned_kernel](
+    ctx.enqueue_function[fill_owned_kernel](
         d_q.unsafe_ptr(),
         patch.d_owned_elem_ids.unsafe_ptr(),
         patch.num_owned_elements,

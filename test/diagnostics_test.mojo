@@ -104,7 +104,9 @@ def fill_checkerboard_kernel[
     q[e * NP + nn] = sign * amplitude
 
 
-def assert_close(name: String, got: Float64, expected: Float64, tol: Float64) raises:
+def assert_close(
+    name: String, got: Float64, expected: Float64, tol: Float64
+) raises:
     var d = got - expected
     var ad = d if d >= 0.0 else -d
     if ad > tol:

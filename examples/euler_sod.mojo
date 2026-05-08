@@ -130,7 +130,9 @@ def sod_ic_kernel(
     # Smooth right-state fraction s in [0, 1]; sharp-limit equivalent
     # when smooth_width -> 0.  The factor (tanh + 1) * 0.5 maps the
     # symmetric tanh to a 0->1 ramp centered at x = 0.5.
-    var s = (tanh((px - Float32(0.5)) / smooth_width) + Float32(1.0)) * Float32(0.5)
+    var s = (tanh((px - Float32(0.5)) / smooth_width) + Float32(1.0)) * Float32(
+        0.5
+    )
     var rho = rho_l + s * (rho_r - rho_l)
     var p = p_l + s * (p_r - p_l)
     var E = p / (gamma - Float32(1.0))  # velocities are zero
@@ -243,7 +245,7 @@ def main() raises:
     solver.enable_cell_limiter(True)
 
     nvtx.push_range("initial_condition")
-    solver.ctx.enqueue_function[sod_ic_kernel, sod_ic_kernel](
+    solver.ctx.enqueue_function[sod_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),

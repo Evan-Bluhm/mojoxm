@@ -66,7 +66,7 @@ for f in "${files[@]}"; do
     copies+=("$tmp")
 done
 
-"${mojo_cmd[@]}" format -q "${copies[@]}"
+"${mojo_cmd[@]}" format -l 200 -q "${copies[@]}"
 
 bad=()
 for f in "${files[@]}"; do

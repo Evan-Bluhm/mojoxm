@@ -156,7 +156,7 @@ def main() raises:
         refs.node_weights^,
     )
 
-    solver.ctx.enqueue_function[cavity_ic_kernel, cavity_ic_kernel](
+    solver.ctx.enqueue_function[cavity_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -168,7 +168,9 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * Maxwell.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_ic,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -189,7 +191,9 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -214,7 +218,10 @@ def main() raises:
 
     if rel_l2 > L2_MAX_REL:
         raise Error(
-            "bench_maxwell_cavity_3d FAILED: rel L2 " + String(rel_l2) + " exceeds threshold " + String(L2_MAX_REL)
+            "bench_maxwell_cavity_3d FAILED: rel L2 "
+            + String(rel_l2)
+            + " exceeds threshold "
+            + String(L2_MAX_REL)
         )
     print("=== bench_maxwell_cavity_3d PASSED ===")
     mpi.finalize()

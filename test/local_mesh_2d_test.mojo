@@ -45,7 +45,14 @@ def check_topology[P: Int](Nx: Int, Ny: Int, Lx: Float64, Ly: Float64) raises:
         for side in range(2):
             var e = Int(mesh.face_elem[fid * 2 + side])
             if e < 0 or e >= mesh.num_elements:
-                raise Error("face " + String(fid) + " side " + String(side) + " has bad element id " + String(e))
+                raise Error(
+                    "face "
+                    + String(fid)
+                    + " side "
+                    + String(side)
+                    + " has bad element id "
+                    + String(e)
+                )
         # Face length strictly positive.
         if not (mesh.face_length[fid] > 0.0):
             raise Error("face " + String(fid) + " has non-positive length")
@@ -55,11 +62,24 @@ def check_topology[P: Int](Nx: Int, Ny: Int, Lx: Float64, Ly: Float64) raises:
         for lf in range(3):
             var fid = Int(mesh.elem_faces[elem * 3 + lf])
             if fid < 0 or fid >= mesh.num_faces:
-                raise Error("elem " + String(elem) + " lf " + String(lf) + " has bad fid " + String(fid))
+                raise Error(
+                    "elem "
+                    + String(elem)
+                    + " lf "
+                    + String(lf)
+                    + " has bad fid "
+                    + String(fid)
+                )
             var side = Int(mesh.elem_face_side[elem * 3 + lf])
             var e_back = Int(mesh.face_elem[fid * 2 + side])
             if e_back != elem:
-                raise Error("elem " + String(elem) + " lf " + String(lf) + ": face_elem round-trip failed")
+                raise Error(
+                    "elem "
+                    + String(elem)
+                    + " lf "
+                    + String(lf)
+                    + ": face_elem round-trip failed"
+                )
 
     # face_elem_node validity (every slot references a valid node).
     for fid in range(mesh.num_faces):
@@ -67,7 +87,15 @@ def check_topology[P: Int](Nx: Int, Ny: Int, Lx: Float64, Ly: Float64) raises:
             for m in range(NFP_e):
                 var nn = Int(mesh.face_elem_node[(fid * 2 + side) * NFP_e + m])
                 if nn < 0 or nn >= NP_p:
-                    raise Error("face " + String(fid) + " side " + String(side) + " slot " + String(m) + " bad node")
+                    raise Error(
+                        "face "
+                        + String(fid)
+                        + " side "
+                        + String(side)
+                        + " slot "
+                        + String(m)
+                        + " bad node"
+                    )
 
     # Geometric consistency: side-0 and side-1 should reference the
     # SAME physical coordinate at each face-local slot (modulo periodic

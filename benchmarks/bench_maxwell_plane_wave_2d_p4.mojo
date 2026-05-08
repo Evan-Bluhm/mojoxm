@@ -123,7 +123,9 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e * NC
+    )
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for i in range(n_q):
@@ -174,7 +176,9 @@ def main() raises:
                 var k_idx = (elem * NP_p + nn) * NC + c
                 var v = hptr_q[k_idx]
                 if isnan(v) or isinf(v):
-                    raise Error("bench_maxwell_plane_wave_2d_p4: non-finite output")
+                    raise Error(
+                        "bench_maxwell_plane_wave_2d_p4: non-finite output"
+                    )
                 var err = Float64(v - host_ic[k_idx])
                 sum_sq += err * err
                 var ic = Float64(host_ic[k_idx])
@@ -199,7 +203,12 @@ def main() raises:
     )
 
     if rel > L2_MAX_REL:
-        raise Error(String("bench_maxwell_plane_wave_2d_p4 FAILED: rel L2 ") + String(rel) + " > " + String(L2_MAX_REL))
+        raise Error(
+            String("bench_maxwell_plane_wave_2d_p4 FAILED: rel L2 ")
+            + String(rel)
+            + " > "
+            + String(L2_MAX_REL)
+        )
     if max_zero_leak > ZERO_COMPONENT_MAX:
         raise Error(
             String("bench_maxwell_plane_wave_2d_p4 FAILED: zero-component ")

@@ -140,8 +140,10 @@ def _run(N: Int) raises -> Float64:
         node_weights^,
     )
 
-    var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
-    solver.ctx.enqueue_function[gaussian_ic_kernel, gaussian_ic_kernel](
+    var inv_two_sigma2 = Float32(1.0) / (
+        Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA
+    )
+    solver.ctx.enqueue_function[gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -156,7 +158,9 @@ def _run(N: Int) raises -> Float64:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_ic,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -178,7 +182,9 @@ def _run(N: Int) raises -> Float64:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
+        n_owned_dof
+    )
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -222,7 +228,10 @@ def main() raises:
 
     if err12 > L2_MAX_REL_AT_12:
         raise Error(
-            "bench_advection_3d_p3 FAILED: rel L2 at N=12 " + String(err12) + " exceeds " + String(L2_MAX_REL_AT_12)
+            "bench_advection_3d_p3 FAILED: rel L2 at N=12 "
+            + String(err12)
+            + " exceeds "
+            + String(L2_MAX_REL_AT_12)
         )
     if not (err6 > err8 and err8 > err12):
         raise Error(

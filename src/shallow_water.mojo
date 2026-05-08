@@ -56,7 +56,9 @@ struct ShallowWater(ImplicitlyCopyable, Physics):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[origin: MutOrigin](self, target: UnsafePointer[NoneType, origin]):
+    def _to_device_type[
+        origin: MutOrigin
+    ](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -171,7 +173,9 @@ struct ShallowWater(ImplicitlyCopyable, Physics):
             q_ghost[0] = q_int[0]
             q_ghost[1] = q_int[1]
             q_ghost[2] = q_int[2]
-        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](q_ghost.unsafe_ptr())
+        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
+            q_ghost.unsafe_ptr()
+        )
         return self.numerical_flux(q_int, q_ghost_p, nx, ny, nz, flux)
 
     # Flat-bottom shallow water: no source.  A bed-slope term

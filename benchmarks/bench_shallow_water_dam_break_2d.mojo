@@ -112,8 +112,12 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
-    var d_cell_mean = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_elements * NC)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e * NC
+    )
+    var d_cell_mean = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_elements * NC
+    )
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -212,7 +216,9 @@ def main() raises:
     var mass_fin: Float64 = 0.0
     for elem in range(gpu_mesh.num_elements):
         for nn in range(NP_p):
-            mass_fin += Float64(hptr_q[(elem * NP_p + nn) * NC + 0]) * node_w[nn]
+            mass_fin += (
+                Float64(hptr_q[(elem * NP_p + nn) * NC + 0]) * node_w[nn]
+            )
 
     var dmass = mass_fin - mass_ic
     if dmass < 0.0:
@@ -239,20 +245,31 @@ def main() raises:
 
     if rel > MASS_TOL_REL:
         raise Error(
-            String("bench_shallow_water_dam_break_2d FAILED: mass drift ") + String(rel) + " > " + String(MASS_TOL_REL)
+            String("bench_shallow_water_dam_break_2d FAILED: mass drift ")
+            + String(rel)
+            + " > "
+            + String(MASS_TOL_REL)
         )
     if h_min < Float32(0.0):
         raise Error(
-            String("bench_shallow_water_dam_break_2d FAILED: h_min ") + String(h_min) + " negative (positivity lost)"
+            String("bench_shallow_water_dam_break_2d FAILED: h_min ")
+            + String(h_min)
+            + " negative (positivity lost)"
         )
     if h_max > H_MAX_OK:
         raise Error(
-            String("bench_shallow_water_dam_break_2d FAILED: h_max ") + String(h_max) + " > " + String(H_MAX_OK)
+            String("bench_shallow_water_dam_break_2d FAILED: h_max ")
+            + String(h_max)
+            + " > "
+            + String(H_MAX_OK)
         )
     var v_bound = Float32(2.0) * Float32(sqrt(G * H_L))
     if v_max > v_bound:
         raise Error(
-            String("bench_shallow_water_dam_break_2d FAILED: |v|_max ") + String(v_max) + " > " + String(v_bound)
+            String("bench_shallow_water_dam_break_2d FAILED: |v|_max ")
+            + String(v_max)
+            + " > "
+            + String(v_bound)
         )
 
     print("=== bench_shallow_water_dam_break_2d PASSED ===")

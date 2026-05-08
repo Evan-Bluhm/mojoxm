@@ -92,7 +92,9 @@ def sod_ic_kernel_p5(
     var nn = idx % NP
     var e = Int(owned_elem_ids[i])
     var px = elem_node_xyz[(e * NP + nn) * 3 + 0]
-    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(0.5)
+    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(
+        0.5
+    )
     var rho = RHO_L + s * (RHO_R - RHO_L)
     var p = P_L + s * (P_R - P_L)
     var E = p / (GAMMA - Float32(1.0))
@@ -114,7 +116,9 @@ def main() raises:
         return
 
     print("bench_euler_sod_3d_p5 (3D Sod shock tube at P=5, BJ-limited)")
-    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL)
+    print(
+        "  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL
+    )
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -166,7 +170,7 @@ def main() raises:
     )
     solver.enable_cell_limiter(True, Float32(0.1))
 
-    solver.ctx.enqueue_function[sod_ic_kernel_p5, sod_ic_kernel_p5](
+    solver.ctx.enqueue_function[sod_ic_kernel_p5](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),
@@ -221,13 +225,23 @@ def main() raises:
 
     if rho_max > RHO_L + BOUNDS_SLACK:
         raise Error(
-            String("bench_euler_sod_3d_p5 FAILED: rho_max ") + String(rho_max) + " overshot RHO_L=" + String(RHO_L)
+            String("bench_euler_sod_3d_p5 FAILED: rho_max ")
+            + String(rho_max)
+            + " overshot RHO_L="
+            + String(RHO_L)
         )
     if rho_min < Float32(0.0):
-        raise Error(String("bench_euler_sod_3d_p5 FAILED: rho_min ") + String(rho_min) + " negative (positivity lost)")
+        raise Error(
+            String("bench_euler_sod_3d_p5 FAILED: rho_min ")
+            + String(rho_min)
+            + " negative (positivity lost)"
+        )
     if rho_min < RHO_R - BOUNDS_SLACK:
         raise Error(
-            String("bench_euler_sod_3d_p5 FAILED: rho_min ") + String(rho_min) + " undershot RHO_R=" + String(RHO_R)
+            String("bench_euler_sod_3d_p5 FAILED: rho_min ")
+            + String(rho_min)
+            + " undershot RHO_R="
+            + String(RHO_R)
         )
 
     var dmass = mass_fin - mass_ic

@@ -26,7 +26,9 @@ from std.gpu.host import DeviceContext, DeviceBuffer
 comptime ref2d_f = DType.float32
 
 
-def _upload_f64_as_f32(mut ctx: DeviceContext, src: List[Float64]) raises -> DeviceBuffer[ref2d_f]:
+def _upload_f64_as_f32(
+    mut ctx: DeviceContext, src: List[Float64]
+) raises -> DeviceBuffer[ref2d_f]:
     var n = len(src)
     var hbuf = ctx.enqueue_create_host_buffer[ref2d_f](n)
     var hptr = hbuf.unsafe_ptr()
@@ -71,4 +73,6 @@ struct ReferenceElement2DGpu[P: Int = 2](Movable):
         comptime SZ = 4  # Float32 == 4 bytes
         comptime NP = Self.NP
         comptime NFP = Self.NFP_edge
-        return SZ * (2 * NP * NP + 3 * NP * NFP + NP)  # D_ref (r + s directions)  # Lift_ref (3 edges)  # node_weights
+        return SZ * (
+            2 * NP * NP + 3 * NP * NFP + NP
+        )  # D_ref (r + s directions)  # Lift_ref (3 edges)  # node_weights

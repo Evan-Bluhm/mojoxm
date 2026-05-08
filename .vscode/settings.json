@@ -10,5 +10,8 @@
     // working, fall back to an absolute path.
     "mojo.lsp.includeDirs": [
         "."
+    ],
+    "mojo.formatting.args": [
+        "--line-length=200"
     ]
 }

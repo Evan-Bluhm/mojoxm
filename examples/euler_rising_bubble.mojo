@@ -113,7 +113,9 @@ def bubble_ic_kernel(
     var bubble_mask = exp(-r2 / (radius * radius))
 
     # Keep pressure = hydrostatic; deplete density inside the bubble.
-    var rho = rho_bg * (Float32(1.0) - (Float32(1.0) - rho_factor) * bubble_mask)
+    var rho = rho_bg * (
+        Float32(1.0) - (Float32(1.0) - rho_factor) * bubble_mask
+    )
     var p = p_bg
     var E = p / (gamma - Float32(1.0))  # velocities are zero
     var base = (e * N_P + nn) * 5
@@ -211,7 +213,7 @@ def main() raises:
         refs.node_weights^,
     )
 
-    solver.ctx.enqueue_function[bubble_ic_kernel, bubble_ic_kernel](
+    solver.ctx.enqueue_function[bubble_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
         solver.mesh.local.d_elem_node_xyz.unsafe_ptr(),

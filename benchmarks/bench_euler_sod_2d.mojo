@@ -123,7 +123,9 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e * NC
+    )
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -229,7 +231,9 @@ def main() raises:
     # Analytic reference at T_FINAL.
     var rho_ref_L = sod_exact_rho(0.10, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
     var rho_ref_R = sod_exact_rho(0.95, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
-    var rho_ref_star = sod_exact_rho(0.60, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R)
+    var rho_ref_star = sod_exact_rho(
+        0.60, T_FINAL, GAMMA, RHO_L, P_L, RHO_R, P_R
+    )
 
     # Bin helper inlined (no nested def -- Mojo nested defs can't
     # capture the NX/LX comptime constants).
@@ -241,8 +245,12 @@ def main() raises:
     var meas_R = profile[ix_R]
     var meas_star = profile[ix_star]
 
-    print("  exact rho_L plateau   =", rho_ref_L, "  measured (x=0.10) =", meas_L)
-    print("  exact rho_R plateau   =", rho_ref_R, "  measured (x=0.95) =", meas_R)
+    print(
+        "  exact rho_L plateau   =", rho_ref_L, "  measured (x=0.10) =", meas_L
+    )
+    print(
+        "  exact rho_R plateau   =", rho_ref_R, "  measured (x=0.95) =", meas_R
+    )
     print(
         "  exact rho_star (left) =",
         rho_ref_star,
@@ -303,7 +311,9 @@ def main() raises:
     var S_R = shock_speed_S_R(RHO_L, P_L, RHO_R, P_R, GAMMA)
     var x_shock_exact = 0.5 + T_FINAL * S_R
     var shock_err_cells = (x_shock_meas - x_shock_exact) / dx_cell
-    var a_shock_err_cells = shock_err_cells if shock_err_cells >= 0.0 else -shock_err_cells
+    var a_shock_err_cells = (
+        shock_err_cells if shock_err_cells >= 0.0 else -shock_err_cells
+    )
     print(
         "  exact shock x =",
         x_shock_exact,

@@ -54,7 +54,7 @@ for f in "${files[@]}"; do
     copies+=("$tmp")
 done
 
-"${mojo_cmd[@]}" format -l 120 -q "${copies[@]}"
+"${mojo_cmd[@]}" format -l 200 -q "${copies[@]}"
 
 bad=()
 for f in "${files[@]}"; do
@@ -67,6 +67,6 @@ if [[ ${#bad[@]} -gt 0 ]]; then
     echo "pre-commit: the following staged Mojo files are not formatted:" >&2
     printf '  %s\n' "${bad[@]}" >&2
     echo >&2
-    echo "Run 'make format' (or 'mojo format -l 120 <file>') and re-stage." >&2
+    echo "Run 'make format' (or 'mojo format -l 200 <file>') and re-stage." >&2
     exit 1
 fi

@@ -82,18 +82,40 @@ def check[P: Int](mut nvtx: NvtxContext, rank: Int, size: Int) raises:
     print("    halo_pinned_bytes     =", rep.halo_pinned_bytes)
 
     if rep.rk_stage_bytes <= 0:
-        raise Error("memory_report_test P=" + String(P) + ": rk_stage_bytes non-positive")
+        raise Error(
+            "memory_report_test P="
+            + String(P)
+            + ": rk_stage_bytes non-positive"
+        )
     if rep.dg_operators_bytes <= 0:
-        raise Error("memory_report_test P=" + String(P) + ": dg_operators_bytes non-positive")
+        raise Error(
+            "memory_report_test P="
+            + String(P)
+            + ": dg_operators_bytes non-positive"
+        )
     if rep.limiter_bytes <= 0:
-        raise Error("memory_report_test P=" + String(P) + ": limiter_bytes non-positive")
+        raise Error(
+            "memory_report_test P=" + String(P) + ": limiter_bytes non-positive"
+        )
     if rep.mesh_connectivity_bytes <= 0:
-        raise Error("memory_report_test P=" + String(P) + ": mesh_connectivity_bytes non-positive")
+        raise Error(
+            "memory_report_test P="
+            + String(P)
+            + ": mesh_connectivity_bytes non-positive"
+        )
     # At np=1 every ring has zero entries.
     if rep.halo_device_bytes != 0:
-        raise Error("memory_report_test P=" + String(P) + ": halo_device_bytes nonzero at np=1")
+        raise Error(
+            "memory_report_test P="
+            + String(P)
+            + ": halo_device_bytes nonzero at np=1"
+        )
     if rep.halo_pinned_bytes != 0:
-        raise Error("memory_report_test P=" + String(P) + ": halo_pinned_bytes nonzero at np=1")
+        raise Error(
+            "memory_report_test P="
+            + String(P)
+            + ": halo_pinned_bytes nonzero at np=1"
+        )
 
     var sum_check = (
         rep.rk_stage_bytes
@@ -150,11 +172,23 @@ def check[P: Int](mut nvtx: NvtxContext, rank: Int, size: Int) raises:
         measure_steps=10,
     )
     if tput.dof_per_second() <= 0.0:
-        raise Error("memory_report_test P=" + String(P) + ": dof_per_second non-positive")
+        raise Error(
+            "memory_report_test P="
+            + String(P)
+            + ": dof_per_second non-positive"
+        )
     if tput.per_step_seconds() <= 0.0:
-        raise Error("memory_report_test P=" + String(P) + ": per_step_seconds non-positive")
+        raise Error(
+            "memory_report_test P="
+            + String(P)
+            + ": per_step_seconds non-positive"
+        )
     if tput.state_bandwidth_bytes_per_second() <= 0.0:
-        raise Error("memory_report_test P=" + String(P) + ": state_bandwidth non-positive")
+        raise Error(
+            "memory_report_test P="
+            + String(P)
+            + ": state_bandwidth non-positive"
+        )
     # Internal consistency: dof_per_second == dof_count / per_step_seconds.
     # Catches a regression where one of the two methods forgets to scale
     # by num_steps (e.g. dof_per_second using wall_seconds in place of
@@ -188,7 +222,8 @@ def check[P: Int](mut nvtx: NvtxContext, rank: Int, size: Int) raises:
             + String(P)
             + ": state_bandwidth "
             + String(bw)
-            + " B/s exceeds 1 TB/s sanity ceiling -- timing likely missing a ctx.synchronize()"
+            + " B/s exceeds 1 TB/s sanity ceiling -- timing likely missing a"
+            " ctx.synchronize()"
         )
     # Sanity: 8 * total_q_len * 4 bytes.
     var expected_state_bytes = 8 * solver.total_q_len * 4

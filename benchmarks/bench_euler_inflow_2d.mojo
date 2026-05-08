@@ -130,7 +130,9 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
+        gpu_mesh.num_faces * NFP_e * NC
+    )
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -196,7 +198,16 @@ def main() raises:
         var rhou = hptr_q[i * 4 + 1]
         var rhov = hptr_q[i * 4 + 2]
         var E = hptr_q[i * 4 + 3]
-        if isnan(rho) or isinf(rho) or isnan(rhou) or isinf(rhou) or isnan(rhov) or isinf(rhov) or isnan(E) or isinf(E):
+        if (
+            isnan(rho)
+            or isinf(rho)
+            or isnan(rhou)
+            or isinf(rhou)
+            or isnan(rhov)
+            or isinf(rhov)
+            or isnan(E)
+            or isinf(E)
+        ):
             raise Error("bench_euler_inflow_2d: non-finite output")
         var drho = Float64(rho - RHO0)
         if drho < 0.0:
@@ -252,13 +263,33 @@ def main() raises:
     )
 
     if rho_rel > RHO_REL_TOL:
-        raise Error("bench_euler_inflow_2d FAILED: rho rel err " + String(rho_rel) + " > " + String(RHO_REL_TOL))
+        raise Error(
+            "bench_euler_inflow_2d FAILED: rho rel err "
+            + String(rho_rel)
+            + " > "
+            + String(RHO_REL_TOL)
+        )
     if rhou_rel > RHOU_REL_TOL:
-        raise Error("bench_euler_inflow_2d FAILED: rhou rel err " + String(rhou_rel) + " > " + String(RHOU_REL_TOL))
+        raise Error(
+            "bench_euler_inflow_2d FAILED: rhou rel err "
+            + String(rhou_rel)
+            + " > "
+            + String(RHOU_REL_TOL)
+        )
     if max_rhov > RHOV_TOL:
-        raise Error("bench_euler_inflow_2d FAILED: max |rhov| " + String(max_rhov) + " > " + String(RHOV_TOL))
+        raise Error(
+            "bench_euler_inflow_2d FAILED: max |rhov| "
+            + String(max_rhov)
+            + " > "
+            + String(RHOV_TOL)
+        )
     if E_rel > E_REL_TOL:
-        raise Error("bench_euler_inflow_2d FAILED: E rel err " + String(E_rel) + " > " + String(E_REL_TOL))
+        raise Error(
+            "bench_euler_inflow_2d FAILED: E rel err "
+            + String(E_rel)
+            + " > "
+            + String(E_REL_TOL)
+        )
 
     print("=== bench_euler_inflow_2d PASSED ===")
     mpi.finalize()

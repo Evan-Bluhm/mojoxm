@@ -46,7 +46,9 @@ struct Advection(ImplicitlyCopyable, Physics):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[origin: MutOrigin](self, target: UnsafePointer[NoneType, origin]):
+    def _to_device_type[
+        origin: MutOrigin
+    ](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -126,7 +128,9 @@ struct Advection(ImplicitlyCopyable, Physics):
             # half so the flux upwinds purely from the interior when
             # vn >= 0 and is exactly zero when vn < 0.
             q_ghost = Float32(0.0)
-        flux[0] = Float32(0.5) * ((nc + absnc) * q_int[0] + (nc - absnc) * q_ghost)
+        flux[0] = Float32(0.5) * (
+            (nc + absnc) * q_int[0] + (nc - absnc) * q_ghost
+        )
         return absnc
 
     # Pure hyperbolic conservation law -- no source.
