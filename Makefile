@@ -275,7 +275,7 @@ help:
 	@echo '  make test-vtu-meshio     meshio-roundtrip + VTK_LAGRANGE_TETRAHEDRON spec'
 	@echo '                           validation on the 3D P=2..5 fixtures (~3s incl. test-vtu-3d-multi)'
 	@echo '  make test-quick          run 8 representative tests (~15s with cached binaries)'
-	@echo '  make test-utils          run 5 helper-module tests (~7s; 3 host-only + 2 small GPU)'
+	@echo '  make test-utils          run 5 helper-module tests (~4s; 3 host-only + 2 small GPU)'
 	@echo '  make test-limiter        run 8 BJ-limiter unit tests (2D + 3D, P=2/3/4/5; ~15s cached)'
 	@echo '  make test-all            run every test above (~3 min wall, measured 2:44 cached)'
 	@echo '  make test-klone          run MPI test on Klone (requires klone-run)'

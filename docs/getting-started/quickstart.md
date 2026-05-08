@@ -24,7 +24,7 @@ Mojo has to compile.
 | ------------------------ | -------------------------------------------------------------- | ------ |
 | `make test-quick`        | 8-test smoke: host operators, 2D + 3D constant-state           | ~13 s  |
 | `make test-limiter`      | 8 BJ-limiter unit tests, P=2/3/4/5 in 2D + 3D                  | ~14 s  |
-| `make test-utils`        | 5 helper-module tests (perf, VTU, SSPRK3, partition, Sod)      | ~7 s   |
+| `make test-utils`        | 5 helper-module tests (perf, VTU, SSPRK3, partition, Sod)      | ~4 s   |
 | `make test-all`          | The full 33-test inventory                                     | ~4 min |
 
 ## Bench
