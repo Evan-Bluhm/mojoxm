@@ -118,7 +118,7 @@ Useful flags:
 
 | Flag             | What it does                                                |
 | ---------------- | ----------------------------------------------------------- |
-| `--by-physics`   | Roll up per-physics totals                                  |
+| `--by-physics`   | Roll up per-physics totals (also: `make profile-summary-by-physics`) |
 | `--show-cv`      | Show coefficient of variation (run-to-run noise estimate)   |
 | `--csv`          | Emit CSV (for spreadsheets / scripts)                       |
 | `--markdown`     | Emit Markdown table (for PR descriptions)                   |

@@ -207,9 +207,7 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -300,33 +298,13 @@ def main() raises:
     )
 
     if rho_rel > RHO_REL_TOL:
-        raise Error(
-            "bench_euler_inflow_3d FAILED: rho rel err "
-            + String(rho_rel)
-            + " > "
-            + String(RHO_REL_TOL)
-        )
+        raise Error("bench_euler_inflow_3d FAILED: rho rel err " + String(rho_rel) + " > " + String(RHO_REL_TOL))
     if rhou_rel > RHOU_REL_TOL:
-        raise Error(
-            "bench_euler_inflow_3d FAILED: rhou rel err "
-            + String(rhou_rel)
-            + " > "
-            + String(RHOU_REL_TOL)
-        )
+        raise Error("bench_euler_inflow_3d FAILED: rhou rel err " + String(rhou_rel) + " > " + String(RHOU_REL_TOL))
     if max_rhovw > RHOVW_TOL:
-        raise Error(
-            "bench_euler_inflow_3d FAILED: rhov/rhow drift "
-            + String(max_rhovw)
-            + " > "
-            + String(RHOVW_TOL)
-        )
+        raise Error("bench_euler_inflow_3d FAILED: rhov/rhow drift " + String(max_rhovw) + " > " + String(RHOVW_TOL))
     if E_rel > E_REL_TOL:
-        raise Error(
-            "bench_euler_inflow_3d FAILED: E rel err "
-            + String(E_rel)
-            + " > "
-            + String(E_REL_TOL)
-        )
+        raise Error("bench_euler_inflow_3d FAILED: E rel err " + String(E_rel) + " > " + String(E_REL_TOL))
 
     print("=== bench_euler_inflow_3d PASSED ===")
     mpi.finalize()

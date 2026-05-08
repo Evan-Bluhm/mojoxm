@@ -130,9 +130,7 @@ def sod_ic_kernel(
     # Smooth right-state fraction s in [0, 1]; sharp-limit equivalent
     # when smooth_width -> 0.  The factor (tanh + 1) * 0.5 maps the
     # symmetric tanh to a 0->1 ramp centered at x = 0.5.
-    var s = (tanh((px - Float32(0.5)) / smooth_width) + Float32(1.0)) * Float32(
-        0.5
-    )
+    var s = (tanh((px - Float32(0.5)) / smooth_width) + Float32(1.0)) * Float32(0.5)
     var rho = rho_l + s * (rho_r - rho_l)
     var p = p_l + s * (p_r - p_l)
     var E = p / (gamma - Float32(1.0))  # velocities are zero

@@ -106,9 +106,7 @@ struct Maxwell(ImplicitlyCopyable, Physics):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[
-        origin: MutOrigin
-    ](self, target: UnsafePointer[NoneType, origin]):
+    def _to_device_type[origin: MutOrigin](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -250,9 +248,7 @@ struct Maxwell(ImplicitlyCopyable, Physics):
             # BC_OUTFLOW / default: zero-gradient extrapolation.
             for k in range(6):
                 q_ghost[k] = q_int[k]
-        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-            q_ghost.unsafe_ptr()
-        )
+        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](q_ghost.unsafe_ptr())
         return self.numerical_flux(q_int, q_ghost_p, nx, ny, nz, flux)
 
     # Uniform current source.  In SI units with eps0 = 1/c^2, mu0 = 1:

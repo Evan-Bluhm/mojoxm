@@ -69,9 +69,7 @@ def check[P: Int]() raises:
 
     var blob = Path(path).read_bytes()
     if len(blob) == 0:
-        raise Error(
-            "vtu_2d_multi_test P=" + String(P) + ": output file is empty"
-        )
+        raise Error("vtu_2d_multi_test P=" + String(P) + ": output file is empty")
     print("    wrote", len(blob), "bytes to", path)
 
     # Re-decode the XML prologue (everything before the appended raw
@@ -79,27 +77,13 @@ def check[P: Int]() raises:
     var s = String(StringSlice[origin_of(blob)](unsafe_from_utf8=blob))
     # ParaView's default-displayed scalar must be field 0.
     if not (String('Scalars="rho"') in s):
-        raise Error(
-            "vtu_2d_multi_test P="
-            + String(P)
-            + ': missing Scalars="rho" attribute'
-        )
+        raise Error("vtu_2d_multi_test P=" + String(P) + ': missing Scalars="rho" attribute')
     if not (String('Name="rho"') in s):
-        raise Error(
-            "vtu_2d_multi_test P="
-            + String(P)
-            + ": missing rho DataArray header"
-        )
+        raise Error("vtu_2d_multi_test P=" + String(P) + ": missing rho DataArray header")
     if not (String('Name="p"') in s):
-        raise Error(
-            "vtu_2d_multi_test P=" + String(P) + ": missing p DataArray header"
-        )
+        raise Error("vtu_2d_multi_test P=" + String(P) + ": missing p DataArray header")
     if not (String('Name="|v|"') in s):
-        raise Error(
-            "vtu_2d_multi_test P="
-            + String(P)
-            + ": missing |v| DataArray header"
-        )
+        raise Error("vtu_2d_multi_test P=" + String(P) + ": missing |v| DataArray header")
 
 
 def main() raises:

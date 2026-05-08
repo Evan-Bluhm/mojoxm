@@ -98,9 +98,7 @@ def _run(NX: Int) raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -207,24 +205,15 @@ def main() raises:
 
     if err32 > L2_MAX_REL:
         raise Error(
-            "bench_shallow_water_wave_2d FAILED: NX=32 rel L2 "
-            + String(err32)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_shallow_water_wave_2d FAILED: NX=32 rel L2 " + String(err32) + " exceeds " + String(L2_MAX_REL)
         )
     if err48 > L2_MAX_REL:
         raise Error(
-            "bench_shallow_water_wave_2d FAILED: NX=48 rel L2 "
-            + String(err48)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_shallow_water_wave_2d FAILED: NX=48 rel L2 " + String(err48) + " exceeds " + String(L2_MAX_REL)
         )
     if err64 > L2_MAX_REL:
         raise Error(
-            "bench_shallow_water_wave_2d FAILED: NX=64 rel L2 "
-            + String(err64)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_shallow_water_wave_2d FAILED: NX=64 rel L2 " + String(err64) + " exceeds " + String(L2_MAX_REL)
         )
 
     print("=== bench_shallow_water_wave_2d PASSED ===")

@@ -137,9 +137,7 @@ def main() raises:
         Lift_ref=Lift_ref^,
         node_weights=node_weights^,
     )
-    solver.enable_cell_limiter(
-        enabled=True, venkat_eps=Float32(0.0)
-    )  # raw BJ, eps=0
+    solver.enable_cell_limiter(enabled=True, venkat_eps=Float32(0.0))  # raw BJ, eps=0
 
     var num_owned = solver.num_owned_elements
     var n_dof = num_owned * NP
@@ -175,10 +173,7 @@ def main() raises:
         ")",
     )
     if max_err_const > CONST_TOL:
-        raise Error(
-            "limiter_3d_test_p4 FAILED: constant state altered by limiter by "
-            + String(max_err_const)
-        )
+        raise Error("limiter_3d_test_p4 FAILED: constant state altered by limiter by " + String(max_err_const))
 
     # --- Test 2: perturbed state -> verify cell-mean preservation.
     solver.ctx.enqueue_function[fill_perturbed_kernel, fill_perturbed_kernel](
@@ -241,8 +236,7 @@ def main() raises:
     )
     if max_change < Float32(0.01):
         raise Error(
-            "limiter_3d_test_p4 FAILED: limiter appears not to have "
-            "modified q (max_change="
+            "limiter_3d_test_p4 FAILED: limiter appears not to have modified q (max_change="
             + String(max_change)
             + "); test setup may be invalid"
         )

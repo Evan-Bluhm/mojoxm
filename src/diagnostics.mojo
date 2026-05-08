@@ -83,9 +83,7 @@ struct DiagnosticsWriter[PhysT: Physics, P: Int = 2](Movable):
         var part = solver.mesh.part.copy()
         # At np=1 the mesh IS the global grid.  At np>1 we reconstruct
         # global_nx*global_ny*global_nz from the partition metadata.
-        self.global_dof_total = (
-            part.global_nx * part.global_ny * part.global_nz * 6 * Self.NP
-        )
+        self.global_dof_total = part.global_nx * part.global_ny * part.global_nz * 6 * Self.NP
         self.domain_volume = domain_lx * domain_ly * domain_lz
         self.linear = linear.copy()
         self.squared = squared.copy()
@@ -162,12 +160,8 @@ struct DiagnosticsWriter[PhysT: Physics, P: Int = 2](Movable):
             var lbuf = InlineArray[Float32, 1](fill=0.0)
             var rbuf = InlineArray[Float32, 1](fill=0.0)
             lbuf[0] = mloc
-            var lp = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-                lbuf.unsafe_ptr()
-            )
-            var rp = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-                rbuf.unsafe_ptr()
-            )
+            var lp = rebind[UnsafePointer[Float32, MutAnyOrigin]](lbuf.unsafe_ptr())
+            var rp = rebind[UnsafePointer[Float32, MutAnyOrigin]](rbuf.unsafe_ptr())
             mpi.allreduce_float_max(lp, rp, 1)
             self.last_row.append(Float64(rbuf[0]))
 

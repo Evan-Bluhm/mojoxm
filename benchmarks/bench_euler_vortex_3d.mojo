@@ -104,12 +104,7 @@ def vortex_ic_kernel(
         dy += Float32(LY)
 
     var r2 = dx * dx + dy * dy
-    var factor = (
-        (GAMMA - Float32(1.0))
-        * BETA
-        * BETA
-        / (Float32(8.0) * GAMMA * TWO_PI_F * TWO_PI_F)
-    )
+    var factor = (GAMMA - Float32(1.0)) * BETA * BETA / (Float32(8.0) * GAMMA * TWO_PI_F * TWO_PI_F)
     var T = T_INF - factor * exp(Float32(1.0) - r2)
     var e_half = exp(Float32(0.5) * (Float32(1.0) - r2))
     var u = U0 - (BETA / TWO_PI_F) * dy * e_half
@@ -117,9 +112,7 @@ def vortex_ic_kernel(
     var w = Float32(0.0)
     var rho = T ** (Float32(1.0) / (GAMMA - Float32(1.0)))
     var p = rho * T
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (
-        u * u + v * v + w * w
-    )
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
 
     var base = (e * N_P + nn) * 5
     q[base + 0] = rho
@@ -200,9 +193,7 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * N_P * Euler.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
     solver.ctx.enqueue_copy(
         hbuf_ic,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -225,9 +216,7 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -240,9 +229,7 @@ def main() raises:
     for k in range(n_owned_dof):
         var v_now = q_ptr[k]
         if isnan(v_now) or isinf(v_now):
-            raise Error(
-                "bench_euler_vortex_3d: non-finite output at " + String(k)
-            )
+            raise Error("bench_euler_vortex_3d: non-finite output at " + String(k))
         var err = Float64(v_now - host_ic[k])
         sum_sq += err * err
         var ic = Float64(host_ic[k])
@@ -253,12 +240,7 @@ def main() raises:
     print("  rel L2(state) =", rel, "  (threshold", L2_MAX_REL, ")")
 
     if rel > L2_MAX_REL:
-        raise Error(
-            "bench_euler_vortex_3d FAILED: rel L2 "
-            + String(rel)
-            + " > "
-            + String(L2_MAX_REL)
-        )
+        raise Error("bench_euler_vortex_3d FAILED: rel L2 " + String(rel) + " > " + String(L2_MAX_REL))
 
     print("=== bench_euler_vortex_3d PASSED ===")
     mpi.finalize()

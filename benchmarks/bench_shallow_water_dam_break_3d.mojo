@@ -187,9 +187,7 @@ def main() raises:
     var mass_ic: Float64 = 0.0
     for elem in range(n_owned):
         for nn in range(NP):
-            mass_ic += Float64(h_buf[elem * NP + nn]) * Float64(
-                re.node_weights[nn]
-            )
+            mass_ic += Float64(h_buf[elem * NP + nn]) * Float64(re.node_weights[nn])
 
     var c_peak = sqrt(G * H_L)
     var h_cell = Float32(LX) / Float32(NX)
@@ -217,9 +215,7 @@ def main() raises:
     var mass_fin: Float64 = 0.0
     for elem in range(n_owned):
         for nn in range(NP):
-            mass_fin += Float64(h_buf[elem * NP + nn]) * Float64(
-                re.node_weights[nn]
-            )
+            mass_fin += Float64(h_buf[elem * NP + nn]) * Float64(re.node_weights[nn])
 
     var hu_buf = List[Float32]()
     for _ in range(n_dof):
@@ -261,31 +257,20 @@ def main() raises:
 
     if rel > MASS_TOL_REL:
         raise Error(
-            String("bench_shallow_water_dam_break_3d FAILED: mass drift ")
-            + String(rel)
-            + " > "
-            + String(MASS_TOL_REL)
+            String("bench_shallow_water_dam_break_3d FAILED: mass drift ") + String(rel) + " > " + String(MASS_TOL_REL)
         )
     if h_min < Float32(0.0):
         raise Error(
-            String("bench_shallow_water_dam_break_3d FAILED: h_min ")
-            + String(h_min)
-            + " negative (positivity lost)"
+            String("bench_shallow_water_dam_break_3d FAILED: h_min ") + String(h_min) + " negative (positivity lost)"
         )
     if h_max > H_MAX_OK:
         raise Error(
-            String("bench_shallow_water_dam_break_3d FAILED: h_max ")
-            + String(h_max)
-            + " > "
-            + String(H_MAX_OK)
+            String("bench_shallow_water_dam_break_3d FAILED: h_max ") + String(h_max) + " > " + String(H_MAX_OK)
         )
     var v_bound = Float32(2.0) * Float32(sqrt(G * H_L))
     if v_max > v_bound:
         raise Error(
-            String("bench_shallow_water_dam_break_3d FAILED: |v|_max ")
-            + String(v_max)
-            + " > "
-            + String(v_bound)
+            String("bench_shallow_water_dam_break_3d FAILED: |v|_max ") + String(v_max) + " > " + String(v_bound)
         )
 
     print("=== bench_shallow_water_dam_break_3d PASSED ===")

@@ -273,9 +273,7 @@ def main() raises:
             nvtx=nvtx,
         )
         if rank == 0:
-            print(
-                "  wrote output/snapshot_t_final.vtu (h + |u|, t=", T_FINAL, ")"
-            )
+            print("  wrote output/snapshot_t_final.vtu (h + |u|, t=", T_FINAL, ")")
 
     if size == 1:
         var mass_final = _total_mass(solver, nvtx)
@@ -318,6 +316,4 @@ def _total_mass(
     var tot: Float64 = 0.0
     for i in range(total_dof):
         tot += Float64(h_buf[i])
-    return Float32(
-        tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ)
-    )
+    return Float32(tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ))

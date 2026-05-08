@@ -92,9 +92,7 @@ def entropy_wave_ic_kernel(
     var v = V0
     var w = W0
     var p = P0
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (
-        u * u + v * v + w * w
-    )
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
 
     var base = (e * NP + nn) * NC
     q[base + 0] = rho
@@ -157,9 +155,7 @@ def _run(N: Int) raises -> Float64:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * NC
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
     solver.ctx.enqueue_copy(
         hbuf_ic,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -181,9 +177,7 @@ def _run(N: Int) raises -> Float64:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),

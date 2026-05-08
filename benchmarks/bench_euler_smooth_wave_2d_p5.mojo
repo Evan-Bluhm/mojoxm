@@ -94,9 +94,7 @@ def _run(N: Int) raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -169,9 +167,7 @@ def main() raises:
         return
 
     print("bench_euler_smooth_wave_2d_p5 (P=5 entropy wave, HLLC)")
-    print(
-        "  P=", P, "  NP=", num_tri_nodes_2d(P), "  refinement sweep N=4, 6, 8"
-    )
+    print("  P=", P, "  NP=", num_tri_nodes_2d(P), "  refinement sweep N=4, 6, 8")
 
     var err4 = _run(4)
     print("  N=4   rel L2 =", err4)
@@ -182,24 +178,15 @@ def main() raises:
 
     if err4 > L2_MAX_REL:
         raise Error(
-            "bench_euler_smooth_wave_2d_p5 FAILED: rel L2 at N=4 "
-            + String(err4)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_euler_smooth_wave_2d_p5 FAILED: rel L2 at N=4 " + String(err4) + " exceeds " + String(L2_MAX_REL)
         )
     if err6 > L2_MAX_REL:
         raise Error(
-            "bench_euler_smooth_wave_2d_p5 FAILED: rel L2 at N=6 "
-            + String(err6)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_euler_smooth_wave_2d_p5 FAILED: rel L2 at N=6 " + String(err6) + " exceeds " + String(L2_MAX_REL)
         )
     if err8 > L2_MAX_REL:
         raise Error(
-            "bench_euler_smooth_wave_2d_p5 FAILED: rel L2 at N=8 "
-            + String(err8)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_euler_smooth_wave_2d_p5 FAILED: rel L2 at N=8 " + String(err8) + " exceeds " + String(L2_MAX_REL)
         )
 
     print("=== bench_euler_smooth_wave_2d_p5 PASSED ===")

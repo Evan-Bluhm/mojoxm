@@ -107,17 +107,13 @@ def brio_wu_ic_kernel_p3(
     var nn = idx % NP
     var e = Int(owned_elem_ids[i])
     var px = elem_node_xyz[(e * NP + nn) * 3 + 0]
-    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(
-        0.5
-    )
+    var s = (tanh((px - Float32(0.5)) / SMOOTH_WIDTH) + Float32(1.0)) * Float32(0.5)
     var rho = RHO_L + s * (RHO_R - RHO_L)
     var p = P_L + s * (P_R - P_L)
     var by = BY_L + s * (BY_R - BY_L)
     var bx = BX
     var bz = Float32(0.0)
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (
-        bx * bx + by * by + bz * bz
-    )
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * (bx * bx + by * by + bz * bz)
     var base = (e * NP + nn) * 9
     q[base + 0] = rho
     q[base + 1] = Float32(0.0)
@@ -140,9 +136,7 @@ def main() raises:
         return
 
     print("bench_mhd_brio_wu_3d_p3 (3D Brio-Wu MHD at P=3)")
-    print(
-        "  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL
-    )
+    print("  P=", P, "  NP=", NP, "  mesh=", NX, "x", NY, "x", NZ, "  T=", T_FINAL)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -273,32 +267,14 @@ def main() raises:
 
     if bx_max_err > BX_TOL:
         raise Error(
-            String("bench_mhd_brio_wu_3d_p3 FAILED: Bx drifted ")
-            + String(bx_max_err)
-            + " > tol "
-            + String(BX_TOL)
+            String("bench_mhd_brio_wu_3d_p3 FAILED: Bx drifted ") + String(bx_max_err) + " > tol " + String(BX_TOL)
         )
     if psi_max > PSI_TOL:
-        raise Error(
-            String("bench_mhd_brio_wu_3d_p3 FAILED: psi ")
-            + String(psi_max)
-            + " > tol "
-            + String(PSI_TOL)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d_p3 FAILED: psi ") + String(psi_max) + " > tol " + String(PSI_TOL))
     if rho_min < RHO_MIN_OK:
-        raise Error(
-            String("bench_mhd_brio_wu_3d_p3 FAILED: rho_min ")
-            + String(rho_min)
-            + " < "
-            + String(RHO_MIN_OK)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d_p3 FAILED: rho_min ") + String(rho_min) + " < " + String(RHO_MIN_OK))
     if rho_max > RHO_MAX_OK:
-        raise Error(
-            String("bench_mhd_brio_wu_3d_p3 FAILED: rho_max ")
-            + String(rho_max)
-            + " > "
-            + String(RHO_MAX_OK)
-        )
+        raise Error(String("bench_mhd_brio_wu_3d_p3 FAILED: rho_max ") + String(rho_max) + " > " + String(RHO_MAX_OK))
 
     var dmass = mass_fin - mass_ic
     if dmass < 0.0:

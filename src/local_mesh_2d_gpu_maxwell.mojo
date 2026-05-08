@@ -98,24 +98,12 @@ def maxwell_vol_lift_combine_rk_kernel_2d[
         var Fy5 = -Ex
         var D_r = D_ref[0 * NP * NP + i * NP + j]
         var D_s = D_ref[1 * NP * NP + i * NP + j]
-        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (
-            iJ10 * Fx0 + iJ11 * Fy0
-        ) * D_s
-        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (
-            iJ10 * Fx1 + iJ11 * Fy1
-        ) * D_s
-        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (
-            iJ10 * Fx2 + iJ11 * Fy2
-        ) * D_s
-        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (
-            iJ10 * Fx3 + iJ11 * Fy3
-        ) * D_s
-        acc4 += (iJ00 * Fx4 + iJ01 * Fy4) * D_r + (
-            iJ10 * Fx4 + iJ11 * Fy4
-        ) * D_s
-        acc5 += (iJ00 * Fx5 + iJ01 * Fy5) * D_r + (
-            iJ10 * Fx5 + iJ11 * Fy5
-        ) * D_s
+        acc0 += (iJ00 * Fx0 + iJ01 * Fy0) * D_r + (iJ10 * Fx0 + iJ11 * Fy0) * D_s
+        acc1 += (iJ00 * Fx1 + iJ01 * Fy1) * D_r + (iJ10 * Fx1 + iJ11 * Fy1) * D_s
+        acc2 += (iJ00 * Fx2 + iJ01 * Fy2) * D_r + (iJ10 * Fx2 + iJ11 * Fy2) * D_s
+        acc3 += (iJ00 * Fx3 + iJ01 * Fy3) * D_r + (iJ10 * Fx3 + iJ11 * Fy3) * D_s
+        acc4 += (iJ00 * Fx4 + iJ01 * Fy4) * D_r + (iJ10 * Fx4 + iJ11 * Fy4) * D_s
+        acc5 += (iJ00 * Fx5 + iJ01 * Fy5) * D_r + (iJ10 * Fx5 + iJ11 * Fy5) * D_s
 
     # ---- Lift contribution.
     var inv_2A = elem_inv_2A[elem]

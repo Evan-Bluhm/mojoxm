@@ -122,12 +122,8 @@ def taylor_green_ic_kernel(
     var w = Float32(0.0)
 
     var rho = rho0
-    var p = p0 + (rho0 * u0 * u0 / Float32(16.0)) * (c2x + c2y) * (
-        c2z + Float32(2.0)
-    )
-    var E = p / (gamma - Float32(1.0)) + Float32(0.5) * rho * (
-        u * u + v * v + w * w
-    )
+    var p = p0 + (rho0 * u0 * u0 / Float32(16.0)) * (c2x + c2y) * (c2z + Float32(2.0))
+    var E = p / (gamma - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
 
     var base = (e * N_P + nn) * 5
     q[base + 0] = rho
@@ -170,9 +166,7 @@ def main() raises:
             NX * NY * NZ * 6,
             "tets",
         )
-        print(
-            "  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P
-        )
+        print("  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P)
 
     var nvtx = NvtxContext()
     if rank == 0:

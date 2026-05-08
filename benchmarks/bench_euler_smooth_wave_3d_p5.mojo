@@ -89,9 +89,7 @@ def entropy_wave_ic_kernel(
     var v = V0
     var w = W0
     var p = P0
-    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (
-        u * u + v * v + w * w
-    )
+    var E = p / (GAMMA - Float32(1.0)) + Float32(0.5) * rho * (u * u + v * v + w * w)
 
     var base = (e * NP + nn) * NC
     q[base + 0] = rho
@@ -154,9 +152,7 @@ def _run(N: Int) raises -> Float64:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * NC
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
     solver.ctx.enqueue_copy(
         hbuf_ic,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -178,9 +174,7 @@ def _run(N: Int) raises -> Float64:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -232,24 +226,15 @@ def main() raises:
 
     if err4 > L2_MAX_REL:
         raise Error(
-            "bench_euler_smooth_wave_3d_p5 FAILED: rel L2 at N=4 "
-            + String(err4)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_euler_smooth_wave_3d_p5 FAILED: rel L2 at N=4 " + String(err4) + " exceeds " + String(L2_MAX_REL)
         )
     if err6 > L2_MAX_REL:
         raise Error(
-            "bench_euler_smooth_wave_3d_p5 FAILED: rel L2 at N=6 "
-            + String(err6)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_euler_smooth_wave_3d_p5 FAILED: rel L2 at N=6 " + String(err6) + " exceeds " + String(L2_MAX_REL)
         )
     if err8 > L2_MAX_REL:
         raise Error(
-            "bench_euler_smooth_wave_3d_p5 FAILED: rel L2 at N=8 "
-            + String(err8)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_euler_smooth_wave_3d_p5 FAILED: rel L2 at N=8 " + String(err8) + " exceeds " + String(L2_MAX_REL)
         )
 
     print("=== bench_euler_smooth_wave_3d_p5 PASSED ===")

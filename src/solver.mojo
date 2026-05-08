@@ -255,9 +255,7 @@ def rk_stage_kernel[
     if valid:
         var q_my_ptr = q_in + (e * NP + i) * NC
         var my_flux_dc = InlineArray[Float32, NC * 3](fill=0.0)
-        var my_flux_dc_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-            my_flux_dc.unsafe_ptr()
-        )
+        var my_flux_dc_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](my_flux_dc.unsafe_ptr())
         _ = physics.internal_flux(
             rebind[UnsafePointer[Float32, MutAnyOrigin]](q_my_ptr),
             my_flux_dc_p,
@@ -286,9 +284,7 @@ def rk_stage_kernel[
                 var q_l_ptr = q_in + (e_l * NP + n_l) * NC
                 var q_r_ptr = q_in + (e_r * NP + n_r) * NC
                 var fstar = InlineArray[Float32, NC](fill=0.0)
-                var fstar_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-                    fstar.unsafe_ptr()
-                )
+                var fstar_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](fstar.unsafe_ptr())
                 # Interior faces take the two-sided numerical flux;
                 # boundary faces (bc_type != 0) use the physics type's
                 # boundary_flux on the interior state only, with the
@@ -348,9 +344,7 @@ def rk_stage_kernel[
     var my_y = elem_node_xyz[(e * NP + i) * 3 + 1]
     var my_z = elem_node_xyz[(e * NP + i) * 3 + 2]
     var source = InlineArray[Float32, NC](fill=0.0)
-    var source_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-        source.unsafe_ptr()
-    )
+    var source_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](source.unsafe_ptr())
     physics.source_term(
         rebind[UnsafePointer[Float32, MutAnyOrigin]](my_q_ptr),
         my_x,
@@ -387,17 +381,13 @@ def rk_stage_kernel[
                 face_c += sign * area * Lim * shared_face_flux[face_base + c]
 
         var rhs_val = vol_c - inv_6V * face_c + source[c]
-        q_out[out_base + c] = (
-            a * q_a[out_base + c] + b * q_b[out_base + c] + cc * dt * rhs_val
-        )
+        q_out[out_base + c] = a * q_a[out_base + c] + b * q_b[out_base + c] + cc * dt * rhs_val
 
     # Post-stage limiter.  Runs once per (element, node) thread on
     # q_out, after the NC RK writes complete.  Physics types without
     # positivity requirements no-op; Euler / MHD / two-fluid clamp
     # density + pressure to their configured floors.
-    physics.limit_state(
-        rebind[UnsafePointer[Float32, MutAnyOrigin]](q_out + out_base)
-    )
+    physics.limit_state(rebind[UnsafePointer[Float32, MutAnyOrigin]](q_out + out_base))
 
 
 # ----------------------------------------------------------------------
@@ -732,16 +722,12 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         """
         nvtx.push_range("download_owned_component_with_ids")
         var hbuf = self.ctx.enqueue_create_host_buffer[dtype](self.total_q_len)
-        var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](
-            self.num_owned_elements
-        )
+        var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](self.num_owned_elements)
         # inv_perm[new_id] -> original build-time id.  After the
         # Mesh element reordering, owned_elem_ids entries are
         # new-numbering ids; we need the original id to decode cube
         # coordinates from the simple (cube, tet) formula.
-        var h_invperm = self.ctx.enqueue_create_host_buffer[DType.int32](
-            self.mesh.local.num_elements
-        )
+        var h_invperm = self.ctx.enqueue_create_host_buffer[DType.int32](self.mesh.local.num_elements)
         self.ctx.enqueue_copy(hbuf, self.d_q)
         self.ctx.enqueue_copy(h_ids, self.mesh.d_owned_elem_ids)
         self.ctx.enqueue_copy(h_invperm, self.mesh.d_inv_perm)
@@ -779,9 +765,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
             # q is stored under the NEW id (that's how the permuted
             # mesh addresses it).
             for nn in range(Self.NP):
-                scalar_host[i * Self.NP + nn] = q_p[
-                    (e_new * Self.NP + nn) * stride + c
-                ]
+                scalar_host[i * Self.NP + nn] = q_p[(e_new * Self.NP + nn) * stride + c]
         nvtx.pop_range()
 
     def download_owned_component(
@@ -796,9 +780,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         # Full-buffer download, then host-side gather through
         # owned_elem_ids.  Ghost-slot values are simply skipped.
         var hbuf = self.ctx.enqueue_create_host_buffer[dtype](self.total_q_len)
-        var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](
-            self.num_owned_elements
-        )
+        var h_ids = self.ctx.enqueue_create_host_buffer[DType.int32](self.num_owned_elements)
         self.ctx.enqueue_copy(hbuf, self.d_q)
         self.ctx.enqueue_copy(h_ids, self.mesh.d_owned_elem_ids)
         self.ctx.synchronize()
@@ -808,9 +790,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         for i in range(self.num_owned_elements):
             var e = Int(ids_p[i])
             for nn in range(Self.NP):
-                scalar_host[i * Self.NP + nn] = q_p[
-                    (e * Self.NP + nn) * stride + c
-                ]
+                scalar_host[i * Self.NP + nn] = q_p[(e * Self.NP + nn) * stride + c]
         nvtx.pop_range()
 
     # --- Internal: one RK stage kernel launch -----------------------
@@ -951,9 +931,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         var d_ref_bytes = ND * NP * NP * SZ_F
         var lift_ref_bytes = NF * NP * NFP * SZ_F
         var node_weights_bytes = NP * SZ_F
-        var dg_operators_bytes = (
-            d_ref_bytes + lift_ref_bytes + node_weights_bytes
-        )
+        var dg_operators_bytes = d_ref_bytes + lift_ref_bytes + node_weights_bytes
 
         # 3. Limiter scratch: d_cell_avg + d_bj_theta.
         var theta_count = num_owned if num_owned > 0 else 1
@@ -1049,9 +1027,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         # Pass 2: BJ theta computation over owned elements (one
         # thread per owned element; same parallelism as the old
         # single-kernel limiter).
-        comptime _theta_kernel = bj_limiter_compute_theta_kernel[
-            Self.NP, Self.NC
-        ]
+        comptime _theta_kernel = bj_limiter_compute_theta_kernel[Self.NP, Self.NC]
         self.ctx.enqueue_function[_theta_kernel, _theta_kernel](
             q_ptr,
             self.mesh.d_owned_elem_ids.unsafe_ptr(),
@@ -1280,9 +1256,7 @@ struct Solver[PhysT: Physics, P: Int = 2](Movable):
         nvtx.pop_range()
 
 
-def _upload_f32(
-    mut ctx: DeviceContext, src: List[Float32]
-) raises -> DeviceBuffer[dtype]:
+def _upload_f32(mut ctx: DeviceContext, src: List[Float32]) raises -> DeviceBuffer[dtype]:
     var n = len(src)
     var hbuf = ctx.enqueue_create_host_buffer[dtype](n)
     memcpy(dest=hbuf.unsafe_ptr(), src=src.unsafe_ptr(), count=n)

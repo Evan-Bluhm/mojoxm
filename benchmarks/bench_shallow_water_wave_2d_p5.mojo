@@ -90,9 +90,7 @@ def _run(NX: Int) raises -> Float64:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -205,24 +203,15 @@ def main() raises:
 
     if err6 > L2_MAX_REL:
         raise Error(
-            "bench_shallow_water_wave_2d_p5 FAILED: NX=6 rel L2 "
-            + String(err6)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_shallow_water_wave_2d_p5 FAILED: NX=6 rel L2 " + String(err6) + " exceeds " + String(L2_MAX_REL)
         )
     if err8 > L2_MAX_REL:
         raise Error(
-            "bench_shallow_water_wave_2d_p5 FAILED: NX=8 rel L2 "
-            + String(err8)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_shallow_water_wave_2d_p5 FAILED: NX=8 rel L2 " + String(err8) + " exceeds " + String(L2_MAX_REL)
         )
     if err12 > L2_MAX_REL:
         raise Error(
-            "bench_shallow_water_wave_2d_p5 FAILED: NX=12 rel L2 "
-            + String(err12)
-            + " exceeds "
-            + String(L2_MAX_REL)
+            "bench_shallow_water_wave_2d_p5 FAILED: NX=12 rel L2 " + String(err12) + " exceeds " + String(L2_MAX_REL)
         )
 
     print("=== bench_shallow_water_wave_2d_p5 PASSED ===")

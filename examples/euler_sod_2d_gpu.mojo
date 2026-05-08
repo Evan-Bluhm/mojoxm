@@ -322,8 +322,6 @@ def main() raises:
         paths,
         times,
     )
-    print(
-        "  wrote output/solution_sod2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames"
-    )
+    print("  wrote output/solution_sod2d_gpu.pvd +", NUM_FRAMES + 1, "VTU frames")
 
     mpi.finalize()

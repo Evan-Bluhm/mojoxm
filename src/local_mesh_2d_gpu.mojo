@@ -55,9 +55,7 @@ comptime mesh_f = DType.float32
 comptime mesh_i = DType.int32
 
 
-def _upload_f64_as_f32(
-    mut ctx: DeviceContext, src: List[Float64]
-) raises -> DeviceBuffer[mesh_f]:
+def _upload_f64_as_f32(mut ctx: DeviceContext, src: List[Float64]) raises -> DeviceBuffer[mesh_f]:
     """Convert a host Float64 list to Float32 in a pinned host buffer,
     then enqueue_copy it to a fresh device buffer.  Used for the mesh
     geometry (coordinates, Jacobians, face normals, etc.) -- the 2D
@@ -72,9 +70,7 @@ def _upload_f64_as_f32(
     return dbuf^
 
 
-def _upload_i32(
-    mut ctx: DeviceContext, src: List[Int32]
-) raises -> DeviceBuffer[mesh_i]:
+def _upload_i32(mut ctx: DeviceContext, src: List[Int32]) raises -> DeviceBuffer[mesh_i]:
     var n = len(src)
     var hbuf = ctx.enqueue_create_host_buffer[mesh_i](n)
     memcpy(dest=hbuf.unsafe_ptr(), src=src.unsafe_ptr(), count=n)

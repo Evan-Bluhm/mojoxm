@@ -154,9 +154,7 @@ def main() raises:
             NX * NY * NZ * 6,
             "tets",
         )
-        print(
-            "  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P
-        )
+        print("  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P)
 
     var nvtx = NvtxContext()
     if rank == 0:
@@ -229,9 +227,7 @@ def main() raises:
 
     # Initial condition on owned elements.
     nvtx.push_range("initial_condition")
-    var inv_two_sigma2 = Float32(1.0) / (
-        Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA
-    )
+    var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
     solver.ctx.enqueue_function[gaussian_ic_kernel, gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),

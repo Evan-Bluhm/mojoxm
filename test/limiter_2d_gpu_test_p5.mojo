@@ -99,11 +99,7 @@ def main() raises:
             max_uniform_err = m
     print("  (1) smooth passthrough max |q - q_IC| =", max_uniform_err)
     if max_uniform_err > Float32(1.0e-6):
-        raise Error(
-            "limiter perturbed a uniform state (max err "
-            + String(max_uniform_err)
-            + ")"
-        )
+        raise Error("limiter perturbed a uniform state (max err " + String(max_uniform_err) + ")")
 
     # ---- (2) within-cell spike monotonicity -----------------------
     # Same setup as the lower-P tests: rho=1 everywhere, then perturb
@@ -142,15 +138,9 @@ def main() raises:
             max_rho = rho
     print("  (2) spike: max rho after limiting (pre-limit = 5.0) =", max_rho)
     if max_rho >= Float32(5.0):
-        raise Error(
-            "limiter did nothing -- max rho stayed at " + String(max_rho)
-        )
+        raise Error("limiter did nothing -- max rho stayed at " + String(max_rho))
     if max_rho > Float32(2.5):
-        raise Error(
-            "limiter under-scaled the spike (max rho "
-            + String(max_rho)
-            + ", expected < 2.5)"
-        )
+        raise Error("limiter under-scaled the spike (max rho " + String(max_rho) + ", expected < 2.5)")
 
     # Check (2b): far-from-spike elements should be unperturbed.
     var max_far_err: Float32 = 0.0
@@ -173,11 +163,7 @@ def main() raises:
                 max_far_err = m
     print("  (2) far-from-spike max |q - q_IC| =", max_far_err)
     if max_far_err > Float32(1.0e-6):
-        raise Error(
-            "limiter perturbed far-from-spike elements (max err "
-            + String(max_far_err)
-            + ")"
-        )
+        raise Error("limiter perturbed far-from-spike elements (max err " + String(max_far_err) + ")")
 
     print("=== limiter_2d_gpu_test_p5 PASSED ===")
     mpi.finalize()

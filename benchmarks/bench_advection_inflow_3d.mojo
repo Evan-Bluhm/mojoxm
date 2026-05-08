@@ -176,19 +176,9 @@ def main() raises:
     )
 
     if max_err > Q_TOL:
-        raise Error(
-            String("bench_advection_inflow_3d FAILED: max |q-1| ")
-            + String(max_err)
-            + " > "
-            + String(Q_TOL)
-        )
+        raise Error(String("bench_advection_inflow_3d FAILED: max |q-1| ") + String(max_err) + " > " + String(Q_TOL))
     if mean_err > MEAN_TOL:
-        raise Error(
-            String("bench_advection_inflow_3d FAILED: |<q>-1| ")
-            + String(mean_err)
-            + " > "
-            + String(MEAN_TOL)
-        )
+        raise Error(String("bench_advection_inflow_3d FAILED: |<q>-1| ") + String(mean_err) + " > " + String(MEAN_TOL))
 
     print("=== bench_advection_inflow_3d PASSED ===")
     mpi.finalize()

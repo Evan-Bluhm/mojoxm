@@ -130,9 +130,7 @@ def _run(N: Int) raises -> Float64:
     )
 
     # Initial condition: Gaussian centered at (0.5, 0.5, 0.5).
-    var inv_two_sigma2 = Float32(1.0) / (
-        Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA
-    )
+    var inv_two_sigma2 = Float32(1.0) / (Float32(2.0) * GAUSS_SIGMA * GAUSS_SIGMA)
     solver.ctx.enqueue_function[gaussian_ic_kernel, gaussian_ic_kernel](
         solver.d_q.unsafe_ptr(),
         solver.mesh.d_owned_elem_ids.unsafe_ptr(),
@@ -149,12 +147,8 @@ def _run(N: Int) raises -> Float64:
 
     # Snapshot the IC on host for later L2 comparison.
     var n_owned_dof = solver.num_owned_elements * N_P
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -173,12 +167,8 @@ def _run(N: Int) raises -> Float64:
     solver.ctx.synchronize()
 
     # Download final state + compute L2.
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -218,10 +208,7 @@ def main() raises:
 
     if err16 > L2_MAX_REL_AT_16:
         raise Error(
-            "bench_advection_3d FAILED: rel L2 at N=16 "
-            + String(err16)
-            + " exceeds "
-            + String(L2_MAX_REL_AT_16)
+            "bench_advection_3d FAILED: rel L2 at N=16 " + String(err16) + " exceeds " + String(L2_MAX_REL_AT_16)
         )
     if not (err8 > err12 and err12 > err16):
         raise Error(

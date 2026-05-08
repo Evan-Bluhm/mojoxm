@@ -351,6 +351,4 @@ def _em_energy(
         for i in range(total_dof):
             var v = Float64(h_buf[i])
             tot += weight * v * v
-    return Float32(
-        0.5 * tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ)
-    )
+    return Float32(0.5 * tot / Float64(total_dof) * Float64(LX) * Float64(LY) * Float64(LZ))

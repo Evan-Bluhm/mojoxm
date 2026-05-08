@@ -291,9 +291,7 @@ def write_snapshot_3d_multi[
     dump_vtu_3d_frame_multi(
         num_elements=solver.num_owned_elements,
         nodes_per_elem=num_tet_nodes(P),
-        elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](
-            solver.mesh.owned_node_xyz_f32_ptr
-        ),
+        elem_node_xyz=rebind[UnsafePointer[Float32, MutAnyOrigin]](solver.mesh.owned_node_xyz_f32_ptr),
         field_names=field_names,
         field_data=field_data,
         path=path,

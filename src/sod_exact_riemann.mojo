@@ -61,8 +61,7 @@ def solve_star(
     Raises if non-convergent (shouldn't on physical inputs)."""
     var e = (gamma - 1.0) / (2.0 * gamma)
     var p_tr = pow(
-        (a_L + a_R - 0.5 * (gamma - 1.0) * (u_R - u_L))
-        / (a_L / pow(p_L, e) + a_R / pow(p_R, e)),
+        (a_L + a_R - 0.5 * (gamma - 1.0) * (u_R - u_L)) / (a_L / pow(p_L, e) + a_R / pow(p_R, e)),
         1.0 / e,
     )
     var p = p_tr if p_tr > 0.0 else 0.5 * (p_L + p_R)
@@ -78,18 +77,14 @@ def solve_star(
             var sL = sqrt(A_L / (p + B_L))
             dfL = sL * (1.0 - 0.5 * (p - p_L) / (p + B_L))
         else:
-            dfL = (1.0 / (rho_L * a_L)) * pow(
-                p / p_L, -(gamma + 1.0) / (2.0 * gamma)
-            )
+            dfL = (1.0 / (rho_L * a_L)) * pow(p / p_L, -(gamma + 1.0) / (2.0 * gamma))
         if p > p_R:
             var A_R = 2.0 / ((gamma + 1.0) * rho_R)
             var B_R = (gamma - 1.0) / (gamma + 1.0) * p_R
             var sR = sqrt(A_R / (p + B_R))
             dfR = sR * (1.0 - 0.5 * (p - p_R) / (p + B_R))
         else:
-            dfR = (1.0 / (rho_R * a_R)) * pow(
-                p / p_R, -(gamma + 1.0) / (2.0 * gamma)
-            )
+            dfR = (1.0 / (rho_R * a_R)) * pow(p / p_R, -(gamma + 1.0) / (2.0 * gamma))
         var resid = fL + fR + (u_R - u_L)
         var dp = -resid / (dfL + dfR)
         var p_new = p + dp
@@ -131,10 +126,7 @@ def sod_exact_rho(
         a_R,
         gamma,
     )
-    var u_star = 0.5 * (
-        f_K(p_star, rho_R, p_R, a_R, gamma)
-        - f_K(p_star, rho_L, p_L, a_L, gamma)
-    )
+    var u_star = 0.5 * (f_K(p_star, rho_R, p_R, a_R, gamma) - f_K(p_star, rho_L, p_L, a_L, gamma))
 
     # Left wave: rarefaction (since p_star < p_L for the canonical IC).
     var rho_star_L = rho_L * pow(p_star / p_L, 1.0 / gamma)
@@ -144,13 +136,9 @@ def sod_exact_rho(
 
     # Right wave: shock (since p_star > p_R for the canonical IC).
     var rho_star_R = rho_R * (
-        (p_star / p_R + (gamma - 1.0) / (gamma + 1.0))
-        / ((gamma - 1.0) / (gamma + 1.0) * p_star / p_R + 1.0)
+        (p_star / p_R + (gamma - 1.0) / (gamma + 1.0)) / ((gamma - 1.0) / (gamma + 1.0) * p_star / p_R + 1.0)
     )
-    var S_R = a_R * sqrt(
-        (gamma + 1.0) / (2.0 * gamma) * p_star / p_R
-        + (gamma - 1.0) / (2.0 * gamma)
-    )  # u_R = 0
+    var S_R = a_R * sqrt((gamma + 1.0) / (2.0 * gamma) * p_star / p_R + (gamma - 1.0) / (2.0 * gamma))  # u_R = 0
 
     if xi < xi_head_L:
         return rho_L
@@ -191,7 +179,4 @@ def shock_speed_S_R(
         a_R,
         gamma,
     )
-    return a_R * sqrt(
-        (gamma + 1.0) / (2.0 * gamma) * p_star / p_R
-        + (gamma - 1.0) / (2.0 * gamma)
-    )
+    return a_R * sqrt((gamma + 1.0) / (2.0 * gamma) * p_star / p_R + (gamma - 1.0) / (2.0 * gamma))

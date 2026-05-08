@@ -273,9 +273,7 @@ struct FiveMomentTwoFluid(ImplicitlyCopyable, Physics):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[
-        origin: MutOrigin
-    ](self, target: UnsafePointer[NoneType, origin]):
+    def _to_device_type[origin: MutOrigin](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -353,12 +351,8 @@ struct FiveMomentTwoFluid(ImplicitlyCopyable, Physics):
 
         # Loose CFL bound for the caller.  Per-face numerical_flux is
         # tighter; we just want something defensively large.
-        var c_e = _species_sound(
-            q_e_ptr, self.gamma_e, self.min_density, self.min_pressure
-        )
-        var c_i = _species_sound(
-            q_i_ptr, self.gamma_i, self.min_density, self.min_pressure
-        )
+        var c_e = _species_sound(q_e_ptr, self.gamma_e, self.min_density, self.min_pressure)
+        var c_i = _species_sound(q_i_ptr, self.gamma_i, self.min_density, self.min_pressure)
         return max(
             max(c_e, c_i),
             max(self.c_light, self.c_h),
@@ -456,18 +450,10 @@ struct FiveMomentTwoFluid(ImplicitlyCopyable, Physics):
         var un_er = (q_r[1] * nx + q_r[2] * ny + q_r[3] * nz) / rho_er
         var un_il = (q_l[6] * nx + q_l[7] * ny + q_l[8] * nz) / rho_il
         var un_ir = (q_r[6] * nx + q_r[7] * ny + q_r[8] * nz) / rho_ir
-        var ce_l = _species_sound(
-            q_l + 0, self.gamma_e, self.min_density, self.min_pressure
-        )
-        var ce_r = _species_sound(
-            q_r + 0, self.gamma_e, self.min_density, self.min_pressure
-        )
-        var ci_l = _species_sound(
-            q_l + 5, self.gamma_i, self.min_density, self.min_pressure
-        )
-        var ci_r = _species_sound(
-            q_r + 5, self.gamma_i, self.min_density, self.min_pressure
-        )
+        var ce_l = _species_sound(q_l + 0, self.gamma_e, self.min_density, self.min_pressure)
+        var ce_r = _species_sound(q_r + 0, self.gamma_e, self.min_density, self.min_pressure)
+        var ci_l = _species_sound(q_l + 5, self.gamma_i, self.min_density, self.min_pressure)
+        var ci_r = _species_sound(q_r + 5, self.gamma_i, self.min_density, self.min_pressure)
         var aun_el = un_el if un_el >= Float32(0.0) else -un_el
         var aun_er = un_er if un_er >= Float32(0.0) else -un_er
         var aun_il = un_il if un_il >= Float32(0.0) else -un_il
@@ -543,9 +529,7 @@ struct FiveMomentTwoFluid(ImplicitlyCopyable, Physics):
             q_ghost[15] = self.inflow_Bz
             q_ghost[16] = self.inflow_psi
         # BC_OUTFLOW / default: ghost == interior (already copied).
-        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-            q_ghost.unsafe_ptr()
-        )
+        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](q_ghost.unsafe_ptr())
         return self.numerical_flux(q_int, q_ghost_p, nx, ny, nz, flux)
 
     # Pointwise source: Lorentz force on each fluid, J on Ampere, GLM

@@ -75,9 +75,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -192,9 +190,7 @@ def main() raises:
         )
     if max_zero > ZERO_COMPONENT_TOL:
         raise Error(
-            String(
-                "bench_maxwell_uniform_m_2d_p3 FAILED: zero-component drift "
-            )
+            String("bench_maxwell_uniform_m_2d_p3 FAILED: zero-component drift ")
             + String(max_zero)
             + " > "
             + String(ZERO_COMPONENT_TOL)

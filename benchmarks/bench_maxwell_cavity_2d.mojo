@@ -110,9 +110,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for i in range(n_q):
@@ -168,12 +166,7 @@ def main() raises:
     var rel = l2 / l2_ic
     print("  rel L2(state) =", rel, "  (threshold", L2_MAX_REL, ")")
     if rel > L2_MAX_REL:
-        raise Error(
-            String("bench_maxwell_cavity_2d FAILED: rel L2 ")
-            + String(rel)
-            + " > "
-            + String(L2_MAX_REL)
-        )
+        raise Error(String("bench_maxwell_cavity_2d FAILED: rel L2 ") + String(rel) + " > " + String(L2_MAX_REL))
 
     print("=== bench_maxwell_cavity_2d PASSED ===")
     mpi.finalize()

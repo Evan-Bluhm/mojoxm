@@ -280,9 +280,7 @@ struct IdealMHD(ImplicitlyCopyable, Physics):
     # --- DevicePassable plumbing (see std.gpu.host.device_context) ---
     comptime device_type = Self
 
-    def _to_device_type[
-        origin: MutOrigin
-    ](self, target: UnsafePointer[NoneType, origin]):
+    def _to_device_type[origin: MutOrigin](self, target: UnsafePointer[NoneType, origin]):
         target.bitcast[Self]()[] = self
 
     @staticmethod
@@ -308,9 +306,7 @@ struct IdealMHD(ImplicitlyCopyable, Physics):
         var u = q[1] / rho
         var v = q[2] / rho
         var w = q[3] / rho
-        var p = mhd_gas_pressure(
-            q, self.gamma, self.min_density, self.min_pressure
-        )
+        var p = mhd_gas_pressure(q, self.gamma, self.min_density, self.min_pressure)
         var bx = q[5]
         var by = q[6]
         var bz = q[7]
@@ -435,9 +431,7 @@ struct IdealMHD(ImplicitlyCopyable, Physics):
             q_ghost[5] = q_int[5]
             q_ghost[6] = q_int[6]
             q_ghost[7] = q_int[7]
-        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](
-            q_ghost.unsafe_ptr()
-        )
+        var q_ghost_p = rebind[UnsafePointer[Float32, MutAnyOrigin]](q_ghost.unsafe_ptr())
         return self.numerical_flux(q_int, q_ghost_p, nx, ny, nz, flux)
 
     # GLM damping: dpsi/dt += -alpha_d * psi.  All other components have

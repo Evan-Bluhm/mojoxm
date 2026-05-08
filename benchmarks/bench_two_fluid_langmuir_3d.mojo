@@ -112,10 +112,7 @@ def langmuir_ic_kernel(
     q[base + 1] = rho_e0 * u_pert
     q[base + 2] = Float32(0.0)
     q[base + 3] = Float32(0.0)
-    q[base + 4] = (
-        p_e0 / (gamma_e - Float32(1.0))
-        + Float32(0.5) * rho_e0 * u_pert * u_pert
-    )
+    q[base + 4] = p_e0 / (gamma_e - Float32(1.0)) + Float32(0.5) * rho_e0 * u_pert * u_pert
     q[base + 5] = rho_i0
     q[base + 6] = Float32(0.0)
     q[base + 7] = Float32(0.0)

@@ -64,9 +64,7 @@ def main() raises:
         return
 
     print("bench_maxwell_uniform_m_3d (uniform M source-term gate)")
-    print(
-        "  P= 2   mesh=", NX, "x", NY, "x", NZ, "   Mz=", MZ, "   T=", T_FINAL
-    )
+    print("  P= 2   mesh=", NX, "x", NY, "x", NZ, "   Mz=", MZ, "   T=", T_FINAL)
 
     var rank = mpi.world_rank()
     var nvtx = NvtxContext()
@@ -120,9 +118,7 @@ def main() raises:
         solver.step_ssprk3(dt, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
     solver.ctx.enqueue_copy(
         hbuf_q,
         solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof),
@@ -200,12 +196,7 @@ def main() raises:
     )
 
     if bz_rel > BZ_REL_TOL:
-        raise Error(
-            "bench_maxwell_uniform_m_3d FAILED: Bz deviation "
-            + String(bz_rel)
-            + " > "
-            + String(BZ_REL_TOL)
-        )
+        raise Error("bench_maxwell_uniform_m_3d FAILED: Bz deviation " + String(bz_rel) + " > " + String(BZ_REL_TOL))
     if max_other > ZERO_COMPONENT_TOL:
         raise Error(
             "bench_maxwell_uniform_m_3d FAILED: zero-component leak "

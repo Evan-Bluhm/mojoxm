@@ -88,9 +88,7 @@ def main() raises:
 
     # BC_OUTFLOW on all four faces -- the path that is otherwise
     # untested in 2D Maxwell.
-    var bcs = BoundaryConditions2D(
-        BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW
-    )
+    var bcs = BoundaryConditions2D(BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW, BC_OUTFLOW)
     var host_mesh = LocalMesh2D[P](NX, NY, LX, LY, bcs)
     var host_re = ReferenceElement2D[P]()
     var gpu_mesh = LocalMesh2DGpu[P](ctx, host_mesh^)
@@ -117,9 +115,7 @@ def main() raises:
     var d_q = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q1 = ctx.enqueue_create_buffer[DType.float32](n_q)
     var d_q2 = ctx.enqueue_create_buffer[DType.float32](n_q)
-    var d_fstar = ctx.enqueue_create_buffer[DType.float32](
-        gpu_mesh.num_faces * NFP_e * NC
-    )
+    var d_fstar = ctx.enqueue_create_buffer[DType.float32](gpu_mesh.num_faces * NFP_e * NC)
     var hbuf_q = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var hptr_q = hbuf_q.unsafe_ptr()
     for k in range(n_q):
@@ -173,12 +169,7 @@ def main() raises:
 
     print("  max |q - q_IC| =", max_drift, "  (threshold", DRIFT_TOL, ")")
     if max_drift > DRIFT_TOL:
-        raise Error(
-            "bench_maxwell_outflow_2d FAILED: drift "
-            + String(max_drift)
-            + " > "
-            + String(DRIFT_TOL)
-        )
+        raise Error("bench_maxwell_outflow_2d FAILED: drift " + String(max_drift) + " > " + String(DRIFT_TOL))
 
     print("=== bench_maxwell_outflow_2d PASSED ===")
     mpi.finalize()

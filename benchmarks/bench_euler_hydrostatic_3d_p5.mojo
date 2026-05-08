@@ -173,12 +173,8 @@ def main() raises:
     solver.ctx.synchronize()
 
     var n_owned_dof = solver.num_owned_elements * NP * Euler.NUM_COMPONENTS
-    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_ic = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_ic, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var ic_ptr = hbuf_ic.unsafe_ptr()
     var host_ic = List[Float32]()
@@ -196,12 +192,8 @@ def main() raises:
         solver.step_ssprk3(dt_used, nvtx)
     solver.ctx.synchronize()
 
-    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](
-        n_owned_dof
-    )
-    solver.ctx.enqueue_copy(
-        hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof)
-    )
+    var hbuf_q = solver.ctx.enqueue_create_host_buffer[DType.float32](n_owned_dof)
+    solver.ctx.enqueue_copy(hbuf_q, solver.d_q.create_sub_buffer[DType.float32](0, n_owned_dof))
     solver.ctx.synchronize()
     var q_ptr = hbuf_q.unsafe_ptr()
 
@@ -220,11 +212,7 @@ def main() raises:
         var u = rhou / rho_now
         var v = rhov / rho_now
         var w = rhow / rho_now
-        var v_mag = sqrt(
-            Float64(u) * Float64(u)
-            + Float64(v) * Float64(v)
-            + Float64(w) * Float64(w)
-        )
+        var v_mag = sqrt(Float64(u) * Float64(u) + Float64(v) * Float64(v) + Float64(w) * Float64(w))
         if v_mag > max_v:
             max_v = v_mag
         var rho_dev = Float64(rho_now - RHO0)
@@ -250,26 +238,13 @@ def main() raises:
     print("  max dp/p0      =", max_p_dev, "  (threshold", P_REL_TOL, ")")
 
     if max_v > VMAX_TOL:
-        raise Error(
-            "bench_euler_hydrostatic_3d_p5 FAILED: max |v| "
-            + String(max_v)
-            + " > "
-            + String(VMAX_TOL)
-        )
+        raise Error("bench_euler_hydrostatic_3d_p5 FAILED: max |v| " + String(max_v) + " > " + String(VMAX_TOL))
     if max_rho_dev > RHO_REL_TOL:
         raise Error(
-            "bench_euler_hydrostatic_3d_p5 FAILED: max drho/rho0 "
-            + String(max_rho_dev)
-            + " > "
-            + String(RHO_REL_TOL)
+            "bench_euler_hydrostatic_3d_p5 FAILED: max drho/rho0 " + String(max_rho_dev) + " > " + String(RHO_REL_TOL)
         )
     if max_p_dev > P_REL_TOL:
-        raise Error(
-            "bench_euler_hydrostatic_3d_p5 FAILED: max dp/p0 "
-            + String(max_p_dev)
-            + " > "
-            + String(P_REL_TOL)
-        )
+        raise Error("bench_euler_hydrostatic_3d_p5 FAILED: max dp/p0 " + String(max_p_dev) + " > " + String(P_REL_TOL))
 
     print("=== bench_euler_hydrostatic_3d_p5 PASSED ===")
     mpi.finalize()

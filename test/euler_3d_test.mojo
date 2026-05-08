@@ -54,11 +54,7 @@ comptime CONST_TOL: Float32 = Float32(1.0e-4)
 
 def fill_constant_kernel[
     P: Int
-](
-    q: UnsafePointer[Float32, MutAnyOrigin],
-    owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin],
-    num_owned: Int,
-):
+](q: UnsafePointer[Float32, MutAnyOrigin], owned_elem_ids: UnsafePointer[Int32, MutAnyOrigin], num_owned: Int,):
     comptime NP = num_tet_nodes(P)
     var idx = Int(global_idx.x)
     var total = num_owned * NP
@@ -157,12 +153,7 @@ def check[P: Int](mut nvtx: NvtxContext) raises:
         for k in range(n_dof):
             var v = scratch[k]
             if isnan(v) or isinf(v):
-                raise Error(
-                    "euler_3d_test P="
-                    + String(P)
-                    + ": non-finite at component "
-                    + String(c)
-                )
+                raise Error("euler_3d_test P=" + String(P) + ": non-finite at component " + String(c))
             var d = v - ic_vals[c]
             var ad = d if d >= Float32(0.0) else -d
             if ad > max_err:

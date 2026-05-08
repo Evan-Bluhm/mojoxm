@@ -263,17 +263,11 @@ struct HaloExchange(Movable):
         # partition edges still need to exchange with their neighbour.
         self.skip_mpi = List[Bool]()
         self.skip_mpi.append(part.rx == 0 and bcs.bc_x_lo != BC_INTERIOR)
-        self.skip_mpi.append(
-            part.rx == part.px - 1 and bcs.bc_x_hi != BC_INTERIOR
-        )
+        self.skip_mpi.append(part.rx == part.px - 1 and bcs.bc_x_hi != BC_INTERIOR)
         self.skip_mpi.append(part.ry == 0 and bcs.bc_y_lo != BC_INTERIOR)
-        self.skip_mpi.append(
-            part.ry == part.py - 1 and bcs.bc_y_hi != BC_INTERIOR
-        )
+        self.skip_mpi.append(part.ry == part.py - 1 and bcs.bc_y_hi != BC_INTERIOR)
         self.skip_mpi.append(part.rz == 0 and bcs.bc_z_lo != BC_INTERIOR)
-        self.skip_mpi.append(
-            part.rz == part.pz - 1 and bcs.bc_z_hi != BC_INTERIOR
-        )
+        self.skip_mpi.append(part.rz == part.pz - 1 and bcs.bc_z_hi != BC_INTERIOR)
 
         self.ring_count = List[Int]()
         self.d_pack_idx = List[DeviceBuffer[halo_i]]()
@@ -353,20 +347,12 @@ struct HaloExchange(Movable):
             self.d_pack_idx.append(d_pack^)
             self.d_unpack_idx.append(d_unpack^)
             var buf_floats = n_owned * N_P * nc
-            self.d_send_buf.append(
-                ctx.enqueue_create_buffer[halo_f](buf_floats)
-            )
-            self.d_recv_buf.append(
-                ctx.enqueue_create_buffer[halo_f](buf_floats)
-            )
+            self.d_send_buf.append(ctx.enqueue_create_buffer[halo_f](buf_floats))
+            self.d_recv_buf.append(ctx.enqueue_create_buffer[halo_f](buf_floats))
             # Host staging only needed for non-CUDA-aware MPI.
             if not self.cuda_aware:
-                self.h_send_buf.append(
-                    ctx.enqueue_create_host_buffer[halo_f](buf_floats)
-                )
-                self.h_recv_buf.append(
-                    ctx.enqueue_create_host_buffer[halo_f](buf_floats)
-                )
+                self.h_send_buf.append(ctx.enqueue_create_host_buffer[halo_f](buf_floats))
+                self.h_recv_buf.append(ctx.enqueue_create_host_buffer[halo_f](buf_floats))
 
         ctx.synchronize()
 
@@ -430,16 +416,8 @@ struct HaloExchange(Movable):
             var neigh = self.neighbour[d]
             var send_tag = d
             var recv_tag = d ^ 1
-            var recv_ptr = (
-                self.d_recv_buf[d]
-                .unsafe_ptr() if self.cuda_aware else self.h_recv_buf[d]
-                .unsafe_ptr()
-            )
-            var send_ptr = (
-                self.d_send_buf[d]
-                .unsafe_ptr() if self.cuda_aware else self.h_send_buf[d]
-                .unsafe_ptr()
-            )
+            var recv_ptr = self.d_recv_buf[d].unsafe_ptr() if self.cuda_aware else self.h_recv_buf[d].unsafe_ptr()
+            var send_ptr = self.d_send_buf[d].unsafe_ptr() if self.cuda_aware else self.h_send_buf[d].unsafe_ptr()
             mpi.irecv_float(
                 recv_ptr,
                 count_fl,
@@ -506,9 +484,7 @@ struct HaloExchange(Movable):
 # ----------------------------------------------------------------------
 
 
-def _upload_i32(
-    mut ctx: DeviceContext, src: List[Int32]
-) raises -> DeviceBuffer[halo_i]:
+def _upload_i32(mut ctx: DeviceContext, src: List[Int32]) raises -> DeviceBuffer[halo_i]:
     var n = len(src)
     var hbuf = ctx.enqueue_create_host_buffer[halo_i](n)
     memcpy(dest=hbuf.unsafe_ptr(), src=src.unsafe_ptr(), count=n)

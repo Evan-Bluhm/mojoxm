@@ -52,10 +52,7 @@ struct TimeLoopResult(Copyable, Movable):
               frame-write time (download +    5.7 s
                 VTU):
         """
-        print(
-            "  final sync:                     "
-            + format_seconds(self.final_sync_sec)
-        )
+        print("  final sync:                     " + format_seconds(self.final_sync_sec))
         print(
             "  total steps:",
             self.total_steps,

@@ -125,9 +125,7 @@ def vortex_ic_kernel(
     # T = 1 - (gamma-1) eps^2 / (8 gamma pi^2) * exp(1 - r^2).  Rewritten
     # via eps_over_2pi (= eps/(2 pi)) so eps^2/(8 gamma pi^2) becomes
     # eps_over_2pi^2 / (2 gamma) -- one expression, formatter-clean.
-    var T = Float32(1.0) - g1 * eps_over_2pi * eps_over_2pi / (
-        Float32(2.0) * gamma
-    ) * exp(Float32(1.0) - r2)
+    var T = Float32(1.0) - g1 * eps_over_2pi * eps_over_2pi / (Float32(2.0) * gamma) * exp(Float32(1.0) - r2)
     var rho = pow(T, Float32(1.0) / g1)
     var p = pow(rho, gamma)
     var E = p / g1 + Float32(0.5) * rho * (u * u + v * v + w * w)
@@ -158,9 +156,7 @@ def main() raises:
     var size = mpi.world_size()
 
     if rank == 0:
-        print(
-            "euler_vortex: GPU DG Euler, P2 tet, HLLEC flux,", size, "rank(s)"
-        )
+        print("euler_vortex: GPU DG Euler, P2 tet, HLLEC flux,", size, "rank(s)")
         print(
             "  global mesh: ",
             NX,
@@ -172,9 +168,7 @@ def main() raises:
             NX * NY * NZ * 6,
             "tets",
         )
-        print(
-            "  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P
-        )
+        print("  nodes per element:", N_P, " total DOF:", NX * NY * NZ * 6 * N_P)
 
     var nvtx = NvtxContext()
     if rank == 0:

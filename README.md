@@ -217,7 +217,7 @@ multi-rank decomposition + halo-exchange machinery.
   at P=2/3/4/5 in 2D + 3D); `make test-utils` (5 helper-module
   tests covering perf-introspection, VTU multi-field, SSPRK3
   stage-plan, MPI partition factorisation, Sod Riemann solver --
-  3 host-only + 2 small GPU-using; ~7s cached).  The full inventory:
+  3 host-only + 2 small GPU-using; ~4s cached).  The full inventory:
   * 2D pipeline -- `local_mesh_2d_gpu_test` (upload round-trips +
     constant-state at P=1..5), `euler_2d_gpu_test` /
     `sw_2d_gpu_test` / `mhd_2d_gpu_test` / `mhd_glm_2d_gpu_test` /
@@ -251,10 +251,10 @@ multi-rank decomposition + halo-exchange machinery.
   largest comptime configuration the suite gates end-to-end.  When
   iterating, pick the slice that matches what's changing:
   `make bench-quick` (13 representative gates, ~30s cached),
-  `make bench-p5` (19 P=5 high-order gates, ~65s cached),
-  `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~40s cached),
-  `make bench-rates` (10 explicit convergence-rate gates, ~30s cached),
-  `make bench-bcs` (27 BC + source-term gates, ~45s cached).  When iterating
+  `make bench-p5` (19 P=5 high-order gates, ~75s cached),
+  `make bench-shocks` (13 Sod / dam-break / Brio-Wu gates, ~45s cached),
+  `make bench-rates` (10 explicit convergence-rate gates, ~35s cached),
+  `make bench-bcs` (27 BC + source-term gates, ~55s cached).  When iterating
   on a single physics module, the per-physics aggregators run only
   the gates exercising that module: `make bench-mhd` (33), `bench-euler`
   (33), `bench-maxwell` (26), `bench-sw` (14), `bench-advection` (12),

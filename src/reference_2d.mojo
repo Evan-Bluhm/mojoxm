@@ -119,12 +119,7 @@ def _edge_to_element_node(
             var exp2 = (P - k) if va == 2 else (k if vb == 2 else 0)
             var i = _lookup_tri_node(tri_nodes, exp0, exp1, exp2)
             if i < 0:
-                raise Error(
-                    "_edge_to_element_node: failed to locate node for edge "
-                    + String(e)
-                    + " slot "
-                    + String(k)
-                )
+                raise Error("_edge_to_element_node: failed to locate node for edge " + String(e) + " slot " + String(k))
             out[e * nfp_edge + k] = Int32(i)
     return out^
 
@@ -231,10 +226,7 @@ struct ReferenceElement2D[P: Int = 2](Copyable, Movable):
                 for j in range(NP_P):
                     var sum: Float64 = 0.0
                     for ip in range(NP_P):
-                        sum += (
-                            M_inv[i * NP_P + ip]
-                            * S[k * NP_P * NP_P + ip * NP_P + j]
-                        )
+                        sum += M_inv[i * NP_P + ip] * S[k * NP_P * NP_P + ip * NP_P + j]
                     self.D_ref[k * NP_P * NP_P + i * NP_P + j] = sum
 
         # 6. 1D edge mass matrix M_edge (size (P+1) x (P+1)).  Uses the
@@ -261,13 +253,9 @@ struct ReferenceElement2D[P: Int = 2](Copyable, Movable):
             for l in range(NFP_edge):
                 var i = Int(self.edge_to_elem[e * NFP_edge + l])
                 if i < 0:
-                    raise Error(
-                        "ReferenceElement2D: edge_to_elem lookup failed"
-                    )
+                    raise Error("ReferenceElement2D: edge_to_elem lookup failed")
                 for m in range(NFP_edge):
-                    L_raw[e * NP_P * NFP_edge + i * NFP_edge + m] = M_edge[
-                        l * NFP_edge + m
-                    ]
+                    L_raw[e * NP_P * NFP_edge + i * NFP_edge + m] = M_edge[l * NFP_edge + m]
 
         self.Lift_ref = List[Float64]()
         for _ in range(3 * NP_P * NFP_edge):
@@ -277,10 +265,7 @@ struct ReferenceElement2D[P: Int = 2](Copyable, Movable):
                 for m in range(NFP_edge):
                     var sum: Float64 = 0.0
                     for ip in range(NP_P):
-                        sum += (
-                            M_inv[i * NP_P + ip]
-                            * L_raw[e * NP_P * NFP_edge + ip * NFP_edge + m]
-                        )
+                        sum += M_inv[i * NP_P + ip] * L_raw[e * NP_P * NFP_edge + ip * NFP_edge + m]
                     self.Lift_ref[e * NP_P * NFP_edge + i * NFP_edge + m] = sum
 
 
